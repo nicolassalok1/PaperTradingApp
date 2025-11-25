@@ -19,7 +19,11 @@ SCRIPTS_APP_PATH = BASE_DIR / "scripts" / "streamlit_app.py"
 SOURCES_APP_PATH = BASE_DIR / "streamlit_app3.py"
 GPT_APP_PATH = BASE_DIR / "streamlit_appGPT.py"
 
-st.set_page_config(page_title="Volatility + RL Dashboards", layout="wide")
+st.set_page_config(
+    page_title="Volatility + RL Dashboards",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 st.title("Volatility + RL Dashboards")
 st.caption("Deux applications Streamlit réunies dans un seul projet, séparées par onglets.")
 
@@ -55,9 +59,13 @@ def _run_gpt_app():
             st.set_page_config = original_set_page_config
 
 
-tabs_main = st.tabs(["Volatility Tools", "RL & Finance Lab", "AI Trading Bot"])
+tabs_main = st.tabs(["AI Trading Bot", "Volatility Tools", "RL & Finance Lab"])
 
 with tabs_main[0]:
+    st.subheader("AI Trading Bot")
+    _run_gpt_app()
+
+with tabs_main[1]:
     st.subheader("Volatility Tools")
     if scripts_app is None:
         st.warning("Module scripts introuvable.")
@@ -73,7 +81,7 @@ with tabs_main[0]:
         scripts_app.render_iv_dashboard_tab(vol_tabs[1])
         scripts_app.render_earnings_dashboard_tab(vol_tabs[2])
 
-with tabs_main[1]:
+with tabs_main[2]:
     st.subheader("RL & Quant Finance Lab")
     if sources_app is None:
         st.warning("Module sources introuvable.")
@@ -136,7 +144,3 @@ with tabs_main[1]:
 
         with rl_tabs[4]:
             sources_app.render_strategies_nlp_sentiment()
-
-with tabs_main[2]:
-    st.subheader("AI Trading Bot")
-    _run_gpt_app()
