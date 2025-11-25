@@ -222,14 +222,14 @@ def render_vol_crush_tab(tab):
         st.info("ℹ️ Manual pricing using Black-Scholes. Enter parameters then analyze scenarios.")
 
 
-# ---------------------- Tab: IV Dashboard (Yahoo) ----------------------
+# ---------------------- Tab: IV Dashboard ----------------------
 def render_iv_dashboard_tab(tab):
     if "volatility_data" not in st.session_state:
         st.session_state.volatility_data = None
         st.session_state.current_implied_vol = None
 
     with tab:
-        st.title("📈 Implied Volatility Trading Dashboard (Yahoo)")
+        st.title("📈 Implied Volatility Trading Dashboard")
         col_inputs = st.columns(3)
         with col_inputs[0]:
             symbol = st.text_input("Symbol", value="SPY")
@@ -393,7 +393,7 @@ def render_iv_dashboard_tab(tab):
                 st.dataframe(df.tail(50))
 
 
-# ---------------------- Tab: Earnings IV Crush (Yahoo) ----------------------
+# ---------------------- Tab: Earnings IV Crush ----------------------
 def render_earnings_dashboard_tab(tab):
     if "earnings_analysis_results" not in st.session_state:
         st.session_state.earnings_analysis_results = None
@@ -401,7 +401,7 @@ def render_earnings_dashboard_tab(tab):
         st.session_state.earnings_vix_data = None
 
     with tab:
-        st.title("📊 Earnings Trading Dashboard - IV Crush (Yahoo)")
+        st.title("📊 Earnings Trading Dashboard - IV Crush")
         col_inputs = st.columns(4)
         with col_inputs[0]:
             ticker = st.text_input("Ticker", value="NVDA")
@@ -617,7 +617,7 @@ def render_earnings_dashboard_tab(tab):
 if __name__ == "__main__":
     _configure_page()
     tab_vol_crush, tab_iv_dashboard, tab_earnings = st.tabs(
-        ["Volatility Crush Analyzer", "IV Dashboard (Yahoo)", "Earnings IV Crush (Yahoo)"]
+        ["Volatility Crush Analyzer", "IV Dashboard", "Earnings IV Crush"]
     )
     render_vol_crush_tab(tab_vol_crush)
     render_iv_dashboard_tab(tab_iv_dashboard)

@@ -1,0 +1,17 @@
+streamlit
+numpy
+scipy
+numba
+matplotlib
+ipywidgets
+pandas
+yfinance
+tensorflow
+plotly
+torch
+requests
+openai
+alpaca-trade-api
+alpha_vantage==2.3.1
+python-dotenv
+datetime

@@ -34,18 +34,18 @@ except Exception as exc:
     st.error(f"Impossible de charger l’app sources : {exc}")
 
 
-tabs_main = st.tabs(["Volatility Tools (scripts/)", "RL & Finance Lab (sources/)"])
+tabs_main = st.tabs(["Volatility Tools", "RL & Finance Lab"])
 
 with tabs_main[0]:
-    st.subheader("Volatility Tools (scripts/)")
+    st.subheader("Volatility Tools")
     if scripts_app is None:
         st.warning("Module scripts introuvable.")
     else:
         vol_tabs = st.tabs(
             [
                 "Volatility Crush Analyzer",
-                "IV Dashboard (Yahoo)",
-                "Earnings IV Crush (Yahoo)",
+                "IV Dashboard",
+                "Earnings IV Crush",
             ]
         )
         scripts_app.render_vol_crush_tab(vol_tabs[0])
@@ -53,7 +53,7 @@ with tabs_main[0]:
         scripts_app.render_earnings_dashboard_tab(vol_tabs[2])
 
 with tabs_main[1]:
-    st.subheader("RL & Quant Finance Lab (sources/)")
+    st.subheader("RL & Quant Finance Lab")
     if sources_app is None:
         st.warning("Module sources introuvable.")
     else:
@@ -64,7 +64,6 @@ with tabs_main[1]:
                 "Signals",
                 "Strategies",
                 "NLP Sentiment",
-                "Notebooks",
             ]
         )
 
@@ -116,14 +115,3 @@ with tabs_main[1]:
 
         with rl_tabs[4]:
             sources_app.render_strategies_nlp_sentiment()
-
-        with rl_tabs[5]:
-            sub_tabs = st.tabs(["NLP Overview", "Wordcloud", "Doc Vectors", "Cosine Sim"])
-            with sub_tabs[0]:
-                sources_app.render_extra_nlp_overview()
-            with sub_tabs[1]:
-                sources_app.render_extra_nlp_wordcloud()
-            with sub_tabs[2]:
-                sources_app.render_extra_nlp_vectors()
-            with sub_tabs[3]:
-                sources_app.render_extra_nlp_cosine()
