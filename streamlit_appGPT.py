@@ -6137,6 +6137,16 @@ api = tradeapi.REST(key, secret_key, BASE_URL, api_version="v2")
 
 # Page config
 st.set_page_config(page_title="AI Trading Bot", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
+st.markdown(
+    """
+    <style>
+    .block-container {
+        max-width: 90vw !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # Helper functions
 @st.cache_data(ttl=10)
@@ -8142,6 +8152,9 @@ with tab1:
                                     "pnl": (new_mark - avg_price) * qty if side == "long" else (avg_price - new_mark) * qty,
                                     "pnl_per_unit": (new_mark - avg_price) if side == "long" else (avg_price - new_mark),
                                 }
+                                # Compute and cache Greeks in the same action
+                                greeks = compute_option_greeks(pos, chain_entry=chain_entry)
+                                st.session_state[f"greeks_{key}"] = greeks
                                 st.success(f"Pricing lancé ({pricing_fn}) → prix courant ≈ {new_mark:.4f} via {new_method}")
                                 st.session_state[state_key] = True
                                 st.rerun()
@@ -8151,37 +8164,7 @@ with tab1:
                         if not st.session_state.get(state_key, False):
                             st.info("Lance le pricing pour afficher les détails.")
                             continue
-                        greeks_state_key = f"greeks_{key}"
-                        if st.button("📐 Calculer Greeks (BSM)", key=f"calc_greeks_{key}"):
-                            try:
-                                chain_list = st.session_state.get(f"chain_cache_{underlying}") or []
-                                chain_entry = None
-                                if chain_list and pos.get("expiration") and strike:
-                                    try:
-                                        expiry_date = datetime.date.fromisoformat(pos.get("expiration"))
-                                        days_to_expiry = (expiry_date - datetime.date.today()).days
-                                        target_T = max(days_to_expiry, 0) / 365.0
-                                    except Exception:
-                                        target_T = None
-                                    if target_T is not None:
-                                        best = None
-                                        best_score = float("inf")
-                                        for c in chain_list:
-                                            cT = float(c.get("T", 0.0) or 0.0)
-                                            cK = float(c.get("strike", 0.0) or 0.0)
-                                            scale = max(strike, 1.0)
-                                            score = abs(cT - target_T) + abs(cK - strike) / scale
-                                            if score < best_score:
-                                                best_score = score
-                                                best = c
-                                        chain_entry = best
-                                greeks = compute_option_greeks(pos, chain_entry=chain_entry)
-                                st.session_state[greeks_state_key] = greeks
-                                st.success("Greeks calculés.")
-                                st.rerun()
-                            except Exception as exc:
-                                st.error(f"Erreur lors du calcul des Greeks : {exc}")
-                        greeks_vals = st.session_state.get(greeks_state_key)
+                        greeks_vals = st.session_state.get(f"greeks_{key}")
                         close_qty = st.selectbox(
                             "Quantity to close",
                             options=list(range(1, close_max + 1)),
@@ -8206,9 +8189,9 @@ with tab1:
                             st.metric("PnL if closed", f"${pnl_total:.2f}", delta=f"{pnl_per_unit:.4f}")
                             if greeks_vals:
                                 st.caption(
-                                    f"Δ {greeks_vals.get('delta') if greeks_vals.get('delta') is not None else '-':}"
-                                    f" | Γ {greeks_vals.get('gamma') if greeks_vals.get('gamma') is not None else '-':}"
-                                    f" | Vega {greeks_vals.get('vega') if greeks_vals.get('vega') is not None else '-':}"
+                                    f"Δ {greeks_vals.get('delta') if greeks_vals.get('delta') is not None else '-':.2f}"
+                                    f" | Γ {greeks_vals.get('gamma') if greeks_vals.get('gamma') is not None else '-':.2f}"
+                                    f" | Vega {greeks_vals.get('vega') if greeks_vals.get('vega') is not None else '-':.2f}"
                                 )
                         if isinstance(misc, dict) and misc:
                             st.caption(f"Misc: {misc}")
@@ -8217,11 +8200,11 @@ with tab1:
                         st.caption(f"Paramètres disponibles: {sorted(available)}")
                         if greeks_vals:
                             col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
-                            col_g1.metric("Delta", f"{greeks_vals.get('delta', '-'):}")
-                            col_g2.metric("Gamma", f"{greeks_vals.get('gamma', '-'):}")
-                            col_g3.metric("Vega", f"{greeks_vals.get('vega', '-'):}")
-                            col_g4.metric("Theta", f"{greeks_vals.get('theta', '-'):}")
-                            col_g5.metric("Rho", f"{greeks_vals.get('rho', '-'):}")
+                            col_g1.metric("Delta", f"{greeks_vals.get('delta', '-'):.2f}")
+                            col_g2.metric("Gamma", f"{greeks_vals.get('gamma', '-'):.2f}")
+                            col_g3.metric("Vega", f"{greeks_vals.get('vega', '-'):.2f}")
+                            col_g4.metric("Theta", f"{greeks_vals.get('theta', '-'):.2f}")
+                            col_g5.metric("Rho", f"{greeks_vals.get('rho', '-'):.2f}")
                         # Afficher les valeurs connues pour chaque paramètre requis
                         def _param_value(k: str):
                             if k == "option_type":
