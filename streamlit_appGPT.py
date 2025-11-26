@@ -7780,60 +7780,6 @@ with tab1:
         df_my_portfolio = df_my_portfolio[[c for c in col_order if c in df_my_portfolio.columns]]
         st.dataframe(df_my_portfolio, width="stretch", hide_index=True)
 
-        # Include realized PnL from expired options
-        expired_options = load_expired_options()
-        # Merge legacy options_book.json content for display/PnL, to ensure completeness
-        legacy_book = load_options_book_legacy_only()
-        for opt_id, entry in legacy_book.items():
-            if opt_id not in expired_options and entry.get("status") in {"expired", "closed"}:
-                expired_options[opt_id] = entry
-
-        st.markdown("### ✅ Options expirées / clôturées")
-        if expired_options:
-            exp_rows = []
-            for key, opt in expired_options.items():
-                exp_rows.append({
-                    "ID/Contract": key,
-                    "Underlying": opt.get("underlying"),
-                    "Type": str(opt.get("option_type") or opt.get("type", "")).capitalize(),
-                    "Side": str(opt.get("side", "")).capitalize(),
-                    "Strike": opt.get("strike"),
-                    "Expiration": opt.get("expiration"),
-                    "Qty": opt.get("quantity"),
-                    "Avg Price": opt.get("avg_price"),
-                    "Underlying close": opt.get("underlying_close"),
-                    "Payoff/unit": opt.get("payoff_per_unit"),
-                    "PnL/unit": opt.get("pnl_per_unit"),
-                    "PnL total": opt.get("pnl_total"),
-                    "Closed at": opt.get("closed_at"),
-                    "Source": opt.get("_source", "book"),
-                })
-            df_exp = pd.DataFrame(exp_rows)
-            st.dataframe(df_exp, width="stretch", hide_index=True)
-            if legacy_book:
-                st.caption("Source merge : options_portfolio.json + options_book.json (legacy).")
-
-            with st.expander("🔎 Détails payoff / méthode de calcul (toutes les options)", expanded=False):
-                for key, opt in expired_options.items():
-                    info = describe_expired_option_payoff(opt)
-                    title = f"{key} – {opt.get('product_type') or opt.get('product') or opt.get('type') or ''}"
-                    st.markdown(f"**{title}**")
-                    st.write(f"**Méthode** : {info['method_label']} (fonction `{info['function']}`)")
-                    st.caption(info["description"])
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.write(f"Payoff/unité: {info['payoff_unit']:.4f}")
-                        st.write(f"Payoff/unité signé (side): {info['payoff_signed_unit']:.4f}")
-                    with c2:
-                        st.write(f"Payoff total (qty x side): {info['payoff_total']:.4f}")
-                        st.write(f"Sous-jacent à l'échéance: {info['underlying_close']}")
-                        st.write(f"Side: {info['side']} | Qty: {info['quantity']}")
-                    st.write("Paramètres utilisés :")
-                    st.json(info["params"])
-                    st.markdown("---")
-        else:
-            st.info("Aucune option expirée/close pour l’instant.")
-
         # Forward portfolio section
         st.markdown("---")
         st.markdown("### 🚀 Forward Portfolio")
@@ -8004,9 +7950,6 @@ with tab1:
                         "Strike2": strike2,
                         "Expiration": pos.get("expiration"),
                         "Quantity": quantity,
-                        "T_0 Price": avg_price,
-                        "Current Price (model)": mark_price,
-                        "Model P&L": total_pnl_opt,
                         "Misc (json)": json.dumps(misc or {}, ensure_ascii=False),
                     })
                 except Exception as exc:
@@ -8036,9 +7979,6 @@ with tab1:
             "Strike2": strike2,
             "Expiration": pos.get("expiration"),
             "Quantity": quantity,
-            "T_0 Price": avg_price,
-            "Current Price (model)": mark_price,
-            "Model P&L": total_pnl_opt,
             "Misc (json)": json.dumps(misc or {}, ensure_ascii=False),
         })
 
@@ -8305,6 +8245,55 @@ with tab1:
                     st.rerun()
     else:
         st.info("No trading systems configured. Add one in the 'Trading Systems' tab.")
+
+    # Expired options at the end of the dashboard
+    st.markdown("---")
+    st.markdown("### ✅ Options expirées / clôturées")
+    expired_options = load_expired_options()
+    legacy_book = load_options_book_legacy_only()
+    for opt_id, entry in legacy_book.items():
+        if opt_id not in expired_options and entry.get("status") in {"expired", "closed"}:
+            expired_options[opt_id] = entry
+
+    if expired_options:
+        exp_rows = []
+        for key, opt in expired_options.items():
+            exp_rows.append({
+                "ID/Contract": key,
+                "Underlying": opt.get("underlying"),
+                "Type": str(opt.get("option_type") or opt.get("type", "")).capitalize(),
+                "Side": str(opt.get("side", "")).capitalize(),
+                "Strike": opt.get("strike"),
+                "Expiration": opt.get("expiration"),
+                "Qty": opt.get("quantity"),
+                "Closed at": opt.get("closed_at"),
+                "Source": opt.get("_source", "book"),
+            })
+        df_exp = pd.DataFrame(exp_rows)
+        st.dataframe(df_exp, width="stretch", hide_index=True)
+        if legacy_book:
+            st.caption("Source merge : options_portfolio.json + options_book.json (legacy).")
+
+        with st.expander("🔎 Détails payoff / méthode de calcul (toutes les options)", expanded=False):
+            for key, opt in expired_options.items():
+                info = describe_expired_option_payoff(opt)
+                title = f"{key} – {opt.get('product_type') or opt.get('product') or opt.get('type') or ''}"
+                st.markdown(f"**{title}**")
+                st.write(f"**Méthode** : {info['method_label']} (fonction `{info['function']}`)")
+                st.caption(info["description"])
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.write(f"Payoff/unité: {info['payoff_unit']:.4f}")
+                    st.write(f"Payoff/unité signé (side): {info['payoff_signed_unit']:.4f}")
+                with c2:
+                    st.write(f"Payoff total (qty x side): {info['payoff_total']:.4f}")
+                    st.write(f"Sous-jacent à l'échéance: {info['underlying_close']}")
+                    st.write(f"Side: {info['side']} | Qty: {info['quantity']}")
+                st.write("Paramètres utilisés :")
+                st.json(info["params"])
+                st.markdown("---")
+    else:
+        st.info("Aucune option expirée/close pour l’instant.")
 
 # Tab 2: Buy/Sell
 with tab2:
