@@ -13,11 +13,25 @@ Side effects & assumptions:
 - Writes to disk in the working directory; callers must ensure filesystem access.
 """
 
-import streamlit as st
-from openai import OpenAI
 import os
 import sys
 from pathlib import Path
+
+
+def _coerce_env_value(val):
+    return val if isinstance(val, str) else str(val)
+
+
+def _coerce_all_env_to_str():
+    for k, v in list(os.environ.items()):
+        os.environ[k] = _coerce_env_value(v)
+
+
+# Pre-coerce everything before importing libs that may read env vars
+_coerce_all_env_to_str()
+
+import streamlit as st
+from openai import OpenAI
 import json
 import alpaca_trade_api as tradeapi
 import time
@@ -53,6 +67,7 @@ FORWARDS_FILE = DB_DIR / "forwards.json"
 LEGACY_EXPIRED_FILE = DB_DIR / "expired_options.json"
 load_dotenv()
 
+
 def _coerce_env_to_str(name: str) -> str | None:
     """Ensure env vars are plain strings (avoid Path/bytes breaking .startswith)."""
     val = os.getenv(name)
@@ -62,6 +77,7 @@ def _coerce_env_to_str(name: str) -> str | None:
         val = str(val)
         os.environ[name] = val
     return val
+
 
 # Coerce frequently used env vars (uppercase + lowercase) that feed into HTTP clients
 _ENV_KEYS = [
@@ -79,12 +95,7 @@ _ENV_KEYS += [k.lower() for k in _ENV_KEYS]
 for _env_key in _ENV_KEYS:
     _coerce_env_to_str(_env_key)
 
-# As a safety net, coerce every env var value to str if not already a string
-def _coerce_all_env_to_str():
-    for k, v in list(os.environ.items()):
-        if not isinstance(v, str):
-            os.environ[k] = str(v)
-
+# Safety net after load_dotenv
 _coerce_all_env_to_str()
 
 def run_app_options():
