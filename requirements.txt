@@ -1,28 +1,39 @@
-alpaca-trade-api
-alpha_vantage==2.3.1
-IPython
-fredapi
-ibapi
-ipywidgets
-keras
-matplotlib
-numba
+# Core & utilities
 numpy
-openai
 pandas
 pandas-datareader
-plotly
-quandl
 python-dotenv
+requests
+
+# Finance & data APIs
+alpaca-trade-api
+alpha_vantage==2.3.1
+fredapi
+ibapi
+quandl
+yfinance
+
+# Visualization
+matplotlib
+plotly
+seaborn
+statsmodels
+wordcloud
+
+# Machine Learning / DL
+keras
+numba
 scikeras
 scikit-learn
 scipy
-seaborn
-statsmodels
-streamlit
 tensorflow
 torch
-requests
-wordcloud
-yfinance
+
+# Streamlit app
+streamlit
 websockets>=14.0
+
+# Notebook / misc tooling
+IPython
+ipywidgets
+openai

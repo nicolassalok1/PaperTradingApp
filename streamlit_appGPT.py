@@ -7632,24 +7632,54 @@ with tab1:
     # Options P&L (open MTM) + realized from expired
     options_book_all = load_options_book()
     open_options = {k: v for k, v in options_book_all.items() if v.get("status", "open") == "open"}
-    open_options_pnl = 0.0
-    for _, pos in open_options.items():
-        qty = float(pos.get("quantity", 0.0) or 0.0)
-        if qty <= 0:
-            continue
-        avg_price = float(pos.get("avg_price", pos.get("T_0_price", 0.0)) or 0.0)
-        side = (pos.get("side") or "long").lower()
-        _, _, _, mark_price, _ = mark_option_market_value(pos, chain_entry=None)
-        mark_price = float(mark_price or 0.0)
-        if side == "long":
-            pnl = (mark_price - avg_price) * qty
-        else:
-            pnl = (avg_price - mark_price) * qty
-        open_options_pnl += pnl
-    realized_options_pnl = sum(
-        float(opt.get("pnl_total", 0.0) or 0.0) for opt in load_expired_options().values()
-    )
-    total_options_pnl = open_options_pnl + realized_options_pnl
+    options_pricing_cache = st.session_state.get("options_pricing_cache")
+    open_options_pnl = None
+    realized_options_pnl = None
+    total_options_pnl = None
+
+    def _compute_open_options_pricing():
+        cache = {}
+        pnl_open = 0.0
+        for opt_id, pos in open_options.items():
+            qty = float(pos.get("quantity", 0.0) or 0.0)
+            if qty <= 0:
+                continue
+            avg_price = float(pos.get("avg_price", pos.get("T_0_price", 0.0)) or 0.0)
+            side = (pos.get("side") or "long").lower()
+            spot, T_val, sigma_val, mark_price_val, method_val = mark_option_market_value(pos, chain_entry=None)
+            mark_price_val = float(mark_price_val or 0.0)
+            pnl_val = (mark_price_val - avg_price) * qty if side == "long" else (avg_price - mark_price_val) * qty
+            pnl_open += pnl_val
+            cache[opt_id] = {
+                "spot": spot,
+                "T": T_val,
+                "sigma": sigma_val,
+                "mark_price": mark_price_val,
+                "method": method_val,
+                "pnl": pnl_val,
+            }
+        st.session_state["options_pricing_cache"] = cache
+        st.session_state["options_pricing_open_pnl"] = pnl_open
+        st.session_state["options_pricing_realized"] = sum(
+            float(opt.get("pnl_total", 0.0) or 0.0) for opt in load_expired_options().values()
+        )
+        st.session_state["options_pricing_total"] = (
+            st.session_state["options_pricing_open_pnl"] + st.session_state["options_pricing_realized"]
+        )
+
+    if st.button("🚀 Lancer pricing options (live)", key="btn_run_options_pricing"):
+        _compute_open_options_pricing()
+        st.rerun()
+
+    if options_pricing_cache is not None:
+        open_options_pnl = st.session_state.get("options_pricing_open_pnl", 0.0)
+        realized_options_pnl = st.session_state.get("options_pricing_realized", 0.0)
+        total_options_pnl = st.session_state.get("options_pricing_total", open_options_pnl)
+    else:
+        # placeholders until user triggers pricing
+        open_options_pnl = None
+        realized_options_pnl = None
+        total_options_pnl = None
 
     # Forwards P&L
     fwd_positions = load_forwards()
@@ -7673,8 +7703,11 @@ with tab1:
         delta_spot = f"{(spot_total_pnl / spot_total_notional * 100):.2f}%" if spot_total_notional > 0 else None
         st.metric("P&L Spot", f"${spot_total_pnl:.2f}", delta=delta_spot)
     with col_opt:
-        delta_opt = f"Open {open_options_pnl:+.2f} | Réalisé {realized_options_pnl:+.2f}"
-        st.metric("P&L Options (open+réalisé)", f"${total_options_pnl:.2f}", delta=delta_opt)
+        if total_options_pnl is not None:
+            delta_opt = f"Open {open_options_pnl:+.2f} | Réalisé {realized_options_pnl:+.2f}"
+            st.metric("P&L Options (open+réalisé)", f"${total_options_pnl:.2f}", delta=delta_opt)
+        else:
+            st.metric("P&L Options (open+réalisé)", "—", delta="Clique sur 🚀 Lancer pricing options")
     with col_fwd:
         delta_fwd = f"{(total_forward_pnl / total_forward_notional * 100):.2f}%" if total_forward_notional > 0 else None
         st.metric("P&L Forwards", f"${total_forward_pnl:.2f}", delta=delta_fwd)
@@ -7827,16 +7860,7 @@ with tab1:
             k: v for k, v in load_options_book().items() if v.get("status", "open") == "open"
         }
         if custom_opts:
-            underlyings_custom = sorted({
-                pos.get("underlying")
-                for pos in custom_opts.values()
-                if pos.get("underlying")
-            })
-            chains_by_underlying_custom = {}
-            for und in underlyings_custom:
-                chain_list = fetch_options_chain(und)
-                chains_by_underlying_custom[und] = chain_list
-            mark_map = {}
+            chains_by_underlying_custom: dict[str, list[dict]] = {}
             def _pricing_metadata(prod: str) -> tuple[str, list[str]]:
                 prod_low = (prod or "").lower()
                 if "barrier" in prod_low:
@@ -7898,48 +7922,6 @@ with tab1:
                     )
                     misc = pos.get("misc")
 
-                    chain_list = chains_by_underlying_custom.get(underlying, [])
-                    chain_entry = None
-                    if chain_list:
-                        try:
-                            expiry_date = datetime.date.fromisoformat(pos.get("expiration"))
-                            days_to_expiry = (expiry_date - datetime.date.today()).days
-                            target_T = max(days_to_expiry, 0) / 365.0
-                        except Exception:
-                            target_T = None
-
-                        if target_T is not None and strike > 0:
-                            nearest = None
-                            best_score = float("inf")
-                            for c in chain_list:
-                                cT = float(c.get("T", 0.0) or 0.0)
-                                cK = float(c.get("strike", 0.0) or 0.0)
-                                scale = max(strike, 1.0)
-                                score = abs(cT - target_T) + abs(cK - strike) / scale
-                                if score < best_score:
-                                    best_score = score
-                                    nearest = c
-                            chain_entry = nearest
-
-                    spot, T_years, sigma_used, mark_price, mark_method = mark_option_market_value(pos, chain_entry=chain_entry)
-                    has_price = mark_price is not None and mark_price > 0
-
-                    if side == "long":
-                        pnl_per_unit = mark_price - avg_price
-                    else:
-                        pnl_per_unit = avg_price - mark_price
-                    total_pnl_opt = pnl_per_unit * quantity
-
-                    mark_map[key] = {
-                        "spot": spot,
-                        "T": T_years,
-                        "sigma": sigma_used,
-                        "mark_price": mark_price,
-                        "method": mark_method,
-                        "pnl": total_pnl_opt,
-                        "pnl_per_unit": pnl_per_unit,
-                    }
-
                     rows_custom.append({
                         "ID/Contract": key,
                         "Product": product,
@@ -7959,35 +7941,12 @@ with tab1:
                         "Error": str(exc),
                     })
 
-        mark_map[key] = {
-            "spot": spot,
-            "T": T_years,
-            "sigma": sigma_used,
-            "mark_price": mark_price,
-            "method": mark_method,
-            "pnl": total_pnl_opt,
-            "pnl_per_unit": pnl_per_unit,
-        }
-
-        rows_custom.append({
-            "ID/Contract": key,
-            "Product": product,
-            "Underlying": underlying,
-            "Type": option_type.capitalize(),
-            "Side": side.capitalize(),
-            "Strike": strike,
-            "Strike2": strike2,
-            "Expiration": pos.get("expiration"),
-            "Quantity": quantity,
-            "Misc (json)": json.dumps(misc or {}, ensure_ascii=False),
-        })
-
         if rows_custom:
             df_custom = pd.DataFrame(rows_custom)
             st.dataframe(df_custom, width="stretch", hide_index=True)
             with st.expander("Manage custom options", expanded=False):
                 for key, pos in custom_opts.items():
-                    snap = mark_map.get(key, {})
+                    snap = st.session_state.get(f"pricing_result_{key}", {})
                     spot = float(snap.get("spot") or 0.0)
                     mark_price = float(snap.get("mark_price") or 0.0)
                     has_price = mark_price is not None and mark_price > 0
@@ -8059,6 +8018,55 @@ with tab1:
                         side_label = side.upper() if side else "N/A"
                         opt_label = option_type.upper() if option_type else "N/A"
                         st.caption(f"Produit reconnu: {product} | Option type: {opt_label} | Side: {side_label}")
+                        state_key = f"pricing_launched_{key}"
+                        launched = st.session_state.get(state_key, False)
+                        if st.button("🚀 Lancer pricing", key=f"run_pricing_{key}"):
+                            try:
+                                chain_state_key = f"chain_cache_{underlying}"
+                                chain_list = st.session_state.get(chain_state_key)
+                                if chain_list is None:
+                                    chain_list = fetch_options_chain(underlying) if underlying else []
+                                    st.session_state[chain_state_key] = chain_list
+                                chain_entry = None
+                                if chain_list and pos.get("expiration") and strike:
+                                    try:
+                                        expiry_date = datetime.date.fromisoformat(pos.get("expiration"))
+                                        days_to_expiry = (expiry_date - datetime.date.today()).days
+                                        target_T = max(days_to_expiry, 0) / 365.0
+                                    except Exception:
+                                        target_T = None
+                                    if target_T is not None:
+                                        best = None
+                                        best_score = float("inf")
+                                        for c in chain_list:
+                                            cT = float(c.get("T", 0.0) or 0.0)
+                                            cK = float(c.get("strike", 0.0) or 0.0)
+                                            scale = max(strike, 1.0)
+                                            score = abs(cT - target_T) + abs(cK - strike) / scale
+                                            if score < best_score:
+                                                best_score = score
+                                                best = c
+                                        chain_entry = best
+                                spot_calc, T_calc, sigma_calc, new_mark, new_method = mark_option_market_value(pos, chain_entry=chain_entry)
+                                # Save pricing snapshot for subsequent renders
+                                st.session_state[f"pricing_result_{key}"] = {
+                                    "spot": spot_calc,
+                                    "T": T_calc,
+                                    "sigma": sigma_calc,
+                                    "mark_price": new_mark,
+                                    "method": new_method,
+                                    "pnl": (new_mark - avg_price) * qty if side == "long" else (avg_price - new_mark) * qty,
+                                    "pnl_per_unit": (new_mark - avg_price) if side == "long" else (avg_price - new_mark),
+                                }
+                                st.success(f"Pricing lancé ({pricing_fn}) → prix courant ≈ {new_mark:.4f} via {new_method}")
+                                st.session_state[state_key] = True
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(f"Erreur lors du pricing : {exc}")
+                                st.session_state[state_key] = False
+                        if not st.session_state.get(state_key, False):
+                            st.info("Lance le pricing pour afficher les détails.")
+                            continue
                         close_qty = st.selectbox(
                             "Quantity to close",
                             options=list(range(1, close_max + 1)),
