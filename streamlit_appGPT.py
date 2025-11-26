@@ -7723,57 +7723,12 @@ with tab1:
         spot_total_pnl += pnl
         spot_total_notional += notional
 
-    # Options P&L (open MTM) + realized from expired
-    options_book_all = load_options_book()
-    open_options = {k: v for k, v in options_book_all.items() if v.get("status", "open") == "open"}
-    options_pricing_cache = st.session_state.get("options_pricing_cache")
-    open_options_pnl = None
-    realized_options_pnl = None
-    total_options_pnl = None
-
-    def _compute_open_options_pricing():
-        cache = {}
-        pnl_open = 0.0
-        for opt_id, pos in open_options.items():
-            qty = float(pos.get("quantity", 0.0) or 0.0)
-            if qty <= 0:
-                continue
-            avg_price = float(pos.get("avg_price", pos.get("T_0_price", 0.0)) or 0.0)
-            side = (pos.get("side") or "long").lower()
-            spot, T_val, sigma_val, mark_price_val, method_val = mark_option_market_value(pos, chain_entry=None)
-            mark_price_val = float(mark_price_val or 0.0)
-            pnl_val = (mark_price_val - avg_price) * qty if side == "long" else (avg_price - mark_price_val) * qty
-            pnl_open += pnl_val
-            cache[opt_id] = {
-                "spot": spot,
-                "T": T_val,
-                "sigma": sigma_val,
-                "mark_price": mark_price_val,
-                "method": method_val,
-                "pnl": pnl_val,
-            }
-        st.session_state["options_pricing_cache"] = cache
-        st.session_state["options_pricing_open_pnl"] = pnl_open
-        st.session_state["options_pricing_realized"] = sum(
-            float(opt.get("pnl_total", 0.0) or 0.0) for opt in load_expired_options().values()
-        )
-        st.session_state["options_pricing_total"] = (
-            st.session_state["options_pricing_open_pnl"] + st.session_state["options_pricing_realized"]
-        )
-
-    if st.button("🚀 Lancer pricing options (live)", key="btn_run_options_pricing"):
-        _compute_open_options_pricing()
-        st.rerun()
-
-    if options_pricing_cache is not None:
-        open_options_pnl = st.session_state.get("options_pricing_open_pnl", 0.0)
-        realized_options_pnl = st.session_state.get("options_pricing_realized", 0.0)
-        total_options_pnl = st.session_state.get("options_pricing_total", open_options_pnl)
-    else:
-        # placeholders until user triggers pricing
-        open_options_pnl = None
-        realized_options_pnl = None
-        total_options_pnl = None
+    # Options P&L : uniquement réalisé (options expirées), aucun pricing live au chargement
+    open_options_pnl = 0.0
+    realized_options_pnl = sum(
+        float(opt.get("pnl_total", 0.0) or 0.0) for opt in load_expired_options().values()
+    )
+    total_options_pnl = realized_options_pnl
 
     # Forwards P&L
     fwd_positions = load_forwards()
@@ -7797,11 +7752,8 @@ with tab1:
         delta_spot = f"{(spot_total_pnl / spot_total_notional * 100):.2f}%" if spot_total_notional > 0 else None
         st.metric("P&L Spot", f"${spot_total_pnl:.2f}", delta=delta_spot)
     with col_opt:
-        if total_options_pnl is not None:
-            delta_opt = f"Open {open_options_pnl:+.2f} | Réalisé {realized_options_pnl:+.2f}"
-            st.metric("P&L Options (open+réalisé)", f"${total_options_pnl:.2f}", delta=delta_opt)
-        else:
-            st.metric("P&L Options (open+réalisé)", "—", delta="Clique sur 🚀 Lancer pricing options")
+        st.metric("P&L Options (open+réalisé)", f"${total_options_pnl:.2f}", delta=total_options_pnl)
+        st.caption(f"Réalisé (options expirées uniquement) {realized_options_pnl:+.2f}")
     with col_fwd:
         delta_fwd = f"{(total_forward_pnl / total_forward_notional * 100):.2f}%" if total_forward_notional > 0 else None
         st.metric("P&L Forwards", f"${total_forward_pnl:.2f}", delta=delta_fwd)
