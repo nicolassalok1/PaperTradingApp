@@ -54,17 +54,17 @@ LEGACY_EXPIRED_FILE = DB_DIR / "expired_options.json"
 load_dotenv()
 
 def _coerce_env_to_str(name: str) -> str | None:
-    """Ensure env vars are strings (avoid WindowsPath objects breaking .startswith)."""
+    """Ensure env vars are plain strings (avoid Path/bytes breaking .startswith)."""
     val = os.getenv(name)
     if val is None:
         return None
     if not isinstance(val, str):
-        val = os.fspath(val)
+        val = str(val)
         os.environ[name] = val
     return val
 
-# Coerce frequently used env vars that feed into HTTP clients
-for _env_key in [
+# Coerce frequently used env vars (uppercase + lowercase) that feed into HTTP clients
+_ENV_KEYS = [
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
     "HTTP_PROXY",
@@ -74,8 +74,18 @@ for _env_key in [
     "APCA_API_KEY_ID",
     "APCA_API_SECRET_KEY",
     "APCA_API_BASE_URL",
-]:
+]
+_ENV_KEYS += [k.lower() for k in _ENV_KEYS]
+for _env_key in _ENV_KEYS:
     _coerce_env_to_str(_env_key)
+
+# As a safety net, coerce every env var value to str if not already a string
+def _coerce_all_env_to_str():
+    for k, v in list(os.environ.items()):
+        if not isinstance(v, str):
+            os.environ[k] = str(v)
+
+_coerce_all_env_to_str()
 
 def run_app_options():
     """
@@ -8374,16 +8384,16 @@ with tab1:
             })
         df_exp = pd.DataFrame(exp_rows)
         desired_cols = [
+            "Expiration",
             "Qty",
             "Underlying",
             "Side",
             "Type",
-            "T_0 Price",
             "Strike",
             "Closing asset price",
+            "T_0 Price",
             "Payoff/unit",
             "PnL total",
-            "Expiration",
         ]
         df_exp = df_exp[[c for c in desired_cols if c in df_exp.columns]]
         st.dataframe(df_exp, width="stretch", hide_index=True)
