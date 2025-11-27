@@ -477,7 +477,19 @@ def payoff_barrier(spot, strike: float, barrier: float, option_type: str = "call
     return np.where(active_mask, base, 0.0)
 
 
-def view_barrier(s0: float, strike: float, barrier: float, direction: str = "up", knock: str = "out", option_type: str = "call", payout: float = 1.0, binary: bool = False, span: float = 0.5, n: int = 300):
+def view_barrier(
+    s0: float,
+    strike: float,
+    barrier: float,
+    direction: str = "up",
+    knock: str = "out",
+    option_type: str = "call",
+    payout: float = 1.0,
+    binary: bool = False,
+    span: float = 0.5,
+    n: int = 300,
+    **kwargs,
+):
     s_grid = np.linspace(s0 * (1.0 - span), s0 * (1.0 + span), n)
     payoff_grid = payoff_barrier(s_grid, strike, barrier, option_type=option_type, direction=direction, knock=knock, payout=payout, binary=binary)
     premium = float(np.asarray(payoff_barrier(s0, strike, barrier, option_type=option_type, direction=direction, knock=knock, payout=payout, binary=binary)).item())
