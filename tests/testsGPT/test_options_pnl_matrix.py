@@ -237,6 +237,19 @@ class OptionsPnLMatrixTests(TestCase):
             def moneyness(val: float) -> float:
                 return val / strike_base if strike_base else 0.0
 
+            # Opening snapshot (T%=100, mark = avg_price pour PnL nul à l'entrée) sur ATM/ITM/OTM
+            print("---- OPENING ----")
+            opening_mark = opt.get("avg_price")
+            for scen in scenarios:
+                open_spot = spots[scen]
+                with self.subTest(option=opt_id, phase="opening", scenario=scen):
+                    open_res = self._pnl(opt, spot=open_spot, mark=opening_mark)
+                    self.assertAlmostEqual(open_res["pnl_total"], 0.0, places=6)
+                    print(
+                        f"[OPEN-{scen.upper()}] {opt_id} stock={open_spot} strike={strike_base} "
+                        f"T%=100 payoff={open_res['payoff_per_unit']:.4f} price={opening_mark}"
+                    )
+
             # Mark-to-market (mid-term) : on logge ATM/ITM/OTM
             print("---- CLOSING ----")
             for scen in scenarios:
@@ -247,7 +260,7 @@ class OptionsPnLMatrixTests(TestCase):
                     self.assertAlmostEqual(mid["pnl_total"], expected_mid["pnl_total"], places=6)
                     print(
                         f"[CLOSE-{scen.upper()}] {opt_id} stock={spot_close} strike={strike_base} "
-                        f"T%=50 pnl={mid['pnl_total']:.4f}"
+                        f"T%=50 pnl={mid['pnl_total']:.4f} price={opt.get('avg_price')}"
                     )
             print("---- EXPIRATION ----")
 
@@ -260,7 +273,7 @@ class OptionsPnLMatrixTests(TestCase):
                     self.assertAlmostEqual(res["pnl_per_unit"], expected["pnl_per_unit"], places=6)
                     print(
                         f"[EXP-{scen.upper()}] {opt_id} stock={spot} moneyness={moneyness(spot):.4f} "
-                        f"T%=0 payoff={res['payoff_per_unit']:.4f} pnl={res['pnl_total']:.4f}"
+                        f"T%=0 payoff={res['payoff_per_unit']:.4f} pnl={res['pnl_total']:.4f} price={opt.get('avg_price')}"
                     )
 
             # Workflow JSON tests : côté long → fermeture mid-term ; côté short → expiration
