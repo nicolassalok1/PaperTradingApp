@@ -4122,22 +4122,25 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 return
 
             if structure_name == "Straddle":
-                if st.button("Pricer le straddle", key=kk("btn")):
-                    price = _vanilla_price_with_dividend("call", common_spot_value, common_strike_value, common_maturity_value, common_rate_value, float(d_common), common_sigma_value) + _vanilla_price_with_dividend("put", common_spot_value, common_strike_value, common_maturity_value, common_rate_value, float(d_common), common_sigma_value)
-                    st.success(f"Prix straddle (K={common_strike_value:.2f}) = {price:.6f}")
-                    render_add_to_dashboard_button(
-                        product_label="Straddle",
-                        option_char=option_char,
-                        price_value=price,
-                        strike=common_strike_value,
-                        maturity=common_maturity_value,
-                        key_prefix=kk("save_straddle"),
-                        spot=common_spot_value,
-                        legs=[
-                            {"option_type": "call", "strike": common_strike_value},
-                            {"option_type": "put", "strike": common_strike_value},
-                        ],
-                    )
+                pre_price = st.session_state.get(_k("straddle_pre_price"))
+                price = pre_price if pre_price is not None else (
+                    _vanilla_price_with_dividend("call", common_spot_value, common_strike_value, common_maturity_value, common_rate_value, float(d_common), common_sigma_value)
+                    + _vanilla_price_with_dividend("put", common_spot_value, common_strike_value, common_maturity_value, common_rate_value, float(d_common), common_sigma_value)
+                )
+                st.success(f"Prix straddle (K={common_strike_value:.2f}) = {float(price):.6f}")
+                render_add_to_dashboard_button(
+                    product_label="Straddle",
+                    option_char=option_char,
+                    price_value=float(price),
+                    strike=common_strike_value,
+                    maturity=common_maturity_value,
+                    key_prefix=kk("save_straddle"),
+                    spot=common_spot_value,
+                    legs=[
+                        {"option_type": "call", "strike": common_strike_value},
+                        {"option_type": "put", "strike": common_strike_value},
+                    ],
+                )
                 return
 
             if structure_name == "Strangle":
@@ -6001,21 +6004,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 _render_structure_panel("Chooser option")
 
         with tab_straddle:
-            _render_payoff_dropdown(
-                "Straddle",
-                "Zone de gain : au-delà du strike central, payoff symétrique Call+Put.",
-                lambda s, K, K2: max(s - K, 0.0) + max(K - s, 0.0),
-                strike2_factor=1.0,
-            )
-            _flag = st.session_state.get(_k("run_straddle_done"), False)
-            if not _flag:
-                if st.button("🚀 Lancer le pricing Straddle", key=_k("run_straddle_btn"), type="primary"):
-                    st.session_state[_k("run_straddle_done")] = True
-                    _flag = True
-            if _flag:
-                _render_structure_panel("Straddle")
-
-            st.subheader("Straddle : payoff / P&L (prime BS)")
             strike_slider = st.slider(
                 "Strike",
                 min_value=0.5 * float(common_spot_value),
@@ -6051,7 +6039,22 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ax.legend(loc="lower right")
             st.pyplot(fig, clear_figure=True)
 
-            st.metric("Prix (BS)", f"{premium:.4f}")
+            # Stocke la prime et affiche directement le formulaire d'ajout (équivalent dropdown)
+            st.session_state[_k("straddle_pre_price")] = premium
+            price = premium
+            render_add_to_dashboard_button(
+                product_label="Straddle",
+                option_char=option_char,
+                price_value=float(price),
+                strike=strike_slider,
+                maturity=common_maturity_value,
+                key_prefix=_k("save_straddle"),
+                spot=common_spot_value,
+                legs=[
+                    {"option_type": "call", "strike": strike_slider},
+                    {"option_type": "put", "strike": strike_slider},
+                ],
+            )
 
         with tab_strangle:
             _render_payoff_dropdown(
