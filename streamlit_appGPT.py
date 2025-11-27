@@ -77,6 +77,7 @@ from pricing import (
     price_straddle_bs,
     price_strangle_bs,
     view_strangle,
+    view_straddle,
 )
 DATA_FILE = JSON_DIR / "equities.json"
 PORTFOLIO_FILE = JSON_DIR / "portfolio.json"
@@ -6000,66 +6001,57 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 _render_structure_panel("Chooser option")
 
         with tab_straddle:
-            st.subheader("Straddle : payoff / P&L (prime BS)")
-            st.caption("Utilise S₀, r, q, T, σ des paramètres communs. Ajuste K put / K call pour voir payoff et P&L net.")
-            k_put = st.slider(
-                "K put",
-                min_value=0.5 * float(common_spot_value),
-                max_value=1.2 * float(common_spot_value),
-                value=0.98 * float(common_spot_value),
-                step=0.5,
-                key=_k("straddle_k_put"),
+            _render_payoff_dropdown(
+                "Straddle",
+                "Zone de gain : au-delà du strike central, payoff symétrique Call+Put.",
+                lambda s, K, K2: max(s - K, 0.0) + max(K - s, 0.0),
+                strike2_factor=1.0,
             )
-            k_call = st.slider(
-                "K call",
-                min_value=0.8 * float(common_spot_value),
+            _flag = st.session_state.get(_k("run_straddle_done"), False)
+            if not _flag:
+                if st.button("🚀 Lancer le pricing Straddle", key=_k("run_straddle_btn"), type="primary"):
+                    st.session_state[_k("run_straddle_done")] = True
+                    _flag = True
+            if _flag:
+                _render_structure_panel("Straddle")
+
+            st.subheader("Straddle : payoff / P&L (prime BS)")
+            strike_slider = st.slider(
+                "Strike",
+                min_value=0.5 * float(common_spot_value),
                 max_value=1.5 * float(common_spot_value),
-                value=1.02 * float(common_spot_value),
+                value=float(common_spot_value),
                 step=0.5,
-                key=_k("straddle_k_call"),
+                key=_k("straddle_k"),
             )
 
-            view_dyn = view_strangle(
+            view_dyn = view_straddle(
                 float(common_spot_value),
-                k_put,
-                k_call,
+                strike_slider,
                 r=float(common_rate_value),
                 q=float(d_common),
                 sigma=float(common_sigma_value),
                 T=float(common_maturity_value),
             )
             premium = float(view_dyn.get("premium", 0.0))
-            be = view_dyn.get("breakevens", ())
-            be_low = be[0] if len(be) > 0 else None
-            be_high = be[1] if len(be) > 1 else None
 
             s_grid = view_dyn["s_grid"]
             payoff_grid = view_dyn["payoff"]
             pnl_grid = view_dyn["pnl"]
-            pnl_at_s0 = float(payoff_strangle(float(common_spot_value), k_put, k_call) - premium)
+            pnl_at_s0 = float(payoff_grid[np.searchsorted(s_grid, float(common_spot_value), side="left") - 1] - premium)
 
             fig, ax = plt.subplots(figsize=(7, 4))
             ax.plot(s_grid, payoff_grid, label="Payoff brut")
             ax.plot(s_grid, pnl_grid, label="P&L net", color="darkorange")
-            ax.axvline(k_put, color="gray", linestyle=":", label=f"K put = {k_put:.2f}")
-            ax.axvline(k_call, color="gray", linestyle="--", label=f"K call = {k_call:.2f}")
-            if be_low is not None:
-                ax.axvline(be_low, color="forestgreen", linestyle=":", label=f"Point mort bas ≈ {be_low:.2f}")
-            if be_high is not None:
-                ax.axvline(be_high, color="forestgreen", linestyle="--", label=f"Point mort haut ≈ {be_high:.2f}")
             ax.axvline(float(common_spot_value), color="crimson", linestyle="-.", label=f"S_0 = {float(common_spot_value):.2f}")
             ax.axhline(0, color="black", linewidth=0.8)
             ax.set_xlabel("Spot")
             ax.set_ylabel("Payoff / P&L")
             ax.set_title("Straddle (payoff & P&L avec prime BS)")
-            ax.legend(loc="best")
+            ax.legend(loc="lower right")
             st.pyplot(fig, clear_figure=True)
 
-            st.markdown(
-                f"""**Prime (BS) ≈ {premium:.4f}**  
-- Points morts : {(f"{be_low:.2f}" if be_low is not None else "n/a")} / {(f"{be_high:.2f}" if be_high is not None else "n/a")}  
-- P&L net à S_0 ({common_spot_value:.2f}) = {pnl_at_s0:.4f}"""
-            )
+            st.metric("Prix (BS)", f"{premium:.4f}")
 
         with tab_strangle:
             _render_payoff_dropdown(
