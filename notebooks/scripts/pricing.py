@@ -228,3 +228,155 @@ def view_iron_condor(s0: float, k_put_long: float, k_put_short: float, k_call_sh
     credit = -premium
     be_low, be_high = k_put_short - credit, k_call_short + credit
     return _build_view(payoff_iron_condor, premium, s0, (k_put_long, k_put_short, k_call_short, k_call_long), (be_low, be_high), span, n)
+
+
+# --- Asian option functions ---
+
+DEFAULT_N_OBS = 252
+DEFAULT_N_PATHS = 100000
+
+
+def _asian_geometric_closed_form(spot: float, strike: float, r: float, sigma: float, T: float, n_obs: int, option_type: str) -> float:
+    """Closed-form price for Asian geometric option."""
+    if n_obs < 1:
+        return 0.0
+    nu = r - 0.5 * sigma**2
+    sigma_g_sq = (sigma**2) * (n_obs + 1) * (2 * n_obs + 1) / (6 * n_obs**2)
+    sigma_g = math.sqrt(sigma_g_sq)
+    mu_g = (nu * (n_obs + 1) / (2 * n_obs) + 0.5 * sigma_g_sq) * T
+    d1 = (math.log(spot / strike) + mu_g + 0.5 * sigma_g_sq * T) / (sigma_g * math.sqrt(T))
+    d2 = d1 - sigma_g * math.sqrt(T)
+    df = math.exp(-r * T)
+    if option_type == "call":
+        return df * (spot * math.exp(mu_g) * _norm_cdf(d1) - strike * _norm_cdf(d2))
+    else:
+        return df * (strike * _norm_cdf(-d2) - spot * math.exp(mu_g) * _norm_cdf(-d1))
+
+
+def price_asian_arith_mc(
+    S: float,
+    K: float,
+    r: float = DEFAULT_R,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    n_obs: int = DEFAULT_N_OBS,
+    n_paths: int = DEFAULT_N_PATHS,
+    option_type: str = "call",
+    seed: int | None = None,
+) -> float:
+    """Monte Carlo price for Asian arithmetic option with control variate."""
+    if seed is not None:
+        np.random.seed(seed)
+    dt = T / n_obs
+    drift = (r - 0.5 * sigma**2) * dt
+    vol_step = sigma * math.sqrt(dt)
+
+    n_base = max(1, n_paths // 2)
+    z_base = np.random.randn(n_obs, n_base)
+    z = np.concatenate([z_base, -z_base], axis=1)
+    n_eff = z.shape[1]
+
+    log_s = math.log(S) + np.cumsum(drift + vol_step * z, axis=0)
+    s_paths = np.exp(log_s)
+
+    arith_mean = s_paths.mean(axis=0)
+    geom_mean = np.exp(np.log(s_paths).mean(axis=0))
+    if option_type == "call":
+        arith_payoff = np.maximum(arith_mean - K, 0.0)
+        geom_payoff = np.maximum(geom_mean - K, 0.0)
+    else:
+        arith_payoff = np.maximum(K - arith_mean, 0.0)
+        geom_payoff = np.maximum(K - geom_mean, 0.0)
+    closed_geom = _asian_geometric_closed_form(S, K, r, sigma, T, n_obs, option_type)
+    cov = np.cov(arith_payoff, geom_payoff)[0, 1]
+    var_geom = np.var(geom_payoff)
+    c = cov / var_geom if var_geom > 0 else 0.0
+    control_estimator = arith_payoff - c * (geom_payoff - closed_geom)
+    disc = math.exp(-r * T)
+    disc_payoff = disc * control_estimator
+    return float(np.mean(disc_payoff))
+
+
+def payoff_asian_arith(avg_price, strike: float, option_type: str = "call"):
+    """Payoff of an Asian arithmetic option given the average price."""
+    avg = np.asarray(avg_price, dtype=float)
+    if option_type == "call":
+        return np.maximum(avg - strike, 0.0)
+    else:
+        return np.maximum(strike - avg, 0.0)
+
+
+def view_asian_arith(
+    s0: float,
+    strike: float,
+    option_type: str = "call",
+    span: float = 0.5,
+    n: int = 300,
+    r: float = DEFAULT_R,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    n_obs: int = DEFAULT_N_OBS,
+    n_paths: int = DEFAULT_N_PATHS,
+    seed: int | None = 42,
+) -> dict:
+    """
+    Build view data for Asian arithmetic option payoff visualization.
+
+    Parameters
+    ----------
+    s0 : float
+        Current spot price.
+    strike : float
+        Strike price of the option.
+    option_type : str
+        'call' or 'put'.
+    span : float
+        Fraction of s0 to span for the grid (e.g., 0.5 means grid goes from s0*0.5 to s0*1.5).
+    n : int
+        Number of points in the grid.
+    r : float
+        Risk-free rate.
+    sigma : float
+        Volatility.
+    T : float
+        Time to maturity in years.
+    n_obs : int
+        Number of averaging observations.
+    n_paths : int
+        Number of Monte Carlo paths for pricing.
+    seed : int or None
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys: s_grid, payoff, pnl, premium, breakevens
+    """
+    premium = price_asian_arith_mc(
+        S=s0,
+        K=strike,
+        r=r,
+        sigma=sigma,
+        T=T,
+        n_obs=n_obs,
+        n_paths=n_paths,
+        option_type=option_type,
+        seed=seed,
+    )
+
+    s_grid = np.linspace(s0 * (1.0 - span), s0 * (1.0 + span), n)
+    payoff_grid = payoff_asian_arith(s_grid, strike, option_type)
+    pnl_grid = payoff_grid - premium
+
+    if option_type == "call":
+        be = strike + premium
+    else:
+        be = strike - premium
+
+    return {
+        "s_grid": s_grid,
+        "payoff": payoff_grid,
+        "pnl": pnl_grid,
+        "premium": premium,
+        "breakevens": (be,),
+    }
