@@ -290,7 +290,7 @@ def price_asian_arith_mc(
     closed_geom = _asian_geometric_closed_form(S, K, r, sigma, T, n_obs, option_type)
     cov = np.cov(arith_payoff, geom_payoff)[0, 1]
     var_geom = np.var(geom_payoff)
-    c = cov / var_geom if var_geom > 0 else 0.0
+    c = cov / var_geom if var_geom > 1e-10 else 0.0
     control_estimator = arith_payoff - c * (geom_payoff - closed_geom)
     disc = math.exp(-r * T)
     disc_payoff = disc * control_estimator
@@ -298,7 +298,15 @@ def price_asian_arith_mc(
 
 
 def payoff_asian_arith(avg_price, strike: float, option_type: str = "call"):
-    """Payoff of an Asian arithmetic option given the average price."""
+    """
+    Payoff of an Asian arithmetic option given the average price.
+
+    Note: For Asian options, the payoff depends on the average of the underlying
+    price over the observation period, not the final spot price. The avg_price
+    parameter represents this average. For visualization purposes (view_asian_arith),
+    we treat avg_price as a grid of hypothetical average prices to show the
+    payoff profile.
+    """
     avg = np.asarray(avg_price, dtype=float)
     if option_type == "call":
         return np.maximum(avg - strike, 0.0)
@@ -364,6 +372,9 @@ def view_asian_arith(
         seed=seed,
     )
 
+    # s_grid represents hypothetical average prices for visualization.
+    # For Asian options, the payoff depends on the average price over the
+    # observation period, not the final spot price.
     s_grid = np.linspace(s0 * (1.0 - span), s0 * (1.0 + span), n)
     payoff_grid = payoff_asian_arith(s_grid, strike, option_type)
     pnl_grid = payoff_grid - premium
