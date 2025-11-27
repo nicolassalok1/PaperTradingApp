@@ -25,6 +25,8 @@ class OptionsPnLMatrixTests(TestCase):
 
     def setUp(self):
         src = Path("streamlit_appGPT.py").read_text(encoding="utf-8")
+        tests_json_dir = Path("tests/jsons")
+        tests_json_dir.mkdir(parents=True, exist_ok=True)
         code = "\n".join(
             [
                 "import json, time, math, numpy as np",
@@ -34,14 +36,21 @@ class OptionsPnLMatrixTests(TestCase):
                     {
                         "load_options_book",
                         "save_options_book",
+                        "load_options_portfolio",
+                        "save_options_portfolio",
                         "add_option_to_dashboard",
+                        "_split_options_book",
+                        "load_expired_options",
+                        "save_expired_options",
+                        "migrate_legacy_expired_options",
+                        "describe_expired_option_payoff",
                         "compute_option_payoff",
                         "compute_option_pnl",
                     },
                 ),
             ]
         )
-        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmpdir = tempfile.TemporaryDirectory(dir=tests_json_dir)
         tmp_path = Path(self.tmpdir.name)
         ns = {}
         exec(code, ns)  # nosec: executed from local source
@@ -49,6 +58,7 @@ class OptionsPnLMatrixTests(TestCase):
         ns["OPTIONS_BOOK_FILE"] = tmp_path / "options_portfolio.json"
         ns["OPTIONS_BOOK_FILE_LEGACY"] = tmp_path / "options_book.json"
         ns["JSON_DIR"] = tmp_path
+        ns["LEGACY_EXPIRED_FILE"] = tmp_path / "expired_options.json"
         self.api = ns
 
     def tearDown(self):
@@ -66,6 +76,18 @@ class OptionsPnLMatrixTests(TestCase):
 
     def _pnl(self, opt, spot, mark=None):
         return self.api["compute_option_pnl"](opt, spot_at_event=spot, mark_price=mark)
+
+    def _expired(self):
+        return self.api["load_expired_options"]()
+
+    def _save_expired(self, payload):
+        return self.api["save_expired_options"](payload)
+    
+    def _log_json(self, label, mapping):
+        print(f"[JSON-{label}] {len(mapping)} entrées")
+        for key, val in mapping.items():
+            print(f"[JSON-{label}] {key} → status={val.get('status')} "
+                  f"close={val.get('underlying_close')} pnl={val.get('pnl_total')}")
 
     def _expected_pnl(self, opt, spot, mark=None):
         qty = float(opt.get("quantity", 1) or 0.0)
@@ -139,6 +161,8 @@ class OptionsPnLMatrixTests(TestCase):
                 payload["quantity"] = 1
                 payload["side"] = side
                 self._add(payload)
+                print(f"[JSON-CREATE] {payload['id']} product={payload.get('product_type')} "
+                      f"type={payload.get('option_type')} side={side}")
 
         book = self._book()
         self.assertEqual(len(book), len(base_cases) * 2)
@@ -147,6 +171,8 @@ class OptionsPnLMatrixTests(TestCase):
         # Trace détaillée pour supervision
         seen_types = set()
         seen_sections = defaultdict(set)
+        closed_payloads = {}
+        expired_payloads = {}
         for opt_id, opt in sorted(book.items(), key=lambda kv: kv[0]):
             base_name = str(opt.get("product_type") or opt.get("product") or opt.get("structure") or opt_id)
             opt_type = str(opt.get("option_type") or opt.get("type") or "").lower()
@@ -199,3 +225,39 @@ class OptionsPnLMatrixTests(TestCase):
                     f"[EXP-{scen.upper()}] {opt_id} stock={spot} moneyness={moneyness(spot):.4f} "
                     f"T%=0 payoff={res['payoff_per_unit']:.4f} pnl={res['pnl_total']:.4f}"
                 )
+
+            # Workflow JSON tests : côté long → fermeture mid-term ; côté short → expiration
+            if side == "long":
+                close_spot = spots["atm"]
+                close_entry = dict(opt)
+                close_entry.update(self._pnl(opt, spot=close_spot))
+                close_entry.update(
+                    {
+                        "status": "expired",
+                        "underlying_close": close_spot,
+                        "closed_at": "T-50%",
+                    }
+                )
+                closed_payloads[opt_id] = close_entry
+                print(f"[JSON-CLOSE] {opt_id} spot={close_spot} pnl={close_entry.get('pnl_total')}")
+            else:
+                exp_spot = spots["atm"]
+                exp_entry = dict(opt)
+                exp_entry.update(self._pnl(opt, spot=exp_spot))
+                exp_entry.update(
+                    {
+                        "status": "expired",
+                        "underlying_close": exp_spot,
+                        "closed_at": "T=0",
+                    }
+                )
+                expired_payloads[opt_id] = exp_entry
+                print(f"[JSON-EXPIRE] {opt_id} spot={exp_spot} pnl={exp_entry.get('pnl_total')}")
+
+        all_expired = {}
+        all_expired.update(closed_payloads)
+        all_expired.update(expired_payloads)
+        self._save_expired(all_expired)
+        self._log_json("WRITE", all_expired)
+        loaded_expired = self._expired()
+        self.assertEqual(len(loaded_expired), len(all_expired))
