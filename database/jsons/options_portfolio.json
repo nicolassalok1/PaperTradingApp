@@ -1529,5 +1529,52 @@
     "pnl_total": 558.38,
     "underlying_close": 659.38,
     "closed_at": "2025-11-24"
+  },
+  "opt_1764277869663": {
+    "underlying": "SPY",
+    "option_type": "call",
+    "product_type": "Straddle",
+    "type": "Straddle",
+    "strike": 679.68,
+    "strike2": 679.68,
+    "expiration": "2026-02-26",
+    "quantity": 1.0,
+    "avg_price": 42.37818447215716,
+    "side": "long",
+    "S0": 679.68,
+    "maturity_years": 0.25,
+    "legs": [
+      {
+        "option_type": "call",
+        "strike": 679.68
+      },
+      {
+        "option_type": "put",
+        "strike": 679.68
+      }
+    ],
+    "T_0": "2025-11-27",
+    "price": 42.37818447215716,
+    "misc": {
+      "structure": "Straddle",
+      "legs": [
+        {
+          "option_type": "call",
+          "strike": 679.68
+        },
+        {
+          "option_type": "put",
+          "strike": 679.68
+        }
+      ],
+      "strike2": 679.68,
+      "spot_at_pricing": 679.68
+    },
+    "id": "opt_1764277869663",
+    "status": "open",
+    "created_at": "2025-11-27 22:11:09",
+    "last_updated": "2025-11-27 22:11:09",
+    "product": "Straddle",
+    "T_0_price": 42.37818447215716
   }
 }

@@ -346,6 +346,32 @@
     "r": 0.02,
     "q": 0.0
   },
+  "exp_test_payoff": {
+    "underlying": "TSLA",
+    "option_type": "put",
+    "product": "vanilla",
+    "product_type": "Vanilla (BSM)",
+    "type": "vanilla",
+    "strike": 250.0,
+    "strike2": null,
+    "expiration": "2025-11-01",
+    "quantity": 2,
+    "avg_price": 8.5,
+    "side": "short",
+    "S0": 255.0,
+    "status": "expired",
+    "underlying_close": 230.0,
+    "payoff_per_unit": 20.0,
+    "pnl_per_unit": -11.5,
+    "pnl_total": -23.0,
+    "closed_at": "2025-11-02",
+    "misc": {
+      "r": 0.02,
+      "q": 0.0
+    },
+    "r": 0.02,
+    "q": 0.0
+  },
   "demo_vanilla_heston": {
     "underlying": "SPY",
     "option_type": "call",
@@ -1503,5 +1529,52 @@
     "pnl_total": 558.38,
     "underlying_close": 659.38,
     "closed_at": "2025-11-24"
+  },
+  "opt_1764277869663": {
+    "underlying": "SPY",
+    "option_type": "call",
+    "product_type": "Straddle",
+    "type": "Straddle",
+    "strike": 679.68,
+    "strike2": 679.68,
+    "expiration": "2026-02-26",
+    "quantity": 1.0,
+    "avg_price": 42.37818447215716,
+    "side": "long",
+    "S0": 679.68,
+    "maturity_years": 0.25,
+    "legs": [
+      {
+        "option_type": "call",
+        "strike": 679.68
+      },
+      {
+        "option_type": "put",
+        "strike": 679.68
+      }
+    ],
+    "T_0": "2025-11-27",
+    "price": 42.37818447215716,
+    "misc": {
+      "structure": "Straddle",
+      "legs": [
+        {
+          "option_type": "call",
+          "strike": 679.68
+        },
+        {
+          "option_type": "put",
+          "strike": 679.68
+        }
+      ],
+      "strike2": 679.68,
+      "spot_at_pricing": 679.68
+    },
+    "id": "opt_1764277869663",
+    "status": "open",
+    "created_at": "2025-11-27 22:11:09",
+    "last_updated": "2025-11-27 22:11:09",
+    "product": "Straddle",
+    "T_0_price": 42.37818447215716
   }
 }

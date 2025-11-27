@@ -76,8 +76,16 @@ from pricing import (
     price_put_spread_bs,
     price_straddle_bs,
     price_strangle_bs,
-    view_strangle,
+    view_asset_or_nothing,
+    view_barrier,
+    view_calendar_spread,
+    view_chooser,
+    view_diagonal_spread,
+    view_digital,
+    view_quanto,
+    view_rainbow,
     view_straddle,
+    view_strangle,
 )
 DATA_FILE = JSON_DIR / "equities.json"
 PORTFOLIO_FILE = JSON_DIR / "portfolio.json"
@@ -6041,20 +6049,70 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
 
             # Stocke la prime et affiche directement le formulaire d'ajout (équivalent dropdown)
             st.session_state[_k("straddle_pre_price")] = premium
-            price = premium
-            render_add_to_dashboard_button(
-                product_label="Straddle",
-                option_char=option_char,
-                price_value=float(price),
-                strike=strike_slider,
-                maturity=common_maturity_value,
-                key_prefix=_k("save_straddle"),
-                spot=common_spot_value,
-                legs=[
-                    {"option_type": "call", "strike": strike_slider},
-                    {"option_type": "put", "strike": strike_slider},
-                ],
-            )
+            price = float(premium)
+
+            st.markdown("### Ajouter au dashboard")
+            st.metric("Prix calculé", f"${price:.6f}")
+
+            underlying = (
+                st.session_state.get("heston_cboe_ticker")
+                or st.session_state.get("tkr_common")
+                or st.session_state.get("common_underlying")
+                or st.session_state.get("ticker_default")
+                or ""
+            ).strip().upper()
+            st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
+            today = datetime.date.today()
+            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("straddle_qty_inline"))
+            side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("straddle_side_inline"))
+            st.caption(f"K (strike commun): {strike_slider:.4f}")
+            st.caption(f"T (maturité commune, années): {float(common_maturity_value):.4f}")
+
+            if st.button("Ajouter au dashboard", key=_k("straddle_add_inline")):
+                payload = {
+                    "underlying": underlying or "N/A",
+                    "option_type": "call" if option_char.lower() == "c" else "put",
+                    "product_type": "Straddle",
+                    "type": "Straddle",
+                    "strike": float(strike_slider),
+                    "strike2": float(strike_slider),
+                    "expiration": expiration_dt.isoformat(),
+                    "quantity": int(qty),
+                    "avg_price": price,
+                    "side": side,
+                    "S0": float(common_spot_value),
+                    "maturity_years": common_maturity_value,
+                    "legs": [
+                        {"option_type": "call", "strike": float(strike_slider)},
+                        {"option_type": "put", "strike": float(strike_slider)},
+                    ],
+                    "T_0": today.isoformat(),
+                    "price": price,
+                    "misc": {
+                        "structure": "Straddle",
+                        "legs": [
+                            {"option_type": "call", "strike": float(strike_slider)},
+                            {"option_type": "put", "strike": float(strike_slider)},
+                        ],
+                        "strike2": float(strike_slider),
+                        "spot_at_pricing": float(common_spot_value),
+                    },
+                }
+                try:
+                    st.caption(f"[LOG] Écriture vers options_portfolio.json avec payload: {payload}")
+                    print(f"[options] add_to_dashboard payload={payload}")
+                    option_id = add_option_to_dashboard(payload)
+                    st.success(
+                        f"Straddle ajouté au dashboard (id: {option_id}) "
+                        f"et enregistré dans options_portfolio.json."
+                    )
+                    try:
+                        st.rerun()
+                    except Exception:
+                        pass
+                except Exception as exc:  # pragma: no cover - UI feedback
+                    st.error(f"Erreur lors de l'ajout au dashboard (écriture JSON) : {exc}")
 
         with tab_strangle:
             _render_payoff_dropdown(
@@ -8198,6 +8256,191 @@ with tab1:
             k: v for k, v in load_options_book().items() if v.get("status", "open") == "open"
         }
         if custom_opts:
+            def _price_from_pricing_py(pos: dict, chain_entry: dict | None = None):
+                """Pricing via notebooks/scripts/pricing.py helpers (BS approximations)."""
+                product_raw = (
+                    pos.get("product_type")
+                    or pos.get("structure")
+                    or pos.get("product")
+                    or pos.get("type")
+                    or ""
+                )
+                product = str(product_raw).lower()
+                underlying = pos.get("underlying")
+                spot = float(pos.get("S0", 0.0) or 0.0)
+                if chain_entry:
+                    spot = float(chain_entry.get("spot", spot) or spot)
+                if spot <= 0 and underlying:
+                    try:
+                        spot = float(get_data(underlying).get("price", 0.0) or 0.0)
+                    except Exception:
+                        spot = 0.0
+
+                strike = float(pos.get("strike", 0.0) or 0.0)
+                strike2 = float(pos.get("strike2", 0.0) or 0.0) if pos.get("strike2") else None
+                sigma = float(pos.get("sigma", 0.2) or 0.2)
+                if chain_entry:
+                    sigma = float(chain_entry.get("iv", sigma) or sigma)
+                try:
+                    r_val = float(pos.get("r", get_r(None) or 0.0))
+                except Exception:
+                    r_val = 0.0
+                try:
+                    q_val = float(pos.get("q", get_q(underlying) or 0.0) if underlying else pos.get("q", 0.0) or 0.0)
+                except Exception:
+                    q_val = float(pos.get("q", 0.0) or 0.0)
+
+                T_years = None
+                if pos.get("expiration"):
+                    try:
+                        expiry_date = datetime.date.fromisoformat(pos.get("expiration"))
+                        days = (expiry_date - datetime.date.today()).days
+                        T_years = max(days, 0) / 365.0
+                    except Exception:
+                        T_years = None
+                if T_years is None:
+                    try:
+                        T_years = float(pos.get("maturity_years") or 0.0)
+                    except Exception:
+                        T_years = None
+                if chain_entry:
+                    T_years = float(chain_entry.get("T", T_years or 0.0) or (T_years or 0.0))
+                if T_years is None or T_years <= 0:
+                    T_years = float(common_maturity_value if 'common_maturity_value' in globals() else 1.0)
+
+                method = "pricing.py"
+                mark = None
+
+                legs = pos.get("legs") or []
+
+                if "straddle" in product and strike > 0:
+                    mark = price_straddle_bs(spot, strike, r=r_val, q=q_val, sigma=sigma, T=T_years)
+                    method = "pricing.py straddle (BS)"
+                elif "strangle" in product:
+                    k_put = strike if strike > 0 else None
+                    k_call = strike2 if strike2 and strike2 > 0 else None
+                    for leg in legs:
+                        if str(leg.get("option_type", "")).lower() == "put" and leg.get("strike") is not None:
+                            k_put = float(leg.get("strike"))
+                        if str(leg.get("option_type", "")).lower() == "call" and leg.get("strike") is not None:
+                            k_call = float(leg.get("strike"))
+                    if k_put and k_call:
+                        if k_put > k_call:
+                            k_put, k_call = k_call, k_put
+                        mark = price_strangle_bs(spot, k_put, k_call, r=r_val, q=q_val, sigma=sigma, T=T_years)
+                        method = "pricing.py strangle (BS)"
+                elif "call spread" in product:
+                    k_long = strike
+                    k_short = strike2 if strike2 else strike
+                    for leg in legs:
+                        if str(leg.get("option_type", "")).lower() == "call":
+                            if str(leg.get("side", "long")).lower() == "long":
+                                k_long = float(leg.get("strike", k_long))
+                            else:
+                                k_short = float(leg.get("strike", k_short))
+                    if k_long and k_short:
+                        mark = price_call_spread_bs(spot, k_long, k_short, r=r_val, q=q_val, sigma=sigma, T=T_years)
+                        method = "pricing.py call spread (BS)"
+                elif "put spread" in product:
+                    k_long = strike
+                    k_short = strike2 if strike2 else strike
+                    for leg in legs:
+                        if str(leg.get("option_type", "")).lower() == "put":
+                            if str(leg.get("side", "long")).lower() == "long":
+                                k_long = float(leg.get("strike", k_long))
+                            else:
+                                k_short = float(leg.get("strike", k_short))
+                    if k_long and k_short:
+                        mark = price_put_spread_bs(spot, k_long, k_short, r=r_val, q=q_val, sigma=sigma, T=T_years)
+                        method = "pricing.py put spread (BS)"
+                elif "butterfly" in product and "iron" not in product:
+                    strikes = sorted({float(leg.get("strike")) for leg in legs if leg.get("strike") is not None})
+                    if len(strikes) >= 3:
+                        k1, k2, k3 = strikes[0], strikes[1], strikes[-1]
+                        mark = price_butterfly_bs(spot, k1, k2, k3, r=r_val, q=q_val, sigma=sigma, T=T_years)
+                        method = "pricing.py butterfly (BS)"
+                elif "condor" in product and "iron" not in product:
+                    strikes = sorted({float(leg.get("strike")) for leg in legs if leg.get("strike") is not None})
+                    if len(strikes) >= 4:
+                        k1, k2, k3, k4 = strikes[0], strikes[1], strikes[2], strikes[-1]
+                        mark = price_condor_bs(spot, k1, k2, k3, k4, r=r_val, q=q_val, sigma=sigma, T=T_years)
+                        method = "pricing.py condor (BS)"
+                elif "iron butterfly" in product:
+                    k_put_long = k_call_long = k_center = None
+                    for leg in legs:
+                        ltype = str(leg.get("option_type", "")).lower()
+                        side_leg = str(leg.get("side", "long")).lower()
+                        if ltype == "put" and side_leg == "long":
+                            k_put_long = float(leg.get("strike"))
+                        elif ltype == "call" and side_leg == "long":
+                            k_call_long = float(leg.get("strike"))
+                        elif side_leg == "short":
+                            k_center = float(leg.get("strike"))
+                    if k_put_long and k_call_long and k_center:
+                        mark = price_iron_butterfly_bs(spot, k_put_long, k_center, k_call_long, r=r_val, q=q_val, sigma=sigma, T=T_years)
+                        method = "pricing.py iron butterfly (BS)"
+                elif "iron condor" in product:
+                    k_put_long = k_put_short = k_call_short = k_call_long = None
+                    for leg in legs:
+                        ltype = str(leg.get("option_type", "")).lower()
+                        side_leg = str(leg.get("side", "long")).lower()
+                        if ltype == "put" and side_leg == "long":
+                            k_put_long = float(leg.get("strike"))
+                        elif ltype == "put" and side_leg == "short":
+                            k_put_short = float(leg.get("strike"))
+                        elif ltype == "call" and side_leg == "short":
+                            k_call_short = float(leg.get("strike"))
+                        elif ltype == "call" and side_leg == "long":
+                            k_call_long = float(leg.get("strike"))
+                    if all(v is not None for v in [k_put_long, k_put_short, k_call_short, k_call_long]):
+                        mark = price_iron_condor_bs(spot, k_put_long, k_put_short, k_call_short, k_call_long, r=r_val, q=q_val, sigma=sigma, T=T_years)
+                        method = "pricing.py iron condor (BS)"
+                elif "digital" in product:
+                    view = view_digital(spot, strike, T=T_years, r=r_val, q=q_val, sigma=sigma, option_type=option_type, payout=float((pos.get("misc") or {}).get("payout", 1.0) if isinstance(pos.get("misc"), dict) else 1.0))
+                    mark = float(view.get("premium", 0.0))
+                    method = "pricing.py digital (BS)"
+                elif "asset-or-nothing" in product:
+                    view = view_asset_or_nothing(spot, strike, T=T_years, r=r_val, q=q_val, sigma=sigma, option_type=option_type)
+                    mark = float(view.get("premium", 0.0))
+                    method = "pricing.py asset-or-nothing (BS)"
+                elif "chooser" in product:
+                    view = view_chooser(spot, strike, T=T_years, r=r_val, q=q_val, sigma=sigma)
+                    mark = float(view.get("premium", 0.0))
+                    method = "pricing.py chooser (BS)"
+                elif "quanto" in product:
+                    fx = float((pos.get("misc") or {}).get("fx_rate", 1.0) if isinstance(pos.get("misc"), dict) else 1.0)
+                    view = view_quanto(spot, strike, fx_rate=fx, option_type=option_type or "call", r=r_val, q=q_val, sigma=sigma, T=T_years)
+                    mark = float(view.get("premium", 0.0))
+                    method = "pricing.py quanto (BS approx)"
+                elif "rainbow" in product:
+                    s2 = float((pos.get("misc") or {}).get("S2", 0.0) if isinstance(pos.get("misc"), dict) else 0.0) or spot
+                    view = view_rainbow(spot, s2, strike, option_type=option_type or "call", r=r_val, q=q_val, sigma=sigma, T=T_years)
+                    mark = float(view.get("premium", 0.0))
+                    method = "pricing.py rainbow (best-of approx)"
+                elif "calendar" in product:
+                    T_short = float((pos.get("misc") or {}).get("T_short", max(T_years * 0.5, 0.05)) if isinstance(pos.get("misc"), dict) else max(T_years * 0.5, 0.05))
+                    T_long = float((pos.get("misc") or {}).get("T_long", T_years) if isinstance(pos.get("misc"), dict) else T_years)
+                    view = view_calendar_spread(spot, strike, T_short, T_long, r=r_val, q=q_val, sigma=sigma, option_type=option_type or "call")
+                    mark = float(view.get("premium", 0.0))
+                    method = "pricing.py calendar spread (BS)"
+                elif "diagonal" in product:
+                    T_near = float((pos.get("misc") or {}).get("T_near", max(T_years * 0.5, 0.05)) if isinstance(pos.get("misc"), dict) else max(T_years * 0.5, 0.05))
+                    T_far = float((pos.get("misc") or {}).get("T_far", T_years) if isinstance(pos.get("misc"), dict) else T_years)
+                    k_far = strike2 if strike2 else strike
+                    view = view_diagonal_spread(spot, strike, k_far, T_near, T_far, r=r_val, q=q_val, sigma=sigma, option_type=option_type or "call")
+                    mark = float(view.get("premium", 0.0))
+                    method = "pricing.py diagonal spread (BS)"
+                elif "barrier" in product:
+                    misc = pos.get("misc") if isinstance(pos.get("misc"), dict) else {}
+                    barrier = float(misc.get("barrier") or misc.get("barrier_level") or (strike * 1.1 if strike else spot * 1.1))
+                    direction = str(misc.get("direction", misc.get("barrier_type", "up"))).lower()
+                    knock = str(misc.get("knock", "out")).lower()
+                    view = view_barrier(spot, strike, barrier, direction=direction, knock=knock, option_type=option_type or "call", payout=float(misc.get("payout", 1.0) or 1.0), binary=False, r=r_val, q=q_val, sigma=sigma, T=T_years)
+                    mark = float(view.get("premium", 0.0))
+                    method = "pricing.py barrier (proxy)"
+
+                return spot, T_years, sigma, mark, method
+
             chains_by_underlying_custom: dict[str, list[dict]] = {}
             def _pricing_metadata(prod: str) -> tuple[str, list[str]]:
                 prod_low = (prod or "").lower()
@@ -8385,7 +8628,9 @@ with tab1:
                                                 best_score = score
                                                 best = c
                                         chain_entry = best
-                                spot_calc, T_calc, sigma_calc, new_mark, new_method = mark_option_market_value(pos, chain_entry=chain_entry)
+                                spot_calc, T_calc, sigma_calc, new_mark, new_method = _price_from_pricing_py(pos, chain_entry=chain_entry)
+                                if new_mark is None or new_mark <= 0:
+                                    spot_calc, T_calc, sigma_calc, new_mark, new_method = mark_option_market_value(pos, chain_entry=chain_entry)
                                 # Save pricing snapshot for subsequent renders
                                 st.session_state[f"pricing_result_{key}"] = {
                                     "spot": spot_calc,
