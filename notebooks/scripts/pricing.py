@@ -466,20 +466,21 @@ def view_cliquet(s0: float, floor: float = 0.0, cap: float = 0.1, span: float = 
 def payoff_barrier(spot, strike: float, barrier: float, option_type: str = "call", direction: str = "up", knock: str = "out", payout: float = 1.0, binary: bool = False):
     s = np.asarray(spot, dtype=float)
     hit = (s >= barrier) if direction == "up" else (s <= barrier)
-    if knock == "in" and not hit:
-        return np.zeros_like(s)
-    if knock == "out" and hit:
-        return np.zeros_like(s)
+
+    # Determine where payoff is active depending on knock in/out
+    active_mask = hit if knock == "in" else ~hit
+
     if binary:
-        return payout * np.where(hit, 1.0, 0.0)
+        return payout * np.where(active_mask, 1.0, 0.0)
+
     base = np.maximum(s - strike, 0.0) if option_type == "call" else np.maximum(strike - s, 0.0)
-    return base
+    return np.where(active_mask, base, 0.0)
 
 
 def view_barrier(s0: float, strike: float, barrier: float, direction: str = "up", knock: str = "out", option_type: str = "call", payout: float = 1.0, binary: bool = False, span: float = 0.5, n: int = 300):
     s_grid = np.linspace(s0 * (1.0 - span), s0 * (1.0 + span), n)
     payoff_grid = payoff_barrier(s_grid, strike, barrier, option_type=option_type, direction=direction, knock=knock, payout=payout, binary=binary)
-    premium = float(payoff_barrier(s0, strike, barrier, option_type=option_type, direction=direction, knock=knock, payout=payout, binary=binary))
+    premium = float(np.asarray(payoff_barrier(s0, strike, barrier, option_type=option_type, direction=direction, knock=knock, payout=payout, binary=binary)).item())
     pnl_grid = payoff_grid - premium
     bes = _find_breakevens_from_grid(s_grid, pnl_grid)
     return {"s_grid": s_grid, "payoff": payoff_grid, "pnl": pnl_grid, "premium": premium, "breakevens": bes}
