@@ -224,9 +224,10 @@ class OptionsPnLMatrixTests(TestCase):
                 print("\n==============================")
                 print(f"========== {base_name.upper()} ==========")
                 print("==============================")
-            # Affichage regroupé : LONG : CALL/PUT et SHORT : CALL/PUT
+            # Affichage regroupé : bloc côté/option type avec sous-lignes OPEN/EXPIRATION
             label_type = opt_type.upper() if opt_type else "N/A"
-            print(f"\n{side.upper()} : {label_type}")
+            block_title = f"{side.upper()} / {label_type}"
+            print(f"\n-- {block_title} --")
             spots = self._spots(opt)
             strike_base = float(opt.get("strike") or 1.0)
             strike2_val = opt.get("strike2")
@@ -247,7 +248,7 @@ class OptionsPnLMatrixTests(TestCase):
             with self.subTest(option=opt_id, phase="opening", scenario=scen):
                 open_res = self._pnl(opt, spot=open_spot, mark=opening_mark)
                 self.assertAlmostEqual(open_res["pnl_total"], 0.0, places=6)
-                print(f"[OPEN-{scen.upper()}] {opt_id} price={opening_mark}")
+                print(f"   OPEN   [{scen.upper()}] price={opening_mark}")
 
             print("---- EXPIRATION ----")
 
@@ -258,7 +259,7 @@ class OptionsPnLMatrixTests(TestCase):
                 expected = self._expected_pnl(opt, spot=spot)
                 self.assertAlmostEqual(res["pnl_total"], expected["pnl_total"], places=6)
                 self.assertAlmostEqual(res["pnl_per_unit"], expected["pnl_per_unit"], places=6)
-                print(f"[EXP-{scen.upper()}] {opt_id} payoff={res['payoff_per_unit']:.4f} (expired)")
+                print(f"   EXPIRE [{scen.upper()}] payoff={res['payoff_per_unit']:.4f} (expired)")
 
                 exp_entry = dict(opt)
                 exp_entry.update(res)

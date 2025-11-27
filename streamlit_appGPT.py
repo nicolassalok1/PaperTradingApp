@@ -741,9 +741,9 @@ def run_app_options():
         title: str,
         xlabel: str = "Spot",
         ylabel: str = "Strike",
+        wrap_in_expander: bool = True,
     ) -> None:
-        # Wrap every heatmap in an expander to avoid flooding the UI
-        with st.expander(f"Afficher la heatmap : {title}", expanded=False):
+        def _draw():
             fig, ax = plt.subplots()
             image = ax.imshow(
                 matrix,
@@ -759,17 +759,21 @@ def run_app_options():
             st.pyplot(fig)
             plt.close(fig)
 
+        if wrap_in_expander:
+            with st.expander(f"Afficher la heatmap : {title}", expanded=False):
+                _draw()
+        else:
+            _draw()
+
 
     def _render_call_put_heatmaps(
         label: str, call_matrix: np.ndarray, put_matrix: np.ndarray, x_values: np.ndarray, y_values: np.ndarray
     ) -> None:
-        col_call, col_put = st.columns(2)
-        with col_call:
+        with st.expander(f"Afficher les heatmaps : {label}", expanded=False):
             st.write(f"Heatmap Call ({label})")
-            _render_heatmap(call_matrix, x_values, y_values, f"Call ({label})")
-        with col_put:
+            _render_heatmap(call_matrix, x_values, y_values, f"Call ({label})", wrap_in_expander=False)
             st.write(f"Heatmap Put ({label})")
-            _render_heatmap(put_matrix, x_values, y_values, f"Put ({label})")
+            _render_heatmap(put_matrix, x_values, y_values, f"Put ({label})", wrap_in_expander=False)
 
 
     def _compute_bsm_heatmaps(
