@@ -229,7 +229,7 @@ class OptionsPnLMatrixTests(TestCase):
                 print("==============================")
             if opt_type and opt_type not in seen_sections[base_name]:
                 seen_sections[base_name].add(opt_type)
-            print(f"\n////////// {opt_type.upper()} //////////")
+                print(f"\n////////// {opt_type.upper()} //////////")
             print(f"\n\\\\\\\\\\\\\\\\ {side.upper()} \\\\\\\\\\\\\\\\")
             spots = self._spots(opt)
             strike_base = float(opt.get("strike") or 1.0)
@@ -244,12 +244,18 @@ class OptionsPnLMatrixTests(TestCase):
                 return val / strike_base if strike_base else 0.0
 
             # Mark-to-market (mid-term) : on logge ATM/ITM/OTM
+            print("---- CLOSING ----")
             for scen in scenarios:
                 spot_close = spots[scen]
                 with self.subTest(option=opt_id, phase="closing", scenario=scen):
                     mid = self._pnl(opt, spot=spot_close)
                     expected_mid = self._expected_pnl(opt, spot=spot_close)
                     self.assertAlmostEqual(mid["pnl_total"], expected_mid["pnl_total"], places=6)
+                    print(
+                        f"[CLOSE-{scen.upper()}] {opt_id} stock={spot_close} strike={strike_base} "
+                        f"T%=50 pnl={mid['pnl_total']:.4f}"
+                    )
+            print("---- EXPIRATION ----")
 
             for scen in scenarios:
                 with self.subTest(option=opt_id, phase="expiration", scenario=scen):
@@ -258,6 +264,10 @@ class OptionsPnLMatrixTests(TestCase):
                     expected = self._expected_pnl(opt, spot=spot)
                     self.assertAlmostEqual(res["pnl_total"], expected["pnl_total"], places=6)
                     self.assertAlmostEqual(res["pnl_per_unit"], expected["pnl_per_unit"], places=6)
+                    print(
+                        f"[EXP-{scen.upper()}] {opt_id} stock={spot} moneyness={moneyness(spot):.4f} "
+                        f"T%=0 payoff={res['payoff_per_unit']:.4f} pnl={res['pnl_total']:.4f}"
+                    )
 
             # Workflow JSON tests : côté long → fermeture mid-term ; côté short → expiration
             if side == "long":
@@ -272,6 +282,7 @@ class OptionsPnLMatrixTests(TestCase):
                     }
                 )
                 closed_payloads[opt_id] = close_entry
+                print(f"[JSON-CLOSE] {opt_id} spot={close_spot} pnl={close_entry.get('pnl_total')}")
             else:
                 exp_spot = spots["atm"]
                 exp_entry = dict(opt)
@@ -284,10 +295,12 @@ class OptionsPnLMatrixTests(TestCase):
                     }
                 )
                 expired_payloads[opt_id] = exp_entry
+                print(f"[JSON-EXPIRE] {opt_id} spot={exp_spot} pnl={exp_entry.get('pnl_total')}")
 
         all_expired = {}
         all_expired.update(closed_payloads)
         all_expired.update(expired_payloads)
         self._save_expired(all_expired)
+        self._log_json("WRITE", all_expired)
         loaded_expired = self._expired()
         self.assertEqual(len(loaded_expired), len(all_expired))
