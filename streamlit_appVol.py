@@ -19,6 +19,9 @@ BASE_DIR = Path(__file__).parent
 # Data and helper modules now live under scripts/scriptsRL; datasets live in database/RLtab/.
 SOURCES_DIR = BASE_DIR / "scripts" / "scriptsRL"
 DATA_DIR = BASE_DIR / "database" / "RLtab"
+# Ensure helper modules under scripts/scriptsRL are importable
+if SOURCES_DIR.exists() and str(SOURCES_DIR) not in sys.path:
+    sys.path.insert(0, str(SOURCES_DIR))
 RL4F_BASE = SOURCES_DIR / "rl4f"
 RL4F_DIRS = [
     RL4F_BASE / "trading_dql",

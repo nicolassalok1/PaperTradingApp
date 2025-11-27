@@ -35,12 +35,19 @@ class HestonTests(TestCase):
             self.skipTest("torch not installed")
         import sys
         import types
+        from pathlib import Path
 
         # Stub plotly to avoid heavy dependency for this unit-level check.
         plotly_stub = types.ModuleType("plotly")
         plotly_stub.graph_objects = types.SimpleNamespace()
         sys.modules.setdefault("plotly", plotly_stub)
         sys.modules.setdefault("plotly.graph_objects", plotly_stub.graph_objects)
+
+        # Ensure local Heston modules are importable
+        heston_dir = Path("scripts/scriptsGPT/pricing_scripts/Heston").resolve()
+        sys.path.insert(0, str(heston_dir))
+        sys.modules.pop("heston_torch", None)
+        sys.modules.pop("heston_mc_heatmap_to_iv", None)
 
         from scripts.scriptsGPT.pricing_scripts.Heston.heston_mc_heatmap_to_iv import bs_price, implied_vol_from_price
 

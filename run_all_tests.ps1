@@ -7,4 +7,4 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 Set-Location $repoRoot
 
 Write-Host "=== Running tests via unittest discover (tests/)..."
-python -m unittest discover -s tests -p "test*.py" -t . @args
+python -m unittest discover -s tests -p "test*.py" -t . @args | Tee-Object -FilePath "tests/testsGPT/test_run.log"

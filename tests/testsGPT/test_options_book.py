@@ -19,7 +19,7 @@ def _extract_functions(source_text, func_names):
 
 class OptionsBookTests(TestCase):
     def setUp(self):
-        src = Path("streamlit_appGPT.py").read_text()
+        src = Path("streamlit_appGPT.py").read_text(encoding="utf-8")
         code = "\n".join(
             [
                 "import json, time, math",

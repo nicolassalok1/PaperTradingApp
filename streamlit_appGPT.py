@@ -19,6 +19,13 @@ from pathlib import Path
 
 
 def _coerce_env_value(val):
+    # Ensure any Path/bytes/other objects become plain strings for HTTP clients.
+    try:
+        import os as _os
+        if hasattr(_os, "fspath"):
+            return val if isinstance(val, str) else _os.fspath(val)
+    except Exception:
+        pass
     return val if isinstance(val, str) else str(val)
 
 
