@@ -547,15 +547,57 @@ def payoff_rainbow(spot1, spot2, strike: float, option_type: str = "call"):
     return np.maximum(best - strike, 0.0)
 
 
+def price_rainbow_mc(
+    S1: float,
+    S2: float,
+    K: float,
+    T: float = DEFAULT_T,
+    sigma1: float = DEFAULT_SIGMA,
+    sigma2: float = DEFAULT_SIGMA,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    rho: float = 0.0,
+    n_paths: int = 20_000,
+    option_type: str = "call",
+) -> float:
+    """
+    Monte Carlo pricing for a 2-asset rainbow (max(S1,S2) - K)^+ or (K - max)^+.
+    Correlation rho is applied between the two asset Brownian motions.
+    """
+    dt = T
+    sqrt_dt = math.sqrt(dt)
+    z1 = np.random.randn(n_paths)
+    z2 = rho * z1 + math.sqrt(max(0.0, 1.0 - rho**2)) * np.random.randn(n_paths)
+    s1_T = S1 * np.exp((r - q - 0.5 * sigma1**2) * dt + sigma1 * sqrt_dt * z1)
+    s2_T = S2 * np.exp((r - q - 0.5 * sigma2**2) * dt + sigma2 * sqrt_dt * z2)
+    best = np.maximum(s1_T, s2_T)
+    if option_type == "put":
+        payoff = np.maximum(K - best, 0.0)
+    else:
+        payoff = np.maximum(best - K, 0.0)
+    return float(math.exp(-r * T) * np.mean(payoff))
+
+
 def view_rainbow(s0: float, s0b: float, strike: float, span: float = 0.5, n: int = 300, **kwargs):
     s_grid = np.linspace(s0 * (1.0 - span), s0 * (1.0 + span), n)
     s_grid_b = np.linspace(s0b * (1.0 - span), s0b * (1.0 + span), n)
     payoff_grid = payoff_rainbow(s_grid, s_grid_b, strike, option_type=kwargs.get("option_type", "call"))
     opt_type = kwargs.get("option_type", "call")
-    # Approx: moyenne des primes vanilla sur chaque actif
-    premium_a = bs_price_call(s0, strike, r=kwargs.get("r", DEFAULT_R), q=kwargs.get("q", DEFAULT_Q), sigma=kwargs.get("sigma", DEFAULT_SIGMA), T=kwargs.get("T", DEFAULT_T)) if opt_type != "put" else bs_price_put(s0, strike, r=kwargs.get("r", DEFAULT_R), q=kwargs.get("q", DEFAULT_Q), sigma=kwargs.get("sigma", DEFAULT_SIGMA), T=kwargs.get("T", DEFAULT_T))
-    premium_b = bs_price_call(s0b, strike, r=kwargs.get("r", DEFAULT_R), q=kwargs.get("q", DEFAULT_Q), sigma=kwargs.get("sigma", DEFAULT_SIGMA), T=kwargs.get("T", DEFAULT_T)) if opt_type != "put" else bs_price_put(s0b, strike, r=kwargs.get("r", DEFAULT_R), q=kwargs.get("q", DEFAULT_Q), sigma=kwargs.get("sigma", DEFAULT_SIGMA), T=kwargs.get("T", DEFAULT_T))
-    premium = 0.5 * (premium_a + premium_b)
+    sigma_a = kwargs.get("sigma", DEFAULT_SIGMA)
+    sigma_b = kwargs.get("sigma_b", sigma_a)
+    premium = price_rainbow_mc(
+        s0,
+        s0b,
+        strike,
+        T=kwargs.get("T", DEFAULT_T),
+        sigma1=sigma_a,
+        sigma2=sigma_b,
+        r=kwargs.get("r", DEFAULT_R),
+        q=kwargs.get("q", DEFAULT_Q),
+        rho=kwargs.get("rho", 0.0),
+        n_paths=int(kwargs.get("n_paths", 20_000)),
+        option_type=opt_type,
+    )
     pnl_grid = payoff_grid - premium
     bes = _find_breakevens_from_grid(s_grid, pnl_grid)
     return {"s_grid": s_grid, "payoff": payoff_grid, "pnl": pnl_grid, "premium": premium, "breakevens": bes}

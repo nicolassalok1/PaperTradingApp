@@ -8308,15 +8308,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 except Exception as exc:
                     st.error(f"Impossible de récupérer le spot CBOE pour {t_b} : {exc}")
 
-            spot_b_default = st.session_state.get(_k("rainbow_s0b_cboe"), float(common_spot_value))
-            spot_b = st.slider(
-                "Spot second sous-jacent (modifiable)",
-                min_value=0.5 * float(spot_b_default),
-                max_value=1.5 * float(spot_b_default),
-                value=float(spot_b_default),
-                step=0.5,
-                key=_k("rainbow_s0b"),
-            )
+            spot_b_default = st.session_state.get(_k("rainbow_s0b_cboe"))
+            if spot_b_default is None:
+                st.info("Récupère d'abord le spot du second sous-jacent (bouton ci-dessus) pour afficher le pricing.")
+                return
+            spot_b = float(spot_b_default)
             opt_type = "call" if option_char.lower() == "c" else "put"
             T_rainbow = st.slider("T (années)", min_value=0.05, max_value=2.0, value=float(common_maturity_value), step=0.05, key=_k("rainbow_T"))
             iv_rain = _get_cached_iv_for(strike, T_rainbow, opt_type)
@@ -8332,6 +8328,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 r=float(common_rate_value),
                 q=float(d_common),
                 sigma=float(sigma_rain),
+                sigma_b=float(sigma_rain),
                 T=float(T_rainbow),
                 option_type=opt_type,
             )
@@ -8364,7 +8361,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 or st.session_state.get("ticker_default")
                 or ""
             ).strip().upper()
-            st.caption(f"Sous-jacent A: {underlying or 'N/A'} (reprise de l'entête)")
+            st.caption(f"Sous-jacent A: {underlying or 'N/A'} | Spot A: {float(common_spot_value):.4f}")
             st.caption(
                 f"Sous-jacent B: {(st.session_state.get(_k('rainbow_ticker_b'), 'N/A') or 'N/A').upper()} | Spot: {spot_b:.4f}"
             )
