@@ -3390,6 +3390,10 @@ def run_app_options():
         st.caption(
             f"S₀ (spot) = {common_spot_value:.4f} | r (risk-free) = {common_rate_value:.4f} | d (dividende continu) = {float(d_common):.4f}"
         )
+        header_table = pd.DataFrame.from_dict(
+            {"S0": [common_spot_value], "r": [common_rate_value], "d": [float(d_common)]}
+        )
+        st.dataframe(header_table, use_container_width=True, hide_index=True)
         hist_df = pd.DataFrame()
         try:
             cli_path = SCRIPTS_DIR / "fetch_history_cli.py"
