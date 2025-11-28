@@ -24,6 +24,10 @@ from typing import Any, Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
+import datetime
+import requests
+import math
+import yfinance as yf
 
 
 def _compute_leg_payoff(leg: dict[str, Any], spot: float) -> float:

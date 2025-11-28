@@ -10043,7 +10043,7 @@ with tab1:
 
                 with st.expander(f"{key} – {pos.get('product_type', pos.get('product')) or 'Option'} ({underlying})"):
                     st.caption(f"Spot (CBOE/cache): {current_spot:.4f}" if current_spot else "Spot indisponible")
-                    st.metric("Mark estimé", f"${(mark_price or 0.0):.4f}", help=f"Méthode: {method}")
+                    st.metric("Payoff actuel", f"${(pay_grid[np.searchsorted(s_grid, current_spot, side='left') - 1] if current_spot else 0.0):.4f}", help=f"Méthode: {method}")
                     fig, ax = plt.subplots(figsize=(6, 3))
                     ax.plot(s_grid, pay_grid, label="Payoff (signé)")
                     ax.plot(s_grid, pnl_grid, label="P&L (vs. prime)", color="darkorange")
@@ -10428,6 +10428,53 @@ with tab1:
         st.dataframe(df_exp, width="stretch", hide_index=True)
         if legacy_book:
             st.caption("Source merge : options_portfolio.json + options_book.json (legacy).")
+
+        st.markdown("#### Profils payoff / P&L (options expirées)")
+        spot_cache_exp: dict[str, float | None] = {}
+
+        def _spot_live_exp(sym: str) -> float | None:
+            if not sym:
+                return None
+            if sym in spot_cache_exp:
+                return spot_cache_exp[sym]
+            spot_val = get_spot_cboe_cached(sym)
+            if spot_val is None or spot_val <= 0:
+                spot_val = float(get_data(sym).get("price", 0.0) or 0.0)
+            spot_cache_exp[sym] = spot_val
+            return spot_val
+
+        for key, opt in expired_options.items():
+            underlying = (opt.get("underlying") or "").upper()
+            side = (opt.get("side") or "long").lower()
+            avg_price = float(opt.get("avg_price", opt.get("T_0_price", 0.0)) or 0.0)
+            qty = float(opt.get("quantity", 0.0) or 0.0)
+            strike = float(opt.get("strike", 0.0) or 0.0)
+            spot_close = float(opt.get("underlying_close", opt.get("S_T", 0.0)) or 0.0)
+            spot_now = _spot_live_exp(underlying)
+            ref = spot_close if spot_close > 0 else (spot_now if spot_now and spot_now > 0 else strike if strike > 0 else 1.0)
+            s_grid = np.linspace(max(0.01, 0.5 * ref), 1.5 * ref, 180)
+            pay_grid = np.array([compute_option_payoff(opt, s) for s in s_grid], dtype=float)
+            if side == "short":
+                pay_grid *= -1.0
+            pnl_grid = pay_grid - avg_price if side == "long" else avg_price + pay_grid
+            pay_close = compute_option_payoff(opt, ref)
+
+            with st.expander(f"{key} – {opt.get('product_type') or opt.get('product') or opt.get('type') or 'Option'} ({underlying})", expanded=False):
+                st.caption(f"Qty: {qty:.0f} | Side: {side} | Strike: {strike:.4f} | Spot réf: {ref:.4f}")
+                st.metric("Payoff @ réf (expirée)", f"${pay_close:.4f}")
+                fig, ax = plt.subplots(figsize=(6, 3))
+                ax.plot(s_grid, pay_grid, label="Payoff (signé)")
+                ax.plot(s_grid, pnl_grid, label="P&L (vs. prime)", color="darkorange")
+                if strike > 0:
+                    ax.axvline(strike, color="gray", linestyle="--", label=f"K = {strike:.2f}")
+                ax.axvline(ref, color="crimson", linestyle="-.", label=f"Ref = {ref:.2f}")
+                ax.axhline(0, color="black", linewidth=0.8)
+                ax.set_xlabel("Spot")
+                ax.set_ylabel("Payoff / P&L")
+                ax.legend(loc="best")
+                ax.grid(alpha=0.3, linestyle="--")
+                st.pyplot(fig, clear_figure=True)
+                st.caption(f"Payoff @ ref: {pay_close:.4f} | Avg price: {avg_price:.4f}")
 
         with st.expander("🔎 Détails payoff / méthode de calcul (toutes les options)", expanded=False):
             for key, opt in expired_options.items():
