@@ -19,6 +19,7 @@ numba
 scipy
 tensorflow
 torch
+scikit-learn
 
 # Streamlit app
 streamlit
