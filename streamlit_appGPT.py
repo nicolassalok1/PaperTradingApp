@@ -4680,9 +4680,14 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     key=_k("barrier_all_payout"),
                 )
             with col3:
-                sigma_b = st.slider("Sigma", min_value=0.01, max_value=1.0, value=common_sigma_value, step=0.01, key=_k("barrier_all_sigma"))
                 r_b = st.slider("r", min_value=-0.05, max_value=0.1, value=common_rate_value, step=0.005, key=_k("barrier_all_r"))
                 T_b = st.slider("T (années)", min_value=0.05, max_value=2.0, value=common_maturity_value, step=0.05, key=_k("barrier_all_T"))
+            iv_bar = _get_cached_iv_for(strike_b, T_b, call_put_b)
+            sigma_b = float(iv_bar) if iv_bar is not None and np.isfinite(iv_bar) and iv_bar > 0 else float(common_sigma_value)
+            if iv_bar is not None and np.isfinite(iv_bar) and iv_bar > 0:
+                st.caption(f"IV récupérée (cache) ≈ {iv_bar:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
             with st.spinner("Calcul..."):
                 view_dyn = view_barrier(
@@ -4769,6 +4774,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         "binary": bool(binary_b),
                         "payout": float(payout_b),
                         "spot_at_pricing": float(s0_ref),
+                        "sigma_used": float(sigma_b),
                     },
                 }
                 try:
@@ -5487,7 +5493,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 st.caption(f"IV récupérée (cache) ≈ {iv_bmd:.4f}")
             else:
                 st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
-            st.caption(f"Paramètres Bermudan : K={K_slider_bmd:.4f} | T={T_slider_bmd:.4f} | {sigma_source_msg}")
 
             st.subheader("Longstaff–Schwartz (GBM)")
             render_method_explainer(
@@ -5799,9 +5804,14 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     key=_k("asian_avg"),
                 )
             with col2:
-                sigma_as = st.slider("Sigma", min_value=0.01, max_value=1.0, value=common_sigma_value, step=0.01, key=_k("asian_sigma"))
                 r_as = st.slider("r", min_value=-0.05, max_value=0.1, value=common_rate_value, step=0.005, key=_k("asian_r"))
                 T_as = st.slider("T (années)", min_value=0.05, max_value=2.0, value=common_maturity_value, step=0.05, key=_k("asian_T"))
+            iv_as = _get_cached_iv_for(strike_as, T_as, option_type_as)
+            sigma_as = float(iv_as) if iv_as is not None and np.isfinite(iv_as) and iv_as > 0 else float(common_sigma_value)
+            if iv_as is not None and np.isfinite(iv_as) and iv_as > 0:
+                st.caption(f"IV récupérée (cache) ≈ {iv_as:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
             view_dyn = view_asian_arith(
                 s0_path,
@@ -5874,7 +5884,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "price": float(premium),
                     "misc": {
                         "avg_ref": float(avg_as),
-                        "sigma": float(sigma_as),
+                        "sigma_used": float(sigma_as),
                         "r": float(r_as),
                         "spot_at_pricing": float(s0_path),
                     },
@@ -5916,6 +5926,31 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             k_put_short = k_center - inner
             k_call_short = k_center + inner
             k_call_long = k_center + outer
+            T_iron_condor = st.slider(
+                "T (années)",
+                min_value=0.05,
+                max_value=2.0,
+                value=float(common_maturity_value),
+                step=0.05,
+                key=_k("iron_condor_T"),
+            )
+            ivs_ic = [
+                _get_cached_iv_for(k_put_long, T_iron_condor, "put"),
+                _get_cached_iv_for(k_put_short, T_iron_condor, "put"),
+                _get_cached_iv_for(k_call_short, T_iron_condor, "call"),
+                _get_cached_iv_for(k_call_long, T_iron_condor, "call"),
+            ]
+            iv_vals_ic = [v for v in ivs_ic if v is not None and np.isfinite(v) and v > 0]
+            sigma_iron_condor = float(np.mean(iv_vals_ic)) if iv_vals_ic else float(common_sigma_value)
+            if iv_vals_ic:
+                iv_txt = " | ".join(
+                    f"K={k:.2f}: {v:.4f}" if v is not None and np.isfinite(v) and v > 0 else f"K={k:.2f}: n/a"
+                    for k, v in zip([k_put_long, k_put_short, k_call_short, k_call_long], ivs_ic)
+                )
+                st.caption(f"IV récupérées (cache) ≈ {iv_txt}")
+                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_iron_condor:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
             view_dyn = view_iron_condor(
                 float(common_spot_value),
@@ -5925,10 +5960,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_call_long,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(common_sigma_value),
-                T=float(common_maturity_value),
+                sigma=float(sigma_iron_condor),
+                T=float(T_iron_condor),
             )
             premium = float(view_dyn.get("premium", 0.0))
+            price_display = abs(premium)
 
             s_grid = view_dyn["s_grid"]
             payoff_grid = view_dyn["payoff"]
@@ -5960,14 +5996,14 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ).strip().upper()
             st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
-            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            expiration_dt = today + datetime.timedelta(days=int((T_iron_condor or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("iron_condor_qty_inline"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("iron_condor_side_inline"))
             st.caption(
                 f"K put long: {k_put_long:.4f} | K put short: {k_put_short:.4f} | "
                 f"K call short: {k_call_short:.4f} | K call long: {k_call_long:.4f}"
             )
-            st.caption(f"T (maturité commune, années): {float(common_maturity_value):.4f}")
+            st.caption(f"T (maturité, années): {float(T_iron_condor):.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("iron_condor_add_inline")):
                 payload = {
@@ -5982,7 +6018,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price_display,
                     "side": side,
                     "S0": float(common_spot_value),
-                    "maturity_years": common_maturity_value,
+                    "maturity_years": float(T_iron_condor),
                     "legs": [
                         {"option_type": "put", "strike": float(k_put_long)},
                         {"option_type": "put", "strike": float(k_put_short)},
@@ -6001,6 +6037,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         ],
                         "premium_raw": float(premium),
                         "spot_at_pricing": float(common_spot_value),
+                        "sigma_used": float(sigma_iron_condor),
+                        "r": float(common_rate_value),
+                        "q": float(d_common),
+                        "maturity": float(T_iron_condor),
                     },
                 }
                 try:
@@ -6433,14 +6473,28 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 step=0.5,
                 key=_k("straddle_k"),
             )
+            T_straddle = st.slider(
+                "T (années)",
+                min_value=0.05,
+                max_value=2.0,
+                value=float(common_maturity_value),
+                step=0.05,
+                key=_k("straddle_T"),
+            )
+            iv_straddle = _get_cached_iv_for(strike_slider, T_straddle, "call")
+            sigma_straddle = float(iv_straddle) if iv_straddle is not None and np.isfinite(iv_straddle) and iv_straddle > 0 else float(common_sigma_value)
+            if iv_straddle is not None and np.isfinite(iv_straddle) and iv_straddle > 0:
+                st.caption(f"IV récupérée (cache) ≈ {iv_straddle:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
             view_dyn = view_straddle(
                 float(common_spot_value),
                 strike_slider,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(common_sigma_value),
-                T=float(common_maturity_value),
+                sigma=float(sigma_straddle),
+                T=float(T_straddle),
             )
             premium = float(view_dyn.get("premium", 0.0))
 
@@ -6476,11 +6530,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ).strip().upper()
             st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
-            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            expiration_dt = today + datetime.timedelta(days=int((T_straddle or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("straddle_qty_inline"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("straddle_side_inline"))
             st.caption(f"K (strike commun): {strike_slider:.4f}")
-            st.caption(f"T (maturité commune, années): {float(common_maturity_value):.4f}")
+            st.caption(f"T (maturité, années): {float(T_straddle):.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("straddle_add_inline")):
                 payload = {
@@ -6495,7 +6549,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price,
                     "side": side,
                     "S0": float(common_spot_value),
-                    "maturity_years": common_maturity_value,
+                    "maturity_years": float(T_straddle),
                     "legs": [
                         {"option_type": "call", "strike": float(strike_slider)},
                         {"option_type": "put", "strike": float(strike_slider)},
@@ -6510,6 +6564,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         ],
                         "strike2": float(strike_slider),
                         "spot_at_pricing": float(common_spot_value),
+                        "sigma_used": float(sigma_straddle),
+                        "r": float(common_rate_value),
+                        "q": float(d_common),
+                        "maturity": float(T_straddle),
                     },
                 }
                 try:
@@ -6546,6 +6604,25 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             )
             k_put = min(k_put_raw, k_call_raw)
             k_call = max(k_put_raw, k_call_raw)
+            T_strangle = st.slider(
+                "T (années)",
+                min_value=0.05,
+                max_value=2.0,
+                value=float(common_maturity_value),
+                step=0.05,
+                key=_k("strangle_T"),
+            )
+            iv_put = _get_cached_iv_for(k_put, T_strangle, "put")
+            iv_call = _get_cached_iv_for(k_call, T_strangle, "call")
+            iv_vals = [v for v in (iv_put, iv_call) if v is not None and np.isfinite(v) and v > 0]
+            sigma_strangle = float(np.mean(iv_vals)) if iv_vals else float(common_sigma_value)
+            if iv_vals:
+                iv_put_txt = f"{iv_put:.4f}" if iv_put is not None and np.isfinite(iv_put) and iv_put > 0 else "n/a"
+                iv_call_txt = f"{iv_call:.4f}" if iv_call is not None and np.isfinite(iv_call) and iv_call > 0 else "n/a"
+                st.caption(f"IV récupérées (cache) ≈ put {iv_put_txt} | call {iv_call_txt}")
+                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_strangle:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
             view_dyn = view_strangle(
                 float(common_spot_value),
@@ -6553,8 +6630,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_call,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(common_sigma_value),
-                T=float(common_maturity_value),
+                sigma=float(sigma_strangle),
+                T=float(T_strangle),
             )
             premium = float(view_dyn.get("premium", 0.0))
 
@@ -6588,11 +6665,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ).strip().upper()
             st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
-            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            expiration_dt = today + datetime.timedelta(days=int((T_strangle or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("strangle_qty_inline"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("strangle_side_inline"))
             st.caption(f"K_put: {k_put:.4f} | K_call: {k_call:.4f}")
-            st.caption(f"T (maturité commune, années): {float(common_maturity_value):.4f}")
+            st.caption(f"T (maturité, années): {float(T_strangle):.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("strangle_add_inline")):
                 payload = {
@@ -6607,7 +6684,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price,
                     "side": side,
                     "S0": float(common_spot_value),
-                    "maturity_years": common_maturity_value,
+                    "maturity_years": float(T_strangle),
                     "legs": [
                         {"option_type": "put", "strike": float(k_put)},
                         {"option_type": "call", "strike": float(k_call)},
@@ -6623,6 +6700,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         "strike_put": float(k_put),
                         "strike_call": float(k_call),
                         "spot_at_pricing": float(common_spot_value),
+                        "sigma_used": float(sigma_strangle),
+                        "r": float(common_rate_value),
+                        "q": float(d_common),
+                        "maturity": float(T_strangle),
                     },
                 }
                 try:
@@ -6659,6 +6740,25 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             )
             k_long = min(k_long_raw, k_short_raw)
             k_short = max(k_long_raw, k_short_raw)
+            T_call_spread = st.slider(
+                "T (années)",
+                min_value=0.05,
+                max_value=2.0,
+                value=float(common_maturity_value),
+                step=0.05,
+                key=_k("call_spread_T"),
+            )
+            iv_long = _get_cached_iv_for(k_long, T_call_spread, "call")
+            iv_short = _get_cached_iv_for(k_short, T_call_spread, "call")
+            iv_vals_cs = [v for v in (iv_long, iv_short) if v is not None and np.isfinite(v) and v > 0]
+            sigma_call_spread = float(np.mean(iv_vals_cs)) if iv_vals_cs else float(common_sigma_value)
+            if iv_vals_cs:
+                iv_long_txt = f"{iv_long:.4f}" if iv_long is not None and np.isfinite(iv_long) and iv_long > 0 else "n/a"
+                iv_short_txt = f"{iv_short:.4f}" if iv_short is not None and np.isfinite(iv_short) and iv_short > 0 else "n/a"
+                st.caption(f"IV récupérées (cache) ≈ long {iv_long_txt} | short {iv_short_txt}")
+                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_call_spread:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
             view_dyn = view_call_spread(
                 float(common_spot_value),
@@ -6666,8 +6766,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_short,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(common_sigma_value),
-                T=float(common_maturity_value),
+                sigma=float(sigma_call_spread),
+                T=float(T_call_spread),
             )
             premium = float(view_dyn.get("premium", 0.0))
 
@@ -6701,11 +6801,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ).strip().upper()
             st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
-            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            expiration_dt = today + datetime.timedelta(days=int((T_call_spread or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("call_spread_qty_inline"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("call_spread_side_inline"))
             st.caption(f"K long: {k_long:.4f} | K short: {k_short:.4f}")
-            st.caption(f"T (maturité commune, années): {float(common_maturity_value):.4f}")
+            st.caption(f"T (maturité, années): {float(T_call_spread):.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("call_spread_add_inline")):
                 payload = {
@@ -6720,7 +6820,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price,
                     "side": side,
                     "S0": float(common_spot_value),
-                    "maturity_years": common_maturity_value,
+                    "maturity_years": float(T_call_spread),
                     "legs": [
                         {"option_type": "call", "strike": float(k_long)},
                         {"option_type": "call", "strike": float(k_short)},
@@ -6734,6 +6834,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                             {"option_type": "call", "strike": float(k_short)},
                         ],
                         "spot_at_pricing": float(common_spot_value),
+                        "sigma_used": float(sigma_call_spread),
+                        "r": float(common_rate_value),
+                        "q": float(d_common),
+                        "maturity": float(T_call_spread),
                     },
                 }
                 try:
@@ -6770,6 +6874,25 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             )
             k_long = max(k_long_raw, k_short_raw)
             k_short = min(k_long_raw, k_short_raw)
+            T_put_spread = st.slider(
+                "T (années)",
+                min_value=0.05,
+                max_value=2.0,
+                value=float(common_maturity_value),
+                step=0.05,
+                key=_k("put_spread_T"),
+            )
+            iv_long_p = _get_cached_iv_for(k_long, T_put_spread, "put")
+            iv_short_p = _get_cached_iv_for(k_short, T_put_spread, "put")
+            iv_vals_ps = [v for v in (iv_long_p, iv_short_p) if v is not None and np.isfinite(v) and v > 0]
+            sigma_put_spread = float(np.mean(iv_vals_ps)) if iv_vals_ps else float(common_sigma_value)
+            if iv_vals_ps:
+                iv_long_txt = f"{iv_long_p:.4f}" if iv_long_p is not None and np.isfinite(iv_long_p) and iv_long_p > 0 else "n/a"
+                iv_short_txt = f"{iv_short_p:.4f}" if iv_short_p is not None and np.isfinite(iv_short_p) and iv_short_p > 0 else "n/a"
+                st.caption(f"IV récupérées (cache) ≈ long {iv_long_txt} | short {iv_short_txt}")
+                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_put_spread:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
             view_dyn = view_put_spread(
                 float(common_spot_value),
@@ -6777,8 +6900,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_short,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(common_sigma_value),
-                T=float(common_maturity_value),
+                sigma=float(sigma_put_spread),
+                T=float(T_put_spread),
             )
             premium = float(view_dyn.get("premium", 0.0))
 
@@ -6812,11 +6935,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ).strip().upper()
             st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
-            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            expiration_dt = today + datetime.timedelta(days=int((T_put_spread or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("put_spread_qty_inline"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("put_spread_side_inline"))
             st.caption(f"K long: {k_long:.4f} | K short: {k_short:.4f}")
-            st.caption(f"T (maturité commune, années): {float(common_maturity_value):.4f}")
+            st.caption(f"T (maturité, années): {float(T_put_spread):.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("put_spread_add_inline")):
                 payload = {
@@ -6831,7 +6954,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price,
                     "side": side,
                     "S0": float(common_spot_value),
-                    "maturity_years": common_maturity_value,
+                    "maturity_years": float(T_put_spread),
                     "legs": [
                         {"option_type": "put", "strike": float(k_long)},
                         {"option_type": "put", "strike": float(k_short)},
@@ -6845,6 +6968,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                             {"option_type": "put", "strike": float(k_short)},
                         ],
                         "spot_at_pricing": float(common_spot_value),
+                        "sigma_used": float(sigma_put_spread),
+                        "r": float(common_rate_value),
+                        "q": float(d_common),
+                        "maturity": float(T_put_spread),
                     },
                 }
                 try:
@@ -6882,6 +7009,30 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             k1 = max(0.01, k_center - wing)
             k2 = k_center
             k3 = k_center + wing
+            T_bfly = st.slider(
+                "T (années)",
+                min_value=0.05,
+                max_value=2.0,
+                value=float(common_maturity_value),
+                step=0.05,
+                key=_k("butterfly_T"),
+            )
+            ivs_bfly = [
+                _get_cached_iv_for(k1, T_bfly, "call"),
+                _get_cached_iv_for(k2, T_bfly, "call"),
+                _get_cached_iv_for(k3, T_bfly, "call"),
+            ]
+            iv_vals_bfly = [v for v in ivs_bfly if v is not None and np.isfinite(v) and v > 0]
+            sigma_bfly = float(np.mean(iv_vals_bfly)) if iv_vals_bfly else float(common_sigma_value)
+            if iv_vals_bfly:
+                iv_txt = " | ".join(
+                    f"K={k:.2f}: {v:.4f}" if v is not None and np.isfinite(v) and v > 0 else f"K={k:.2f}: n/a"
+                    for k, v in zip([k1, k2, k3], ivs_bfly)
+                )
+                st.caption(f"IV récupérées (cache) ≈ {iv_txt}")
+                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_bfly:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
             view_dyn = view_butterfly(
                 float(common_spot_value),
@@ -6890,8 +7041,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k3,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(common_sigma_value),
-                T=float(common_maturity_value),
+                sigma=float(sigma_bfly),
+                T=float(T_bfly),
             )
             premium = float(view_dyn.get("premium", 0.0))
 
@@ -6925,11 +7076,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ).strip().upper()
             st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
-            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            expiration_dt = today + datetime.timedelta(days=int((T_bfly or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("butterfly_qty_inline"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("butterfly_side_inline"))
             st.caption(f"K1: {k1:.4f} | K2: {k2:.4f} | K3: {k3:.4f}")
-            st.caption(f"T (maturité commune, années): {float(common_maturity_value):.4f}")
+            st.caption(f"T (maturité, années): {float(T_bfly):.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("butterfly_add_inline")):
                 payload = {
@@ -6944,7 +7095,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price,
                     "side": side,
                     "S0": float(common_spot_value),
-                    "maturity_years": common_maturity_value,
+                    "maturity_years": float(T_bfly),
                     "legs": [
                         {"option_type": "call", "strike": float(k1)},
                         {"option_type": "call", "strike": float(k2)},
@@ -6962,6 +7113,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                             {"option_type": "call", "strike": float(k3)},
                         ],
                         "spot_at_pricing": float(common_spot_value),
+                        "sigma_used": float(sigma_bfly),
+                        "r": float(common_rate_value),
+                        "q": float(d_common),
+                        "maturity": float(T_bfly),
                     },
                 }
                 try:
@@ -7010,6 +7165,31 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             k2 = k_center - inner
             k3 = k_center + inner
             k4 = k_center + outer
+            T_condor = st.slider(
+                "T (années)",
+                min_value=0.05,
+                max_value=2.0,
+                value=float(common_maturity_value),
+                step=0.05,
+                key=_k("condor_T"),
+            )
+            ivs_condor = [
+                _get_cached_iv_for(k1, T_condor, "call"),
+                _get_cached_iv_for(k2, T_condor, "call"),
+                _get_cached_iv_for(k3, T_condor, "call"),
+                _get_cached_iv_for(k4, T_condor, "call"),
+            ]
+            iv_vals_condor = [v for v in ivs_condor if v is not None and np.isfinite(v) and v > 0]
+            sigma_condor = float(np.mean(iv_vals_condor)) if iv_vals_condor else float(common_sigma_value)
+            if iv_vals_condor:
+                iv_txt = " | ".join(
+                    f"K={k:.2f}: {v:.4f}" if v is not None and np.isfinite(v) and v > 0 else f"K={k:.2f}: n/a"
+                    for k, v in zip([k1, k2, k3, k4], ivs_condor)
+                )
+                st.caption(f"IV récupérées (cache) ≈ {iv_txt}")
+                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_condor:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
             view_dyn = view_condor(
                 float(common_spot_value),
@@ -7019,8 +7199,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k4,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(common_sigma_value),
-                T=float(common_maturity_value),
+                sigma=float(sigma_condor),
+                T=float(T_condor),
             )
             premium = float(view_dyn.get("premium", 0.0))
 
@@ -7054,11 +7234,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ).strip().upper()
             st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
-            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            expiration_dt = today + datetime.timedelta(days=int((T_condor or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("condor_qty_inline"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("condor_side_inline"))
             st.caption(f"K1: {k1:.4f} | K2: {k2:.4f} | K3: {k3:.4f} | K4: {k4:.4f}")
-            st.caption(f"T (maturité commune, années): {float(common_maturity_value):.4f}")
+            st.caption(f"T (maturité, années): {float(T_condor):.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("condor_add_inline")):
                 payload = {
@@ -7073,7 +7253,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price,
                     "side": side,
                     "S0": float(common_spot_value),
-                    "maturity_years": common_maturity_value,
+                    "maturity_years": float(T_condor),
                     "legs": [
                         {"option_type": "call", "strike": float(k1)},
                         {"option_type": "call", "strike": float(k2)},
@@ -7091,6 +7271,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                             {"option_type": "call", "strike": float(k4)},
                         ],
                         "spot_at_pricing": float(common_spot_value),
+                        "sigma_used": float(sigma_condor),
+                        "r": float(common_rate_value),
+                        "q": float(d_common),
+                        "maturity": float(T_condor),
                     },
                 }
                 try:
@@ -7129,6 +7313,30 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             k_call_long = k_center + wing
 
             # Iron butterfly uses its own pricer (different from iron condor)
+            T_iron_bfly = st.slider(
+                "T (années)",
+                min_value=0.05,
+                max_value=2.0,
+                value=float(common_maturity_value),
+                step=0.05,
+                key=_k("iron_bfly_T"),
+            )
+            ivs_ib = [
+                _get_cached_iv_for(k_put_long, T_iron_bfly, "put"),
+                _get_cached_iv_for(k_center, T_iron_bfly, "call"),
+                _get_cached_iv_for(k_call_long, T_iron_bfly, "call"),
+            ]
+            iv_vals_ib = [v for v in ivs_ib if v is not None and np.isfinite(v) and v > 0]
+            sigma_iron_bfly = float(np.mean(iv_vals_ib)) if iv_vals_ib else float(common_sigma_value)
+            if iv_vals_ib:
+                iv_txt = " | ".join(
+                    f"K={k:.2f}: {v:.4f}" if v is not None and np.isfinite(v) and v > 0 else f"K={k:.2f}: n/a"
+                    for k, v in zip([k_put_long, k_center, k_call_long], ivs_ib)
+                )
+                st.caption(f"IV récupérées (cache) ≈ {iv_txt}")
+                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_iron_bfly:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
             view_dyn = view_iron_butterfly(
                 float(common_spot_value),
                 k_put_long,
@@ -7136,8 +7344,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_call_long,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(common_sigma_value),
-                T=float(common_maturity_value),
+                sigma=float(sigma_iron_bfly),
+                T=float(T_iron_bfly),
             )
             premium_raw = price_iron_butterfly_bs(
                 float(common_spot_value),
@@ -7146,8 +7354,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_call_long,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(common_sigma_value),
-                T=float(common_maturity_value),
+                sigma=float(sigma_iron_bfly),
+                T=float(T_iron_bfly),
             )
             premium = float(premium_raw)
             price_display = abs(premium)
@@ -7182,11 +7390,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ).strip().upper()
             st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
-            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            expiration_dt = today + datetime.timedelta(days=int((T_iron_bfly or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("iron_bfly_qty_inline"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("iron_bfly_side_inline"))
             st.caption(f"K_put_long: {k_put_long:.4f} | K_centre: {k_center:.4f} | K_call_long: {k_call_long:.4f}")
-            st.caption(f"T (maturité commune, années): {float(common_maturity_value):.4f}")
+            st.caption(f"T (maturité, années): {float(T_iron_bfly):.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("iron_bfly_add_inline")):
                 payload = {
@@ -7201,7 +7409,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price_display,
                     "side": side,
                     "S0": float(common_spot_value),
-                    "maturity_years": common_maturity_value,
+                    "maturity_years": float(T_iron_bfly),
                     "legs": [
                         {"option_type": "put", "strike": float(k_put_long)},
                         {"option_type": "put", "strike": float(k_center)},
@@ -7220,6 +7428,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         ],
                         "premium_raw": float(premium),
                         "spot_at_pricing": float(common_spot_value),
+                        "sigma_used": float(sigma_iron_bfly),
+                        "r": float(common_rate_value),
+                        "q": float(d_common),
+                        "maturity": float(T_iron_bfly),
                     },
                 }
                 try:
@@ -7548,9 +7760,14 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     key=_k("asian_geo_avg"),
                 )
             with col2:
-                sigma_ag = st.slider("Sigma", min_value=0.01, max_value=1.0, value=common_sigma_value, step=0.01, key=_k("asian_geo_sigma"))
                 r_ag = st.slider("r", min_value=-0.05, max_value=0.1, value=common_rate_value, step=0.005, key=_k("asian_geo_r"))
                 T_ag = st.slider("T (années)", min_value=0.05, max_value=2.0, value=common_maturity_value, step=0.05, key=_k("asian_geo_T"))
+            iv_ag = _get_cached_iv_for(strike_ag, T_ag, option_type_ag)
+            sigma_ag = float(iv_ag) if iv_ag is not None and np.isfinite(iv_ag) and iv_ag > 0 else float(common_sigma_value)
+            if iv_ag is not None and np.isfinite(iv_ag) and iv_ag > 0:
+                st.caption(f"IV récupérée (cache) ≈ {iv_ag:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
             view_dyn = view_asian_geom(
                 s0_path,
@@ -7624,7 +7841,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "price": price,
                     "misc": {
                         "avg_ref": float(avg_ag),
-                        "sigma": float(sigma_ag),
+                        "sigma_used": float(sigma_ag),
                         "r": float(r_ag),
                         "spot_at_pricing": float(s0_path),
                     },
