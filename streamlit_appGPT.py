@@ -37,6 +37,10 @@ def _coerce_all_env_to_str():
 # Pre-coerce everything before importing libs that may read env vars
 _coerce_all_env_to_str()
 
+# Désactive torch.compile / torch._dynamo pour éviter les imports cassés sur certaines versions
+os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
+os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+
 import streamlit as st
 from openai import OpenAI
 import json
@@ -192,6 +196,9 @@ def run_app_options():
 
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
     os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+    os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")  # désactive torch._compile/._dynamo pour éviter les imports cassés sur optimizer
+    os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+    os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")  # évite l’initialisation torch._dynamo sur torch.optim
 
     import matplotlib.pyplot as plt
     import numpy as np
@@ -2860,13 +2867,23 @@ def run_app_options():
         weights_t = torch.tensor(weights_np, dtype=torch.float64, device=HES_DEVICE)
 
         u = torch.zeros(5, dtype=torch.float64, device=HES_DEVICE, requires_grad=True)
-        optimizer = torch.optim.Adam([u], lr=lr)
+        m = torch.zeros_like(u)
+        v = torch.zeros_like(u)
+        beta1, beta2 = 0.9, 0.999
+        eps = 1e-8
 
         for iteration in range(max_iters):
-            optimizer.zero_grad()
+            if u.grad is not None:
+                u.grad.zero_()
             loss_val = heston_nn_loss(u, S0_t, K_t, T_t, C_mkt_t, r, q, weights=weights_t)
             loss_val.backward()
-            optimizer.step()
+            with torch.no_grad():
+                grad = u.grad
+                m.mul_(beta1).add_(grad, alpha=1 - beta1)
+                v.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+                m_hat = m / (1 - beta1 ** (iteration + 1))
+                v_hat = v / (1 - beta2 ** (iteration + 1))
+                u -= lr * m_hat / (torch.sqrt(v_hat) + eps)
             if progress_callback:
                 progress_callback(iteration + 1, max_iters, float(loss_val.detach().cpu()))
 
