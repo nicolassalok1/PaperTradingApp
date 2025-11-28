@@ -3294,153 +3294,6 @@ def run_app_options():
                 st.session_state["cboe_T_options"] = maturity_list
                 st.session_state["sidebar_maturity_options"] = maturity_list
 
-        col_nn, col_modes = st.columns(2)
-        with col_nn:
-            st.subheader("🎯 Calibration NN Carr-Madan")
-            calib_T_band = st.number_input(
-                "Largeur bande T (±)",
-                value=0.04,
-                min_value=0.01,
-                max_value=0.5,
-                step=0.01,
-                format="%.2f",
-                key="heston_cboe_calib_band",
-                help="Largeur de la bande de maturités autour de la cible utilisée pour la calibration.",
-            )
-
-            unique_T = sorted(calls_df["T"].round(2).unique().tolist())
-            if unique_T:
-                if calib_T_target is None:
-                    target_guess = max(MIN_IV_MATURITY, unique_T[0] + calib_T_band + 0.1)
-                    idx_default = int(np.argmin(np.abs(np.array(unique_T) - target_guess)))
-                else:
-                    try:
-                        idx_default = unique_T.index(calib_T_target)
-                    except ValueError:
-                        idx_default = 0
-
-                calib_T_target = st.selectbox(
-                    "Maturité T cible pour la calibration (Time to Maturity)",
-                    unique_T,
-                    index=idx_default,
-                    format_func=lambda x: f"{x:.2f}",
-                    key="heston_cboe_calib_target",
-                    help="Maturité autour de laquelle la calibration Heston est centrée.",
-                )
-                state.heston_calib_T_target = calib_T_target
-            else:
-                st.warning("Pas de maturités disponibles dans les données CBOE.")
-                calib_T_target = None
-
-        with col_modes:
-            st.subheader("⚙️ Modes de calibration NN")
-            mode = st.radio(
-                "Choisir un mode",
-                ["Rapide", "Bonne", "Excellente"],
-                index=0,
-                horizontal=True,
-                key="heston_cboe_mode",
-                help="Choisit un compromis entre vitesse de calibration et précision de l’ajustement.",
-            )
-            if mode == "Rapide":
-                max_iters = 300
-                learning_rate = 0.01
-            elif mode == "Bonne":
-                max_iters = 1000
-                learning_rate = 0.005
-            else:
-                max_iters = 2000
-                learning_rate = 0.001
-            st.markdown(
-                f"**Itérations NN** : `{max_iters}`  \n"
-                f"**Learning rate** : `{learning_rate}`"
-            )
-
-        if calib_T_target is not None:
-            calib_band_range = (
-                max(MIN_IV_MATURITY, calib_T_target - calib_T_band),
-                calib_T_target + calib_T_band,
-            )
-        else:
-            calib_band_range = None
-
-        # Only explicit click launches calibration; changing K/T won't auto-relance
-        run_button = st.button("🚀 Lancer l'analyse", type="primary", width="stretch", key="heston_cboe_run")
-        st.divider()
-
-        if run_button:
-            if calib_band_range is None or calib_T_target is None:
-                st.error("Veuillez choisir une maturité T cible après avoir chargé les données.")
-                return
-
-            try:
-                st.info(f"📡 Données CBOE chargées pour {ticker} (cache)")
-                st.success(f"{len(calls_df)} calls, {len(puts_df)} puts | S0 ≈ {S0_ref:.2f}")
-                st.write(f"Maturité T cible pour la calibration : {calib_T_target:.2f} ans")
-
-                st.info("🧠 Calibration ciblée...")
-                progress_bar = st.progress(0.0)
-                status_text = st.empty()
-                loss_log: list[float] = []
-
-                def progress_cb(current: int, total: int, loss_val: float) -> None:
-                    progress_bar.progress(current / total)
-                    status_text.text(f"⏳ Iter {current}/{total} | Loss = {loss_val:.6f}")
-                    loss_log.append(loss_val)
-
-                calib_slice = calls_df[
-                    (calls_df["T"].round(2).between(*calib_band_range))
-                    & (calls_df["K"].between(S0_ref - span_mc, S0_ref + span_mc))
-                    & (calls_df["C_mkt"] > 0.05)
-                    & (calls_df["iv_market"] > 0)
-                ]
-                if len(calib_slice) < 5:
-                    calib_slice = calls_df.copy()
-
-                params_cm = calibrate_heston_nn(
-                    calib_slice,
-                    r=rf_rate,
-                    q=div_yield,
-                    max_iters=int(max_iters),
-                    lr=learning_rate,
-                    spot_override=S0_ref,
-                    progress_callback=progress_cb,
-                )
-                progress_bar.empty()
-                status_text.empty()
-
-                params_dict = {
-                    "kappa": float(params_cm.kappa.detach()),
-                    "theta": float(params_cm.theta.detach()),
-                    "sigma": float(params_cm.sigma.detach()),
-                    "rho": float(params_cm.rho.detach()),
-                    "v0": float(params_cm.v0.detach()),
-                }
-                state.heston_params_cm = params_cm
-                state.heston_params_meta = {
-                    "r": rf_rate,
-                    "q": div_yield,
-                    "S0_ref": float(S0_ref),
-                }
-                # Met à jour les paramètres Heston globaux, qui alimentent la sidebar
-                st.session_state["heston_kappa_common"] = params_dict["kappa"]
-                st.session_state["heston_theta_common"] = params_dict["theta"]
-                st.session_state["heston_eta_common"] = params_dict["sigma"]
-                st.session_state["heston_rho_common"] = params_dict["rho"]
-                st.session_state["heston_v0_common"] = params_dict["v0"]
-                st.success("✓ Calibration terminée")
-                st.dataframe(pd.Series(params_dict, name="Paramètre").to_frame())
-
-                # Fin : on s'arrête après calibration, pas de surfaces IV/heatmaps pour alléger l'affichage.
-
-                st.balloons()
-                st.success("🎉 Analyse terminée")
-
-            except Exception as exc:
-                st.error(f"❌ Erreur : {exc}")
-                import traceback
-
-                st.code(traceback.format_exc())
     # ---------------------------------------------------------------------------
     #  Application Streamlit unifiée
     # ---------------------------------------------------------------------------
@@ -4893,6 +4746,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             st.header("Option européenne")
             _render_option_text("Option européenne", "european_graph")
             params_heston = _heston_params_from_state()
+            ticker_local = st.session_state.get("heston_cboe_ticker", "")
             K_eu = float(common_strike_value)
             S0_eu = float(common_spot_value)
             T_eu = float(common_maturity_value)
@@ -4933,11 +4787,200 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ax.set_title(f"Vanilla {opt_type.capitalize()} (payoff & P&L)")
             ax.legend(loc="best")
             st.pyplot(fig, clear_figure=True)
+            st.subheader("Black–Scholes–Merton (prix ponctuel + heatmaps)")
+            render_unlock_sidebar_button("eu_bsm", "🔓 Réactiver T (onglet BSM)")
+            render_method_explainer(
+                "🧮 Méthode Black–Scholes–Merton (BSM)",
+                (
+                    "- **Étape 1 – Mise sous la mesure neutre au risque** : on suppose GBM avec volatilité constante `σ` et drift `r-d`.\n"
+                    "- **Étape 2 – Calcul des quantités intermédiaires** : `d1`, `d2` pour chaque `(S, K)`.\n"
+                    "- **Étape 3 – Formule de prix** : call/put fermés.\n"
+                    "- **Étape 4 – Construction des heatmaps** : matrices de prix call/put sur la grille Spot × Strike.\n"
+                ),
+            )
+            render_inputs_explainer(
+                "🔧 Paramètres utilisés – BSM",
+                (
+                    "- **\"S0 (spot)\"** et **\"K (strike)\"** : centres de la grille.\n"
+                    "- **\"T (maturité, années)\"**, **\"r\"**, **\"d\"**, **\"σ\"** : paramètres du modèle.\n"
+                    "- **\"Span autour du spot (heatmaps)\"** : amplitude de la grille.\n"
+                ),
+            )
+            cpflag_eu_bsm = option_label
+            st.caption("Type fixé par l’onglet Call / Put en haut de page.")
+            price_bsm = st.session_state.get("eu_price_bsm")
+            if price_bsm is None:
+                with st.spinner("Calcul BSM..."):
+                    opt_type_bsm = "call" if option_char == "c" else "put"
+                    price_bsm = _vanilla_price_with_dividend(
+                        option_type=opt_type_bsm,
+                        S0=common_spot_value,
+                        K=common_strike_value,
+                        T=common_maturity_value,
+                        r=common_rate_value,
+                        dividend=float(d_common),
+                        sigma=common_sigma_value,
+                    )
+                st.session_state["eu_price_bsm"] = price_bsm
+            st.success(f"Prix BSM ({cpflag_eu_bsm}) = {price_bsm:.6f}")
+            render_add_to_dashboard_button(
+                product_label="Vanilla (BSM)",
+                option_char=option_char,
+                price_value=price_bsm,
+                strike=common_strike_value,
+                maturity=common_maturity_value,
+                key_prefix=_k("save_bsm"),
+                spot=common_spot_value,
+            )
             st.caption(
-                f"Prix option = {premium_eu:.4f} | Payoff @ S0 = {payoff_s0:.4f} | "
-                f"P&L net (S0) = {pnl_s0:.4f}"
+                f"Paramètres utilisés pour le prix unique BSM : "
+                f"S0={common_spot_value:.4f}, K={common_strike_value:.4f}, "
+                f"T={common_maturity_value:.4f}, r={common_rate_value:.4f}, "
+                f"d={float(d_common):.4f}, σ={common_sigma_value:.4f}"
             )
             st.subheader("Heston (référence)")
+            st.divider()
+            st.subheader("🎯 Calibration NN Carr-Madan")
+            col_nn, col_modes = st.columns(2)
+            calib_T_target = state.get("heston_calib_T_target")
+            with col_nn:
+                calib_T_band = st.number_input(
+                    "Largeur bande T (±)",
+                    value=0.04,
+                    min_value=0.01,
+                    max_value=0.5,
+                    step=0.01,
+                    format="%.2f",
+                    key=_k("heston_cboe_calib_band"),
+                    help="Largeur de la bande de maturités autour de la cible utilisée pour la calibration.",
+                )
+                st.session_state["heston_cboe_calib_band"] = calib_T_band
+
+                unique_T = sorted(calls_df["T"].round(2).unique().tolist())
+                if unique_T:
+                    if calib_T_target is None:
+                        target_guess = max(MIN_IV_MATURITY, unique_T[0] + calib_T_band + 0.1)
+                        idx_default = int(np.argmin(np.abs(np.array(unique_T) - target_guess)))
+                    else:
+                        try:
+                            idx_default = unique_T.index(calib_T_target)
+                        except ValueError:
+                            idx_default = 0
+
+                    calib_T_target = st.selectbox(
+                        "Maturité T cible pour la calibration (Time to Maturity)",
+                        unique_T,
+                        index=idx_default,
+                        format_func=lambda x: f"{x:.2f}",
+                        key=_k("heston_cboe_calib_target"),
+                        help="Maturité autour de laquelle la calibration Heston est centrée.",
+                    )
+                    st.session_state.heston_calib_T_target = calib_T_target
+                else:
+                    st.warning("Pas de maturités disponibles dans les données CBOE.")
+                    calib_T_target = None
+
+            with col_modes:
+                st.subheader("⚙️ Modes de calibration NN")
+                mode = st.radio(
+                    "Choisir un mode",
+                    ["Rapide", "Bonne", "Excellente"],
+                    index=0,
+                    horizontal=True,
+                    key=_k("heston_cboe_mode"),
+                    help="Choisit un compromis entre vitesse de calibration et précision de l’ajustement.",
+                )
+                if mode == "Rapide":
+                    max_iters = 300
+                    learning_rate = 0.01
+                elif mode == "Bonne":
+                    max_iters = 1000
+                    learning_rate = 0.005
+                else:
+                    max_iters = 2000
+                    learning_rate = 0.001
+                st.markdown(
+                    f"**Itérations NN** : `{max_iters}`  \n"
+                    f"**Learning rate** : `{learning_rate}`"
+                )
+
+            calib_band_range = (
+                max(MIN_IV_MATURITY, calib_T_target - calib_T_band),
+                calib_T_target + calib_T_band,
+            ) if calib_T_target is not None else None
+
+            run_button = st.button("🚀 Lancer l'analyse", type="primary", width="stretch", key=_k("heston_cboe_run"))
+            st.divider()
+
+            if run_button:
+                if calib_band_range is None or calib_T_target is None:
+                    st.error("Veuillez choisir une maturité T cible après avoir chargé les données.")
+                    st.stop()
+
+                try:
+                    st.info(f"📡 Données CBOE chargées pour {ticker_local} (cache)")
+                    st.success(f"{len(calls_df)} calls, {len(puts_df)} puts | S0 ≈ {S0_ref:.2f}")
+                    st.write(f"Maturité T cible pour la calibration : {calib_T_target:.2f} ans")
+
+                    st.info("🧠 Calibration ciblée...")
+                    progress_bar = st.progress(0.0)
+                    status_text = st.empty()
+                    loss_log: list[float] = []
+
+                    def progress_cb(current: int, total: int, loss_val: float) -> None:
+                        progress_bar.progress(current / total)
+                        status_text.text(f"⏳ Iter {current}/{total} | Loss = {loss_val:.6f}")
+                        loss_log.append(loss_val)
+
+                    calib_slice = calls_df[
+                        (calls_df["T"].round(2).between(*calib_band_range))
+                        & (calls_df["K"].between(S0_ref - span_mc, S0_ref + span_mc))
+                        & (calls_df["C_mkt"] > 0.05)
+                        & (calls_df["iv_market"] > 0)
+                    ]
+                    if len(calib_slice) < 5:
+                        calib_slice = calls_df.copy()
+
+                    params_cm = calibrate_heston_nn(
+                        calib_slice,
+                        r=rf_rate,
+                        q=div_yield,
+                        max_iters=int(max_iters),
+                        lr=learning_rate,
+                        spot_override=S0_ref,
+                        progress_callback=progress_cb,
+                    )
+                    progress_bar.empty()
+                    status_text.empty()
+
+                    params_dict = {
+                        "kappa": float(params_cm.kappa.detach()),
+                        "theta": float(params_cm.theta.detach()),
+                        "sigma": float(params_cm.sigma.detach()),
+                        "rho": float(params_cm.rho.detach()),
+                        "v0": float(params_cm.v0.detach()),
+                    }
+                    state.heston_params_cm = params_cm
+                    state.heston_params_meta = {
+                        "r": rf_rate,
+                        "q": div_yield,
+                        "S0_ref": float(S0_ref),
+                    }
+                    st.session_state["heston_kappa_common"] = params_dict["kappa"]
+                    st.session_state["heston_theta_common"] = params_dict["theta"]
+                    st.session_state["heston_eta_common"] = params_dict["sigma"]
+                    st.session_state["heston_rho_common"] = params_dict["rho"]
+                    st.session_state["heston_v0_common"] = params_dict["v0"]
+                    st.success("✓ Calibration terminée")
+                    st.dataframe(pd.Series(params_dict, name="Paramètre").to_frame())
+                    st.balloons()
+                    st.success("🎉 Analyse terminée")
+
+                except Exception as exc:
+                    st.error(f"❌ Erreur : {exc}")
+                    import traceback
+
+                    st.code(traceback.format_exc())
             render_method_explainer(
                 "🧮 Méthode Heston pour les options européennes",
                 (
