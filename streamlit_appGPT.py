@@ -5049,18 +5049,15 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                                 r=float(common_rate_value),
                                 option_type="call" if option_char == "c" else "put",
                             )
-                    col_iv, col_heatmap = st.columns(2)
-                    with col_iv:
-                        iv_fig = make_iv_surface_figure(k_grid, t_grid, iv_grid, title_suffix=" (Heston Carr–Madan)")
-                        st.pyplot(iv_fig)
-                    with col_heatmap:
-                        _render_heatmaps_for_current_option(
-                            "Heston Carr–Madan (K, T)",
-                            call_matrix,
-                            put_matrix,
-                            k_vals,
-                            t_vals,
-                        )
+                    iv_fig = make_iv_surface_figure(k_grid, t_grid, iv_grid, title_suffix=" (Heston Carr–Madan)")
+                    st.pyplot(iv_fig)
+                    _render_heatmaps_for_current_option(
+                        "Heston Carr–Madan (K, T)",
+                        call_matrix,
+                        put_matrix,
+                        k_vals,
+                        t_vals,
+                    )
             except Exception as exc:
                 st.error(f"Erreur calcul heatmap / surface IV Heston : {exc}")
 
