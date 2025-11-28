@@ -4997,6 +4997,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 st.divider()
 
                 if run_button:
+                    st.session_state["heston_calibrating"] = True
                     if calls_df is None or getattr(calls_df, "empty", True):
                         st.error("Pas de données CBOE en cache. Charge-les via Refresh (pas de téléchargement auto en calibration).")
                         st.stop()
@@ -5069,6 +5070,13 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         import traceback
 
                         st.code(traceback.format_exc())
+                    finally:
+                        st.session_state["heston_calibrating"] = False
+                        st.rerun()
+
+                if st.session_state.get("heston_calibrating", False):
+                    st.info("🧠 Calibration Heston en cours... (le reste de l'onglet réapparaîtra après).")
+                    st.stop()
 
             render_inputs_explainer(
                 "🔧 Paramètres utilisés – Heston européen",
