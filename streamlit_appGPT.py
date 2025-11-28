@@ -51,6 +51,7 @@ import datetime
 import math
 import yfinance as yf
 import re
+import inspect
 
 # Configuration
 APP_DIR = Path(__file__).resolve().parent
@@ -147,6 +148,23 @@ for _env_key in _ENV_KEYS:
 
 # Safety net after load_dotenv
 _coerce_all_env_to_str()
+
+
+def _patch_inspect_pathlike_to_str() -> None:
+    """Force inspect.getsourcefile à retourner une str même si un Path est rencontré (torch peut casser sinon)."""
+    try:
+        original = inspect.getsourcefile
+
+        def _safe_getsourcefile(obj):
+            res = original(obj)
+            return os.fspath(res) if isinstance(res, (Path, os.PathLike)) else res
+
+        inspect.getsourcefile = _safe_getsourcefile  # type: ignore[assignment]
+    except Exception:
+        pass
+
+
+_patch_inspect_pathlike_to_str()
 
 def run_app_options():
     """
@@ -5119,255 +5137,342 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 fig_pay = _payoff_plot(xs, ys, f"Payoff américaine ({cpflag_am})", strike_lines=[K_common])
                 st.plotly_chart(fig_pay, width="stretch")
 
-            am_run_flag = st.session_state.get(_k("run_am_done"), False)
-            if not am_run_flag:
-                if st.button("🚀 Lancer tous les pricings Américain", key=_k("run_all_am"), type="primary"):
-                    st.session_state[_k("run_am_done")] = True
-                    st.rerun()
-                st.info("Clique sur le bouton pour afficher immédiatement les prix et les dropdowns d’ajout.")
+            st.subheader("Arbre binomial CRR")
+            render_method_explainer(
+                "🌳 Arbre CRR",
+                (
+                    "- Discrétisation de l’horizon en `n_tree_am` pas.\n"
+                    "- Recursion backward avec exercice optimal.\n"
+                ),
+            )
+            n_tree_am = st.number_input(
+                "Nombre de pas de l'arbre",
+                value=10,
+                min_value=5,
+                key=_k("n_tree_am"),
+                help="Nombre de pas de temps utilisés dans l’arbre binomial CRR.",
+            )
+            option_am_crr = Option(s0=S0_common, T=T_common, K=K_common, call=cpflag_am == "Call")
+            int_n_tree = int(n_tree_am)
+            if int_n_tree > 10:
+                st.info("L'affichage peut devenir difficile à lire pour un nombre de pas supérieur à 10.")
+            with st.expander(f"📈 Pricing CRR ({cpflag_am}) + heatmap", expanded=False):
+                with st.spinner("Calcul du prix CRR"):
+                    try:
+                        option_am_single = Option(
+                            s0=S0_common,
+                            T=T_common,
+                            K=K_common,
+                            call=(cpflag_am == 'Call'),
+                        )
+                        price_crr_single = crr_pricing(
+                            r=r_common,
+                            sigma=sigma_common,
+                            option=option_am_single,
+                            n=int_n_tree,
+                        )
+                        st.success(f"Prix américain CRR ({cpflag_am}) ≈ {price_crr_single:.6f} (avec {int_n_tree} pas)")
+                        render_add_to_dashboard_button(
+                            product_label="American (CRR)",
+                            option_char=option_char,
+                            price_value=price_crr_single,
+                            strike=K_common,
+                            maturity=T_common,
+                            key_prefix=_k("save_am_crr"),
+                            spot=S0_common,
+                        )
+                    except Exception as exc:
+                        st.error(f"Erreur CRR : {exc}")
+                with st.spinner("Construction de l'arbre CRR"):
+                    spot_tree, value_tree = _build_crr_tree(
+                        option=option_am_crr, r=r_common, sigma=sigma_common, n_steps=int_n_tree
+                    )
+                st.write("**Représentation graphique**")
+                fig_tree = _plot_crr_tree(spot_tree, value_tree)
+                st.pyplot(fig_tree)
+                plt.close(fig_tree)
 
-            if am_run_flag:
-                st.subheader("Longstaff–Schwartz (Heston)")
-                render_method_explainer(
-                    "🧮 L-S Heston",
-                    (
-                        "- Simulation Monte Carlo avec variance stochastique calibrée Heston.\n"
-                        "- Régression backward pour l’exercice optimal.\n"
-                    ),
+                with st.spinner("Calcul de la heatmap CRR"):
+                    call_heatmap_crr, put_heatmap_crr = _compute_american_crr_heatmaps(
+                        heatmap_spot_values,
+                        heatmap_strike_values,
+                        T_common,
+                        r_common,
+                        sigma_common,
+                        int_n_tree,
+                    )
+                _render_heatmaps_for_current_option(
+                    "CRR",
+                    call_heatmap_crr,
+                    put_heatmap_crr,
+                    heatmap_spot_values,
+                    heatmap_strike_values,
                 )
-                heston_ready = bool(st.session_state.get("heston_cboe_loaded_once", False))
-                n_paths_am_hes = st.number_input(
-                    "Trajectoires Monte Carlo (Heston)",
-                    value=1000,
-                    min_value=100,
-                    key=_k("n_paths_am_hes"),
-                    disabled=not heston_ready,
+            st.caption(
+                f"Paramètres utilisés pour CRR : "
+                f"S0={S0_common:.4f}, K={K_common:.4f}, T={T_common:.4f}, "
+                f"r={r_common:.4f}, σ={sigma_common:.4f}, n={int_n_tree}"
+            )
+
+        with tab_bermudan:
+            st.header("Option bermudéenne")
+            _render_option_text("Option bermudéenne", "bermuda_payoff")
+
+            with st.expander("📊 Graph payoff (bermudan)", expanded=False):
+                xs = np.linspace(max(0.1, K_common * 0.5), K_common * 1.5, 120)
+                ys = [max(x - K_common, 0.0) if option_char == "c" else max(K_common - x, 0.0) for x in xs]
+                fig_pay = _payoff_plot(xs, ys, f"Payoff Bermudan ({option_label})", strike_lines=[K_common])
+                st.plotly_chart(fig_pay, width="stretch")
+                st.caption("Payoff vanilla avec exercice possible sur un nombre fini de dates.")
+
+            st.subheader("Longstaff–Schwartz (GBM)")
+            render_method_explainer(
+                "🧮 L-S Bermudan (GBM)",
+                (
+                    "- Simulation GBM sous la mesure risque-neutre avec `N_paths` trajectoires et `M` pas de temps.\n"
+                    "- Régression backward sur `n_ex_dates` dates d’exercice pour décider de l’exercice optimal.\n"
+                    "- Polynôme de degré `degree` pour approximer la valeur de continuation."
+                ),
+            )
+            col_mc1, col_mc2 = st.columns(2)
+            with col_mc1:
+                n_paths_bmd = st.number_input(
+                    "Trajectoires Monte Carlo",
+                    value=5000,
+                    min_value=500,
+                    step=500,
+                    key=_k("bmd_paths"),
                 )
-                n_steps_am_hes = st.number_input(
-                    "Pas de temps (Heston)",
+                n_steps_bmd = st.number_input(
+                    "Pas de temps",
                     value=50,
-                    min_value=1,
-                    key=_k("n_steps_am_hes"),
-                    disabled=not heston_ready,
+                    min_value=10,
+                    step=5,
+                    key=_k("bmd_steps"),
                 )
-                v0_am_hes = None
-                process_am_hes = None
-                if heston_ready:
-                    kappa_am = float(st.session_state.get("heston_kappa_common", 2.0))
-                    theta_am = float(st.session_state.get("heston_theta_common", 0.04))
-                    eta_am = float(st.session_state.get("heston_eta_common", 0.5))
-                    rho_am = float(st.session_state.get("heston_rho_common", -0.7))
-                    v0_am_hes = float(st.session_state.get("heston_v0_common", 0.04))
-                    process_am_hes = HestonProcess(
-                        mu=r_common - d_common, kappa=kappa_am, theta=theta_am, eta=eta_am, rho=rho_am
-                    )
-                    st.caption(
-                        f"Paramètres Heston : κ={kappa_am:.4f}, θ={theta_am:.4f}, η={eta_am:.4f}, ρ={rho_am:.4f}, v0={v0_am_hes:.4f}"
-                    )
-                else:
-                    st.caption("Heston désactivé : fais la calibration Heston pour l’activer.")
+            with col_mc2:
+                n_ex_dates_bmd = st.number_input(
+                    "Dates d’exercice Bermudan",
+                    value=6,
+                    min_value=2,
+                    max_value=80,
+                    step=1,
+                    key=_k("bmd_exdates"),
+                )
+                degree_bmd = st.selectbox(
+                    "Degré polynôme (régression)",
+                    [2, 3, 4, 5],
+                    index=1,
+                    key=_k("bmd_degree"),
+                )
 
-                with st.expander(f"📈 Pricing Heston L-S ({cpflag_am})", expanded=False):
-                    if not heston_ready:
-                        st.info("Calibration Heston requise.")
+            with st.expander(f"📈 Pricing Bermudan L-S ({option_label})", expanded=False):
+                with st.spinner("Calcul Bermudan LSMC..."):
+                    try:
+                        price_bmd_mc = price_bermudan_lsmc(
+                            S0=S0_common,
+                            K=K_common,
+                            T=T_common,
+                            r=r_common,
+                            q=d_common,
+                            sigma=sigma_common,
+                            cpflag=option_char,
+                            M=int(n_steps_bmd),
+                            N_paths=int(n_paths_bmd),
+                            degree=int(degree_bmd),
+                            n_ex_dates=int(n_ex_dates_bmd),
+                            seed=12345,
+                        )
+                        st.success(f"Prix Bermudan L-S ({option_label}) = {price_bmd_mc:.6f}")
+                        render_add_to_dashboard_button(
+                            product_label="Bermudan (LSMC)",
+                            option_char=option_char,
+                            price_value=price_bmd_mc,
+                            strike=K_common,
+                            maturity=T_common,
+                            key_prefix=_k("save_bmd_lsmc"),
+                            spot=S0_common,
+                            misc={
+                                "method": "lsmc_gbm",
+                                "n_paths": int(n_paths_bmd),
+                                "n_steps": int(n_steps_bmd),
+                                "n_ex_dates": int(n_ex_dates_bmd),
+                                "degree": int(degree_bmd),
+                            },
+                        )
+                    except Exception as exc:
+                        st.error(f"Erreur Bermudan LSMC : {exc}")
+            st.divider()
+
+            st.subheader("Crank–Nicolson (PDE)")
+            render_method_explainer(
+                "🧮 Crank–Nicolson Bermudan",
+                (
+                    "- Résolution de la PDE Black–Scholes en log(S) avec dates d’exercice discrètes.\n"
+                    "- Les grecs (Δ, Γ, Θ) sont obtenus par bumping autour des paramètres courants.\n"
+                    "- Ajuste la finesse de la grille via `n_points` (espace) et `n_time`."
+                ),
+            )
+            col_cn1, col_cn2 = st.columns(2)
+            with col_cn1:
+                n_spatial_bmd = st.number_input(
+                    "Points spatiaux (grille logS)",
+                    value=200,
+                    min_value=80,
+                    step=20,
+                    key=_k("bmd_cn_nspace"),
+                )
+                n_time_bmd = st.number_input(
+                    "Points temporels",
+                    value=220,
+                    min_value=80,
+                    step=20,
+                    key=_k("bmd_cn_time"),
+                )
+            with col_cn2:
+                n_ex_dates_cn = st.number_input(
+                    "Dates d’exercice (PDE)",
+                    value=int(n_ex_dates_bmd),
+                    min_value=2,
+                    max_value=120,
+                    step=1,
+                    key=_k("bmd_cn_exdates"),
+                )
+                exercise_step_bmd = st.number_input(
+                    "Exercise step (0 = désactivé)",
+                    value=0,
+                    min_value=0,
+                    max_value=365,
+                    step=1,
+                    key=_k("bmd_cn_step"),
+                )
+                exercise_step_bmd = None if exercise_step_bmd <= 0 else int(exercise_step_bmd)
+
+            with st.expander(f"📈 Pricing Bermudan PDE ({option_label})", expanded=False):
+                try:
+                    cn_kwargs = {
+                        "Typeflag": "Bmd",
+                        "cpflag": option_char,
+                        "S0": S0_common,
+                        "K": K_common,
+                        "T": T_common,
+                        "vol": sigma_common,
+                        "r": r_common,
+                        "d": d_common,
+                        "n_spatial": int(n_spatial_bmd),
+                        "n_time": int(n_time_bmd),
+                    }
+                    if exercise_step_bmd is not None:
+                        cn_kwargs["exercise_step"] = exercise_step_bmd
                     else:
-                        with st.spinner("Calcul Longstaff–Schwartz Heston..."):
-                            try:
-                                option_ls = Option(
-                                    s0=S0_common,
+                        cn_kwargs["n_exercise_dates"] = int(n_ex_dates_cn)
+                    solver_bmd = CrankNicolsonBS(**cn_kwargs)
+                    price_bmd_cn, delta_bmd, gamma_bmd, theta_bmd = solver_bmd.CN_option_info()
+                    st.success(f"Prix Bermudan PDE ({option_label}) = {price_bmd_cn:.6f}")
+                    st.caption(f"Δ={delta_bmd:.4f} | Γ={gamma_bmd:.4f} | Θ={theta_bmd:.4f}")
+                    render_add_to_dashboard_button(
+                        product_label="Bermudan (PDE)",
+                        option_char=option_char,
+                        price_value=price_bmd_cn,
+                        strike=K_common,
+                        maturity=T_common,
+                        key_prefix=_k("save_bmd_cn"),
+                        spot=S0_common,
+                        misc={
+                            "method": "crank_nicolson",
+                            "n_spatial": int(n_spatial_bmd),
+                            "n_time": int(n_time_bmd),
+                            "n_ex_dates": None if exercise_step_bmd is not None else int(n_ex_dates_cn),
+                            "exercise_step": exercise_step_bmd,
+                        },
+                    )
+                except Exception as exc:
+                    st.error(f"Erreur Bermudan PDE : {exc}")
+
+            with st.expander("Heatmap Bermudan (PDE)", expanded=False):
+                grid_bmd = st.slider(
+                    "Taille de grille (spots/strikes)",
+                    min_value=3,
+                    max_value=11,
+                    value=7,
+                    step=2,
+                    key=_k("bmd_heat_grid"),
+                )
+                n_spatial_heat = st.number_input(
+                    "Points spatiaux (heatmap)",
+                    value=max(80, int(n_spatial_bmd)),
+                    min_value=60,
+                    step=20,
+                    key=_k("bmd_heat_space"),
+                )
+                n_time_heat = st.number_input(
+                    "Points temporels (heatmap)",
+                    value=max(120, int(n_time_bmd)),
+                    min_value=80,
+                    step=20,
+                    key=_k("bmd_heat_time"),
+                )
+                if st.button("Calculer la heatmap Bermudan", key=_k("bmd_heat_btn")):
+                    with st.spinner("Calcul heatmap Bermudan (PDE)..."):
+                        spots_grid = _heatmap_axis(S0_common, heatmap_span, n_points=int(grid_bmd))
+                        strikes_grid = _heatmap_axis(K_common, heatmap_span, n_points=int(grid_bmd))
+                        cn_heat_kwargs = {
+                            "Typeflag": "Bmd",
+                            "cpflag": "c",
+                            "S0": S0_common,
+                            "K": K_common,
+                            "T": T_common,
+                            "vol": sigma_common,
+                            "r": r_common,
+                            "d": d_common,
+                            "n_spatial": int(n_spatial_heat),
+                            "n_time": int(n_time_heat),
+                        }
+                        if exercise_step_bmd is not None:
+                            cn_heat_kwargs["exercise_step"] = exercise_step_bmd
+                        else:
+                            cn_heat_kwargs["n_exercise_dates"] = int(n_ex_dates_cn)
+                        solver_heat = CrankNicolsonBS(**cn_heat_kwargs)
+                        call_matrix = np.zeros((len(strikes_grid), len(spots_grid)))
+                        put_matrix = np.zeros_like(call_matrix)
+                        for i_strike, strike_val in enumerate(strikes_grid):
+                            for j_spot, spot_val in enumerate(spots_grid):
+                                call_matrix[i_strike, j_spot], _, _, _ = solver_heat.CN_option_info(
+                                    Typeflag="Bmd",
+                                    cpflag="c",
+                                    S0=float(spot_val),
+                                    K=float(strike_val),
                                     T=T_common,
-                                    K=K_common,
-                                    v0=v0_am_hes,
-                                    call=(cpflag_am == "Call"),
+                                    vol=sigma_common,
+                                    r=r_common,
+                                    d=d_common,
                                 )
-                                price_ls = longstaff_schwartz_price(
-                                    option=option_ls,
-                                    process=process_am_hes,
-                                    n_paths=int(n_paths_am_hes),
-                                    n_steps=int(n_steps_am_hes),
+                                put_matrix[i_strike, j_spot], _, _, _ = solver_heat.CN_option_info(
+                                    Typeflag="Bmd",
+                                    cpflag="p",
+                                    S0=float(spot_val),
+                                    K=float(strike_val),
+                                    T=T_common,
+                                    vol=sigma_common,
+                                    r=r_common,
+                                    d=d_common,
                                 )
-                                st.success(f"Prix américain Heston L-S ({cpflag_am}) = {price_ls:.6f}")
-                                render_add_to_dashboard_button(
-                                    product_label="American (Heston L-S)",
-                                    option_char=option_char,
-                                    price_value=price_ls,
-                                    strike=K_common,
-                                    maturity=T_common,
-                                    key_prefix=_k("save_am_heston_ls"),
-                                    spot=S0_common,
-                                )
-                            except Exception as exc:
-                                st.error(f"Erreur Longstaff–Schwartz Heston : {exc}")
-                with st.expander("Heatmap Heston (L-S)", expanded=False):
-                    if heston_ready:
-                        with st.spinner("Calcul des heatmaps Heston L-S"):
-                            call_heatmap_ls, put_heatmap_ls = _compute_american_ls_heatmaps(
-                                heatmap_spot_values,
-                                heatmap_strike_values,
-                                T_common,
-                                process_am_hes,
-                                int(n_paths_am_hes),
-                                int(n_steps_am_hes),
-                                v0_am_hes,
-                            )
                         _render_heatmaps_for_current_option(
-                            "Heston L-S",
-                            call_heatmap_ls,
-                            put_heatmap_ls,
-                            heatmap_spot_values,
-                            heatmap_strike_values,
+                            "Bermudan (PDE)",
+                            call_matrix,
+                            put_matrix,
+                            spots_grid,
+                            strikes_grid,
                         )
-                    else:
-                        st.info("Heatmap désactivée : calibration Heston requise.")
 
-                st.divider()
-
-                st.subheader("Longstaff–Schwartz (GBM)")
-                render_method_explainer(
-                    "🧮 L-S GBM",
-                    (
-                        "- Simulation GBM (volatilité constante) + régression backward.\n"
-                    ),
-                )
-                n_paths_am_gbm = st.number_input(
-                    "Trajectoires Monte Carlo (GBM)",
-                    value=1000,
-                    min_value=100,
-                    key=_k("n_paths_am_gbm"),
-                )
-                n_steps_am_gbm = st.number_input(
-                    "Pas de temps (GBM)",
-                    value=50,
-                    min_value=1,
-                    key=_k("n_steps_am_gbm"),
-                )
-                process_am_gbm = GeometricBrownianMotion(mu=r_common - d_common, sigma=sigma_common)
-
-                with st.expander(f"📈 Pricing GBM L-S ({cpflag_am})", expanded=False):
-                    with st.spinner("Calcul Longstaff–Schwartz GBM..."):
-                        try:
-                            option_ls = Option(
-                                s0=S0_common,
-                                T=T_common,
-                                K=K_common,
-                                v0=None,
-                                call=(cpflag_am == "Call"),
-                            )
-                            price_ls = longstaff_schwartz_price(
-                                option=option_ls,
-                                process=process_am_gbm,
-                                n_paths=int(n_paths_am_gbm),
-                                n_steps=int(n_steps_am_gbm),
-                            )
-                            st.success(f"Prix américain GBM L-S ({cpflag_am}) = {price_ls:.6f}")
-                            render_add_to_dashboard_button(
-                                product_label="American (GBM L-S)",
-                                option_char=option_char,
-                                price_value=price_ls,
-                                strike=K_common,
-                                maturity=T_common,
-                                key_prefix=_k("save_am_gbm_ls"),
-                                spot=S0_common,
-                            )
-                        except Exception as exc:
-                            st.error(f"Erreur Longstaff–Schwartz GBM : {exc}")
-                with st.expander("Heatmap GBM (L-S)", expanded=False):
-                    with st.spinner("Calcul des heatmaps GBM L-S"):
-                        call_heatmap_ls, put_heatmap_ls = _compute_american_ls_heatmaps(
-                            heatmap_spot_values,
-                            heatmap_strike_values,
-                            T_common,
-                            process_am_gbm,
-                            int(n_paths_am_gbm),
-                            int(n_steps_am_gbm),
-                            None,
-                        )
-                    _render_heatmaps_for_current_option(
-                        "GBM L-S",
-                        call_heatmap_ls,
-                        put_heatmap_ls,
-                        heatmap_spot_values,
-                        heatmap_strike_values,
-                    )
-
-                st.divider()
-
-                st.subheader("Arbre binomial CRR")
-                render_method_explainer(
-                    "🌳 Arbre CRR",
-                    (
-                        "- Discrétisation de l’horizon en `n_tree_am` pas.\n"
-                        "- Recursion backward avec exercice optimal.\n"
-                    ),
-                )
-                n_tree_am = st.number_input(
-                    "Nombre de pas de l'arbre",
-                    value=10,
-                    min_value=5,
-                    key=_k("n_tree_am"),
-                    help="Nombre de pas de temps utilisés dans l’arbre binomial CRR.",
-                )
-                option_am_crr = Option(s0=S0_common, T=T_common, K=K_common, call=cpflag_am == "Call")
-                int_n_tree = int(n_tree_am)
-                if int_n_tree > 10:
-                    st.info("L'affichage peut devenir difficile à lire pour un nombre de pas supérieur à 10.")
-                with st.expander(f"📈 Pricing CRR ({cpflag_am}) + heatmap", expanded=False):
-                    with st.spinner("Calcul du prix CRR"):
-                        try:
-                            option_am_single = Option(
-                                s0=S0_common,
-                                T=T_common,
-                                K=K_common,
-                                call=(cpflag_am == 'Call'),
-                            )
-                            price_crr_single = crr_pricing(
-                                r=r_common,
-                                sigma=sigma_common,
-                                option=option_am_single,
-                                n=int_n_tree,
-                            )
-                            st.success(f"Prix américain CRR ({cpflag_am}) ≈ {price_crr_single:.6f} (avec {int_n_tree} pas)")
-                            render_add_to_dashboard_button(
-                                product_label="American (CRR)",
-                                option_char=option_char,
-                                price_value=price_crr_single,
-                                strike=K_common,
-                                maturity=T_common,
-                                key_prefix=_k("save_am_crr"),
-                                spot=S0_common,
-                            )
-                        except Exception as exc:
-                            st.error(f"Erreur CRR : {exc}")
-                    with st.spinner("Construction de l'arbre CRR"):
-                        spot_tree, value_tree = _build_crr_tree(
-                            option=option_am_crr, r=r_common, sigma=sigma_common, n_steps=int_n_tree
-                        )
-                    st.write("**Représentation graphique**")
-                    fig_tree = _plot_crr_tree(spot_tree, value_tree)
-                    st.pyplot(fig_tree)
-                    plt.close(fig_tree)
-
-                    with st.spinner("Calcul de la heatmap CRR"):
-                        call_heatmap_crr, put_heatmap_crr = _compute_american_crr_heatmaps(
-                            heatmap_spot_values,
-                            heatmap_strike_values,
-                            T_common,
-                            r_common,
-                            sigma_common,
-                            int_n_tree,
-                        )
-                    _render_heatmaps_for_current_option(
-                        "CRR",
-                        call_heatmap_crr,
-                        put_heatmap_crr,
-                        heatmap_spot_values,
-                        heatmap_strike_values,
-                    )
-                st.caption(
-                    f"Paramètres utilisés pour CRR : "
-                    f"S0={S0_common:.4f}, K={K_common:.4f}, T={T_common:.4f}, "
-                    f"r={r_common:.4f}, σ={sigma_common:.4f}, n={int_n_tree}"
-                )
+            payoff_desc_bmd = (
+                "Payoff = max(S-K,0) pour un call / max(K-S,0) pour un put, exercé sur un ensemble de dates discrètes."
+            )
+            _render_payoff_dropdown(
+                f"Option bermudéenne ({option_label})",
+                payoff_desc_bmd,
+                lambda s, K, K2: max(s - K, 0.0) if option_char == "c" else max(K - s, 0.0),
+            )
 
         # Données SPY 1 an pour les onglets path-dependent (valeur de référence S0)
         spy_close_path = None
@@ -7917,6 +8022,19 @@ def load_cached_option_history() -> tuple[str | None, pd.DataFrame | None]:
         except Exception:
             return None, None
     return None, None
+
+
+def get_last_cached_option_ticker() -> str | None:
+    """Retourne le dernier ticker utilisé pour les options (via meta cache)."""
+    try:
+        with open(CACHE_OPTIONS_META_FILE, "r") as f:
+            meta = json.load(f)
+        tkr = meta.get("ticker")
+        if tkr:
+            return str(tkr).strip().upper()
+    except Exception:
+        return None
+    return None
 
 
 def save_cached_option_history(ticker: str, df: pd.DataFrame) -> None:
