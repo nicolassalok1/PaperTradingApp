@@ -4983,77 +4983,72 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 run_button = st.button("🚀 Lancer l'analyse", type="primary", width="stretch", key=_k("heston_cboe_run"))
                 st.divider()
 
+                # Afficher la progression asynchrone sans griser l’app
+                if st.session_state.get("heston_calibrating", False):
+                    prog_val = float(st.session_state.get("heston_calib_progress", 0.0))
+                    st.progress(prog_val)
+                    st.info("🧠 Calibration Heston en cours... (tu peux rester sur l’onglet)")
+                    calib_err = st.session_state.get("heston_calibration_error")
+                    if calib_err:
+                        st.error(calib_err)
+                    st.stop()
+
                 if run_button:
                     if calib_band_range is None or calib_T_target is None:
                         st.error("Veuillez choisir une maturité T cible après avoir chargé les données.")
                         st.stop()
 
-                    status_holder = st.empty()
-                    status_holder.info("🧠 Calibration Heston en cours...")
-                    try:
-                        st.info(f"📡 Données CBOE chargées pour {st.session_state.get('heston_cboe_ticker', '')} (cache)")
-                        st.success(f"{len(calls_df)} calls, {len(puts_df)} puts | S0 ≈ {S0_ref:.2f}")
-                        st.write(f"Maturité T cible pour la calibration : {calib_T_target:.2f} ans")
+                    calib_slice = calls_df[
+                        (calls_df["T"].round(2).between(*calib_band_range))
+                        & (calls_df["K"].between(S0_ref - span_mc, S0_ref + span_mc))
+                        & (calls_df["C_mkt"] > 0.05)
+                        & (calls_df["iv_market"] > 0)
+                    ]
+                    if len(calib_slice) < 5:
+                        calib_slice = calls_df.copy()
 
-                        progress_bar = st.progress(0.0)
-                        status_text = st.empty()
-                        loss_log: list[float] = []
+                    st.session_state["heston_calibrating"] = True
+                    st.session_state["heston_calib_progress"] = 0.0
+                    st.session_state["heston_calibration_error"] = None
+                    st.info(f"📡 Données CBOE chargées pour {st.session_state.get('heston_cboe_ticker', '')} (cache)")
+                    st.success(f"{len(calls_df)} calls, {len(puts_df)} puts | S0 ≈ {S0_ref:.2f}")
+                    st.write(f"Maturité T cible pour la calibration : {calib_T_target:.2f} ans")
 
-                        def progress_cb(current: int, total: int, loss_val: float) -> None:
-                            progress_bar.progress(current / total)
-                            status_text.text(f"⏳ Iter {current}/{total} | Loss = {loss_val:.6f}")
-                            loss_log.append(loss_val)
-                            st.session_state["heston_calib_progress"] = current / total
+                    def _run_heston_calib_async(slice_df: pd.DataFrame) -> None:
+                        try:
+                            def progress_cb(current: int, total: int, loss_val: float) -> None:
+                                st.session_state["heston_calib_progress"] = current / total
 
-                        calib_slice = calls_df[
-                            (calls_df["T"].round(2).between(*calib_band_range))
-                            & (calls_df["K"].between(S0_ref - span_mc, S0_ref + span_mc))
-                            & (calls_df["C_mkt"] > 0.05)
-                            & (calls_df["iv_market"] > 0)
-                        ]
-                        if len(calib_slice) < 5:
-                            calib_slice = calls_df.copy()
+                            params_cm = calibrate_heston_nn(
+                                slice_df,
+                                r=rf_rate,
+                                q=div_yield,
+                                max_iters=int(max_iters),
+                                lr=learning_rate,
+                                spot_override=S0_ref,
+                                progress_callback=progress_cb,
+                            )
+                            params_dict = {
+                                "kappa": float(params_cm.kappa.detach()),
+                                "theta": float(params_cm.theta.detach()),
+                                "sigma": float(params_cm.sigma.detach()),
+                                "rho": float(params_cm.rho.detach()),
+                                "v0": float(params_cm.v0.detach()),
+                            }
+                            st.session_state["heston_kappa_common"] = params_dict["kappa"]
+                            st.session_state["heston_theta_common"] = params_dict["theta"]
+                            st.session_state["heston_eta_common"] = params_dict["sigma"]
+                            st.session_state["heston_rho_common"] = params_dict["rho"]
+                            st.session_state["heston_v0_common"] = params_dict["v0"]
+                            st.session_state["carr_madan_calibrated"] = True
+                            st.session_state["heston_calibration_error"] = None
+                        except Exception as exc:
+                            st.session_state["heston_calibration_error"] = f"❌ Erreur : {exc}"
+                        finally:
+                            st.session_state["heston_calibrating"] = False
 
-                        params_cm = calibrate_heston_nn(
-                            calib_slice,
-                            r=rf_rate,
-                            q=div_yield,
-                            max_iters=int(max_iters),
-                            lr=learning_rate,
-                            spot_override=S0_ref,
-                            progress_callback=progress_cb,
-                        )
-                        progress_bar.empty()
-                        status_text.empty()
-                        status_holder.empty()
-
-                        params_dict = {
-                            "kappa": float(params_cm.kappa.detach()),
-                            "theta": float(params_cm.theta.detach()),
-                            "sigma": float(params_cm.sigma.detach()),
-                            "rho": float(params_cm.rho.detach()),
-                            "v0": float(params_cm.v0.detach()),
-                        }
-                        st.session_state["heston_kappa_common"] = params_dict["kappa"]
-                        st.session_state["heston_theta_common"] = params_dict["theta"]
-                        st.session_state["heston_eta_common"] = params_dict["sigma"]
-                        st.session_state["heston_rho_common"] = params_dict["rho"]
-                        st.session_state["heston_v0_common"] = params_dict["v0"]
-                        st.session_state["carr_madan_calibrated"] = True
-                        st.success("✓ Calibration terminée")
-                        st.dataframe(pd.Series(params_dict, name="Paramètre").to_frame())
-                        st.balloons()
-                        st.success("🎉 Analyse terminée")
-                        params_heston = _heston_params_from_state()
-
-                    except Exception as exc:
-                        progress_bar.empty()
-                        status_text.empty()
-                        status_holder.empty()
-                        st.error(f"❌ Erreur : {exc}")
-                        import traceback
-
-                        st.code(traceback.format_exc())
+                    threading.Thread(target=_run_heston_calib_async, args=(calib_slice.copy(),), daemon=True).start()
+                    st.experimental_rerun()
 
             render_inputs_explainer(
                 "🔧 Paramètres utilisés – Heston européen",
@@ -5161,6 +5156,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
 
             if st.session_state.get("carr_madan_calibrated", False):
                 final_price = price_cm if price_cm is not None else None
+                st.caption(
+                    f"Prévisualisation ajout dashboard Heston — Prix: {final_price if final_price is not None else '-'} | "
+                    f"K: {common_strike_value:.4f} | T: {common_maturity_value:.4f} | S0: {common_spot_value:.4f}"
+                )
                 render_add_to_dashboard_button(
                     product_label="Vanilla (Heston CM)",
                     option_char=option_char,

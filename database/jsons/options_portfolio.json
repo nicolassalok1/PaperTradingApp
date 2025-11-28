@@ -1576,5 +1576,41 @@
     "last_updated": "2025-11-27 22:11:09",
     "product": "Straddle",
     "T_0_price": 42.37818447215716
+  },
+  "opt_1764353197646": {
+    "underlying": "BTC",
+    "option_type": "call",
+    "product_type": "Vanilla (Heston CM)",
+    "type": "Vanilla (Heston CM)",
+    "strike": 100.0,
+    "strike2": null,
+    "expiration": "2027-01-14",
+    "quantity": 1.0,
+    "avg_price": 9.220089225742186,
+    "side": "long",
+    "S0": 40.74,
+    "maturity_years": 1.13,
+    "legs": null,
+    "T_0": "2025-11-28",
+    "price": 9.220089225742186,
+    "misc": {
+      "structure": "Vanilla (Heston CM)",
+      "legs": null,
+      "strike2": null,
+      "spot_at_pricing": 40.74,
+      "heston_params": {
+        "kappa": 0.30279845702154723,
+        "theta": 0.4064818576836971,
+        "eta": 1.3409619615190873,
+        "rho": -0.2087075554369735,
+        "v0": 0.3677948735000368
+      }
+    },
+    "id": "opt_1764353197646",
+    "status": "open",
+    "created_at": "2025-11-28 19:06:37",
+    "last_updated": "2025-11-28 19:06:37",
+    "product": "Vanilla (Heston CM)",
+    "T_0_price": 9.220089225742186
   }
 }
