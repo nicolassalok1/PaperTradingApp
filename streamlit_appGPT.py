@@ -5940,15 +5940,22 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 _get_cached_iv_for(k_call_short, T_iron_condor, "call"),
                 _get_cached_iv_for(k_call_long, T_iron_condor, "call"),
             ]
+            sigma_put_long_ic = float(ivs_ic[0]) if ivs_ic[0] is not None and np.isfinite(ivs_ic[0]) and ivs_ic[0] > 0 else float(common_sigma_value)
+            sigma_put_short_ic = float(ivs_ic[1]) if ivs_ic[1] is not None and np.isfinite(ivs_ic[1]) and ivs_ic[1] > 0 else float(common_sigma_value)
+            sigma_call_short_ic = float(ivs_ic[2]) if ivs_ic[2] is not None and np.isfinite(ivs_ic[2]) and ivs_ic[2] > 0 else float(common_sigma_value)
+            sigma_call_long_ic = float(ivs_ic[3]) if ivs_ic[3] is not None and np.isfinite(ivs_ic[3]) and ivs_ic[3] > 0 else float(common_sigma_value)
             iv_vals_ic = [v for v in ivs_ic if v is not None and np.isfinite(v) and v > 0]
-            sigma_iron_condor = float(np.mean(iv_vals_ic)) if iv_vals_ic else float(common_sigma_value)
             if iv_vals_ic:
                 iv_txt = " | ".join(
                     f"K={k:.2f}: {v:.4f}" if v is not None and np.isfinite(v) and v > 0 else f"K={k:.2f}: n/a"
                     for k, v in zip([k_put_long, k_put_short, k_call_short, k_call_long], ivs_ic)
                 )
                 st.caption(f"IV récupérées (cache) ≈ {iv_txt}")
-                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_iron_condor:.4f}")
+                st.caption(
+                    "σ utilisées : "
+                    f"put long {sigma_put_long_ic:.4f} | put short {sigma_put_short_ic:.4f} | "
+                    f"call short {sigma_call_short_ic:.4f} | call long {sigma_call_long_ic:.4f}"
+                )
             else:
                 st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
@@ -5960,7 +5967,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_call_long,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(sigma_iron_condor),
+                sigma=float(common_sigma_value),
+                sigma_put_long=float(sigma_put_long_ic),
+                sigma_put_short=float(sigma_put_short_ic),
+                sigma_call_short=float(sigma_call_short_ic),
+                sigma_call_long=float(sigma_call_long_ic),
                 T=float(T_iron_condor),
             )
             premium = float(view_dyn.get("premium", 0.0))
@@ -6037,7 +6048,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         ],
                         "premium_raw": float(premium),
                         "spot_at_pricing": float(common_spot_value),
-                        "sigma_used": float(sigma_iron_condor),
+                        "sigma_put_long_used": float(sigma_put_long_ic),
+                        "sigma_put_short_used": float(sigma_put_short_ic),
+                        "sigma_call_short_used": float(sigma_call_short_ic),
+                        "sigma_call_long_used": float(sigma_call_long_ic),
                         "r": float(common_rate_value),
                         "q": float(d_common),
                         "maturity": float(T_iron_condor),
@@ -6069,14 +6083,21 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 step=0.5,
                 key=_k("digital_k"),
             )
+            T_dig = st.slider("T (années)", min_value=0.05, max_value=2.0, value=float(common_maturity_value), step=0.05, key=_k("digital_T"))
             opt_type = "call" if opt_char_dig == "c" else "put"
+            iv_dig = _get_cached_iv_for(strike, T_dig, opt_type)
+            sigma_dig = float(iv_dig) if iv_dig is not None and np.isfinite(iv_dig) and iv_dig > 0 else float(common_sigma_value)
+            if iv_dig is not None and np.isfinite(iv_dig) and iv_dig > 0:
+                st.caption(f"IV récupérée (cache) ≈ {iv_dig:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
             view_dyn = view_digital(
                 float(common_spot_value),
                 strike,
-                T=float(common_maturity_value),
+                T=float(T_dig),
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(common_sigma_value),
+                sigma=float(sigma_dig),
                 option_type=opt_type,
             )
             premium = float(view_dyn.get("premium", 0.0))
@@ -6110,11 +6131,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ).strip().upper()
             st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
-            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            expiration_dt = today + datetime.timedelta(days=int((T_dig or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("digital_qty_inline"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("digital_side_inline"))
             st.caption(f"K: {strike:.4f}")
-            st.caption(f"T (maturité commune, années): {float(common_maturity_value):.4f}")
+            st.caption(f"T (maturité, années): {float(T_dig):.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("digital_add_inline")):
                 payload = {
@@ -6128,7 +6149,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price,
                     "side": side,
                     "S0": float(common_spot_value),
-                    "maturity_years": common_maturity_value,
+                    "maturity_years": float(T_dig),
                     "legs": [
                         {"option_type": opt_char_rain, "strike": float(strike), "payout": 1.0, "digital": True},
                     ],
@@ -6138,6 +6159,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         "structure": "Digital",
                         "strike": float(strike),
                         "spot_at_pricing": float(common_spot_value),
+                        "sigma_used": float(sigma_dig),
+                        "r": float(common_rate_value),
+                        "q": float(d_common),
+                        "maturity": float(T_dig),
                     },
                 }
                 try:
@@ -6622,13 +6647,13 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             )
             iv_put = _get_cached_iv_for(k_put, T_strangle, "put")
             iv_call = _get_cached_iv_for(k_call, T_strangle, "call")
-            iv_vals = [v for v in (iv_put, iv_call) if v is not None and np.isfinite(v) and v > 0]
-            sigma_strangle = float(np.mean(iv_vals)) if iv_vals else float(common_sigma_value)
-            if iv_vals:
+            sigma_put_strangle = float(iv_put) if iv_put is not None and np.isfinite(iv_put) and iv_put > 0 else float(common_sigma_value)
+            sigma_call_strangle = float(iv_call) if iv_call is not None and np.isfinite(iv_call) and iv_call > 0 else float(common_sigma_value)
+            if any(v is not None and np.isfinite(v) and v > 0 for v in (iv_put, iv_call)):
                 iv_put_txt = f"{iv_put:.4f}" if iv_put is not None and np.isfinite(iv_put) and iv_put > 0 else "n/a"
                 iv_call_txt = f"{iv_call:.4f}" if iv_call is not None and np.isfinite(iv_call) and iv_call > 0 else "n/a"
                 st.caption(f"IV récupérées (cache) ≈ put {iv_put_txt} | call {iv_call_txt}")
-                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_strangle:.4f}")
+                st.caption(f"σ utilisées : put {sigma_put_strangle:.4f} | call {sigma_call_strangle:.4f}")
             else:
                 st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
@@ -6638,7 +6663,9 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_call,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(sigma_strangle),
+                sigma=float(common_sigma_value),
+                sigma_call=float(sigma_call_strangle),
+                sigma_put=float(sigma_put_strangle),
                 T=float(T_strangle),
             )
             premium = float(view_dyn.get("premium", 0.0))
@@ -6708,7 +6735,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         "strike_put": float(k_put),
                         "strike_call": float(k_call),
                         "spot_at_pricing": float(common_spot_value),
-                        "sigma_used": float(sigma_strangle),
+                        "sigma_put_used": float(sigma_put_strangle),
+                        "sigma_call_used": float(sigma_call_strangle),
                         "r": float(common_rate_value),
                         "q": float(d_common),
                         "maturity": float(T_strangle),
@@ -6758,13 +6786,13 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             )
             iv_long = _get_cached_iv_for(k_long, T_call_spread, "call")
             iv_short = _get_cached_iv_for(k_short, T_call_spread, "call")
-            iv_vals_cs = [v for v in (iv_long, iv_short) if v is not None and np.isfinite(v) and v > 0]
-            sigma_call_spread = float(np.mean(iv_vals_cs)) if iv_vals_cs else float(common_sigma_value)
-            if iv_vals_cs:
+            sigma_long_cs = float(iv_long) if iv_long is not None and np.isfinite(iv_long) and iv_long > 0 else float(common_sigma_value)
+            sigma_short_cs = float(iv_short) if iv_short is not None and np.isfinite(iv_short) and iv_short > 0 else float(common_sigma_value)
+            if any(v is not None and np.isfinite(v) and v > 0 for v in (iv_long, iv_short)):
                 iv_long_txt = f"{iv_long:.4f}" if iv_long is not None and np.isfinite(iv_long) and iv_long > 0 else "n/a"
                 iv_short_txt = f"{iv_short:.4f}" if iv_short is not None and np.isfinite(iv_short) and iv_short > 0 else "n/a"
                 st.caption(f"IV récupérées (cache) ≈ long {iv_long_txt} | short {iv_short_txt}")
-                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_call_spread:.4f}")
+                st.caption(f"σ utilisées : long {sigma_long_cs:.4f} | short {sigma_short_cs:.4f}")
             else:
                 st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
@@ -6774,7 +6802,9 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_short,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(sigma_call_spread),
+                sigma=float(common_sigma_value),
+                sigma_long=float(sigma_long_cs),
+                sigma_short=float(sigma_short_cs),
                 T=float(T_call_spread),
             )
             premium = float(view_dyn.get("premium", 0.0))
@@ -6842,7 +6872,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                             {"option_type": "call", "strike": float(k_short)},
                         ],
                         "spot_at_pricing": float(common_spot_value),
-                        "sigma_used": float(sigma_call_spread),
+                        "sigma_call_long_used": float(sigma_long_cs),
+                        "sigma_call_short_used": float(sigma_short_cs),
                         "r": float(common_rate_value),
                         "q": float(d_common),
                         "maturity": float(T_call_spread),
@@ -6892,13 +6923,13 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             )
             iv_long_p = _get_cached_iv_for(k_long, T_put_spread, "put")
             iv_short_p = _get_cached_iv_for(k_short, T_put_spread, "put")
-            iv_vals_ps = [v for v in (iv_long_p, iv_short_p) if v is not None and np.isfinite(v) and v > 0]
-            sigma_put_spread = float(np.mean(iv_vals_ps)) if iv_vals_ps else float(common_sigma_value)
-            if iv_vals_ps:
+            sigma_long_ps = float(iv_long_p) if iv_long_p is not None and np.isfinite(iv_long_p) and iv_long_p > 0 else float(common_sigma_value)
+            sigma_short_ps = float(iv_short_p) if iv_short_p is not None and np.isfinite(iv_short_p) and iv_short_p > 0 else float(common_sigma_value)
+            if any(v is not None and np.isfinite(v) and v > 0 for v in (iv_long_p, iv_short_p)):
                 iv_long_txt = f"{iv_long_p:.4f}" if iv_long_p is not None and np.isfinite(iv_long_p) and iv_long_p > 0 else "n/a"
                 iv_short_txt = f"{iv_short_p:.4f}" if iv_short_p is not None and np.isfinite(iv_short_p) and iv_short_p > 0 else "n/a"
                 st.caption(f"IV récupérées (cache) ≈ long {iv_long_txt} | short {iv_short_txt}")
-                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_put_spread:.4f}")
+                st.caption(f"σ utilisées : long {sigma_long_ps:.4f} | short {sigma_short_ps:.4f}")
             else:
                 st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
@@ -6908,7 +6939,9 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_short,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(sigma_put_spread),
+                sigma=float(common_sigma_value),
+                sigma_long=float(sigma_long_ps),
+                sigma_short=float(sigma_short_ps),
                 T=float(T_put_spread),
             )
             premium = float(view_dyn.get("premium", 0.0))
@@ -6976,7 +7009,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                             {"option_type": "put", "strike": float(k_short)},
                         ],
                         "spot_at_pricing": float(common_spot_value),
-                        "sigma_used": float(sigma_put_spread),
+                        "sigma_put_long_used": float(sigma_long_ps),
+                        "sigma_put_short_used": float(sigma_short_ps),
                         "r": float(common_rate_value),
                         "q": float(d_common),
                         "maturity": float(T_put_spread),
@@ -7030,6 +7064,9 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 _get_cached_iv_for(k2, T_bfly, "call"),
                 _get_cached_iv_for(k3, T_bfly, "call"),
             ]
+            sigma_k1_bfly = float(ivs_bfly[0]) if ivs_bfly[0] is not None and np.isfinite(ivs_bfly[0]) and ivs_bfly[0] > 0 else float(common_sigma_value)
+            sigma_k2_bfly = float(ivs_bfly[1]) if ivs_bfly[1] is not None and np.isfinite(ivs_bfly[1]) and ivs_bfly[1] > 0 else float(common_sigma_value)
+            sigma_k3_bfly = float(ivs_bfly[2]) if ivs_bfly[2] is not None and np.isfinite(ivs_bfly[2]) and ivs_bfly[2] > 0 else float(common_sigma_value)
             iv_vals_bfly = [v for v in ivs_bfly if v is not None and np.isfinite(v) and v > 0]
             sigma_bfly = float(np.mean(iv_vals_bfly)) if iv_vals_bfly else float(common_sigma_value)
             if iv_vals_bfly:
@@ -7038,7 +7075,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     for k, v in zip([k1, k2, k3], ivs_bfly)
                 )
                 st.caption(f"IV récupérées (cache) ≈ {iv_txt}")
-                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_bfly:.4f}")
+                st.caption(f"σ utilisées : K1 {sigma_k1_bfly:.4f} | K2 {sigma_k2_bfly:.4f} | K3 {sigma_k3_bfly:.4f}")
             else:
                 st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
@@ -7049,7 +7086,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k3,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(sigma_bfly),
+                sigma=float(common_sigma_value),
+                sigma_k1=float(sigma_k1_bfly),
+                sigma_k2=float(sigma_k2_bfly),
+                sigma_k3=float(sigma_k3_bfly),
                 T=float(T_bfly),
             )
             premium = float(view_dyn.get("premium", 0.0))
@@ -7121,7 +7161,9 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                             {"option_type": "call", "strike": float(k3)},
                         ],
                         "spot_at_pricing": float(common_spot_value),
-                        "sigma_used": float(sigma_bfly),
+                        "sigma_k1_used": float(sigma_k1_bfly),
+                        "sigma_k2_used": float(sigma_k2_bfly),
+                        "sigma_k3_used": float(sigma_k3_bfly),
                         "r": float(common_rate_value),
                         "q": float(d_common),
                         "maturity": float(T_bfly),
@@ -7187,6 +7229,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 _get_cached_iv_for(k3, T_condor, "call"),
                 _get_cached_iv_for(k4, T_condor, "call"),
             ]
+            sigma_k1_condor = float(ivs_condor[0]) if ivs_condor[0] is not None and np.isfinite(ivs_condor[0]) and ivs_condor[0] > 0 else float(common_sigma_value)
+            sigma_k2_condor = float(ivs_condor[1]) if ivs_condor[1] is not None and np.isfinite(ivs_condor[1]) and ivs_condor[1] > 0 else float(common_sigma_value)
+            sigma_k3_condor = float(ivs_condor[2]) if ivs_condor[2] is not None and np.isfinite(ivs_condor[2]) and ivs_condor[2] > 0 else float(common_sigma_value)
+            sigma_k4_condor = float(ivs_condor[3]) if ivs_condor[3] is not None and np.isfinite(ivs_condor[3]) and ivs_condor[3] > 0 else float(common_sigma_value)
             iv_vals_condor = [v for v in ivs_condor if v is not None and np.isfinite(v) and v > 0]
             sigma_condor = float(np.mean(iv_vals_condor)) if iv_vals_condor else float(common_sigma_value)
             if iv_vals_condor:
@@ -7195,7 +7241,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     for k, v in zip([k1, k2, k3, k4], ivs_condor)
                 )
                 st.caption(f"IV récupérées (cache) ≈ {iv_txt}")
-                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_condor:.4f}")
+                st.caption(
+                    f"σ utilisées : "
+                    f"K1 {sigma_k1_condor:.4f} | K2 {sigma_k2_condor:.4f} | "
+                    f"K3 {sigma_k3_condor:.4f} | K4 {sigma_k4_condor:.4f}"
+                )
             else:
                 st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
@@ -7207,7 +7257,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k4,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(sigma_condor),
+                sigma=float(common_sigma_value),
+                sigma_k1=float(sigma_k1_condor),
+                sigma_k2=float(sigma_k2_condor),
+                sigma_k3=float(sigma_k3_condor),
+                sigma_k4=float(sigma_k4_condor),
                 T=float(T_condor),
             )
             premium = float(view_dyn.get("premium", 0.0))
@@ -7279,7 +7333,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                             {"option_type": "call", "strike": float(k4)},
                         ],
                         "spot_at_pricing": float(common_spot_value),
-                        "sigma_used": float(sigma_condor),
+                        "sigma_k1_used": float(sigma_k1_condor),
+                        "sigma_k2_used": float(sigma_k2_condor),
+                        "sigma_k3_used": float(sigma_k3_condor),
+                        "sigma_k4_used": float(sigma_k4_condor),
                         "r": float(common_rate_value),
                         "q": float(d_common),
                         "maturity": float(T_condor),
@@ -7334,6 +7391,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 _get_cached_iv_for(k_center, T_iron_bfly, "call"),
                 _get_cached_iv_for(k_call_long, T_iron_bfly, "call"),
             ]
+            sigma_put_long_ib = float(ivs_ib[0]) if ivs_ib[0] is not None and np.isfinite(ivs_ib[0]) and ivs_ib[0] > 0 else float(common_sigma_value)
+            sigma_call_center_ib = float(ivs_ib[1]) if ivs_ib[1] is not None and np.isfinite(ivs_ib[1]) and ivs_ib[1] > 0 else float(common_sigma_value)
+            sigma_call_long_ib = float(ivs_ib[2]) if ivs_ib[2] is not None and np.isfinite(ivs_ib[2]) and ivs_ib[2] > 0 else float(common_sigma_value)
+            sigma_put_center_ib = sigma_call_center_ib  # même strike central, on réutilise la même IV pour le put central
             iv_vals_ib = [v for v in ivs_ib if v is not None and np.isfinite(v) and v > 0]
             sigma_iron_bfly = float(np.mean(iv_vals_ib)) if iv_vals_ib else float(common_sigma_value)
             if iv_vals_ib:
@@ -7342,7 +7403,13 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     for k, v in zip([k_put_long, k_center, k_call_long], ivs_ib)
                 )
                 st.caption(f"IV récupérées (cache) ≈ {iv_txt}")
-                st.caption(f"σ utilisée (moyenne IV) ≈ {sigma_iron_bfly:.4f}")
+                st.caption(
+                    "σ utilisées : "
+                    f"put long {sigma_put_long_ib:.4f} | "
+                    f"put center {sigma_put_center_ib:.4f} | "
+                    f"call center {sigma_call_center_ib:.4f} | "
+                    f"call long {sigma_call_long_ib:.4f}"
+                )
             else:
                 st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
             view_dyn = view_iron_butterfly(
@@ -7352,7 +7419,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_call_long,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(sigma_iron_bfly),
+                sigma=float(common_sigma_value),
+                sigma_put_long=float(sigma_put_long_ib),
+                sigma_put_center=float(sigma_put_center_ib),
+                sigma_call_center=float(sigma_call_center_ib),
+                sigma_call_long=float(sigma_call_long_ib),
                 T=float(T_iron_bfly),
             )
             premium_raw = price_iron_butterfly_bs(
@@ -7362,7 +7433,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 k_call_long,
                 r=float(common_rate_value),
                 q=float(d_common),
-                sigma=float(sigma_iron_bfly),
+                sigma=float(common_sigma_value),
+                sigma_put_long=float(sigma_put_long_ib),
+                sigma_put_center=float(sigma_put_center_ib),
+                sigma_call_center=float(sigma_call_center_ib),
+                sigma_call_long=float(sigma_call_long_ib),
                 T=float(T_iron_bfly),
             )
             premium = float(premium_raw)
@@ -7436,7 +7511,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         ],
                         "premium_raw": float(premium),
                         "spot_at_pricing": float(common_spot_value),
-                        "sigma_used": float(sigma_iron_bfly),
+                        "sigma_put_long_used": float(sigma_put_long_ib),
+                        "sigma_put_center_used": float(sigma_put_center_ib),
+                        "sigma_call_center_used": float(sigma_call_center_ib),
+                        "sigma_call_long_used": float(sigma_call_long_ib),
                         "r": float(common_rate_value),
                         "q": float(d_common),
                         "maturity": float(T_iron_bfly),
@@ -7495,16 +7573,15 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 if t_long != t_long_raw:
                     st.caption(f"T long ajusté à {t_long:.2f} pour rester après T court.")
             with col2:
-                sigma_cal = st.slider(
-                    "Sigma",
-                    min_value=0.01,
-                    max_value=1.0,
-                    value=common_sigma_value,
-                    step=0.01,
-                    key=_k("calendar_sigma"),
-                )
-                r_cal = st.slider("r", min_value=-0.05, max_value=0.1, value=common_rate_value, step=0.005, key=_k("calendar_r"))
                 span_cal = st.slider("Span payoff (%)", min_value=0.1, max_value=1.0, value=0.5, step=0.05, key=_k("calendar_span"))
+
+            iv_cal = _get_cached_iv_for(strike_cal, t_long, option_type_cal)
+            sigma_cal = float(iv_cal) if iv_cal is not None and np.isfinite(iv_cal) and iv_cal > 0 else float(common_sigma_value)
+            if iv_cal is not None and np.isfinite(iv_cal) and iv_cal > 0:
+                st.caption(f"IV récupérée (cache) ≈ {iv_cal:.4f}")
+            else:
+                st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
+            r_cal = float(common_rate_value)
 
             view_dyn = view_calendar_spread(
                 s0_ref,
@@ -7641,16 +7718,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 if t_far != t_far_raw:
                     st.caption(f"T far ajusté à {t_far:.2f} pour rester après T near.")
             with col2:
-                sigma_diag = st.slider(
-                    "Sigma",
-                    min_value=0.01,
-                    max_value=1.0,
-                    value=common_sigma_value,
-                    step=0.01,
-                    key=_k("diag_sigma"),
-                )
-                r_diag = st.slider("r", min_value=-0.05, max_value=0.1, value=common_rate_value, step=0.005, key=_k("diag_r"))
                 span_diag = st.slider("Span payoff (%)", min_value=0.1, max_value=1.0, value=0.5, step=0.05, key=_k("diag_span"))
+            r_diag = float(common_rate_value)
 
             view_dyn = view_diagonal_spread(
                 s0_ref,

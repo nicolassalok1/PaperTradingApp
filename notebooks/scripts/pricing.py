@@ -199,51 +199,165 @@ def price_straddle_bs(
     return bs_price_put(S, strike, r=r, q=q, sigma=sigma_p, T=T) + bs_price_call(S, strike, r=r, q=q, sigma=sigma_c, T=T)
 
 
-def price_strangle_bs(S: float, k_put: float, k_call: float, r: float = DEFAULT_R, q: float = DEFAULT_Q, sigma: float = DEFAULT_SIGMA, T: float = DEFAULT_T) -> float:
-    return bs_price_put(S, k_put, r=r, q=q, sigma=sigma, T=T) + bs_price_call(S, k_call, r=r, q=q, sigma=sigma, T=T)
+def price_strangle_bs(
+    S: float,
+    k_put: float,
+    k_call: float,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    sigma_call: float | None = None,
+    sigma_put: float | None = None,
+) -> float:
+    sigma_c = sigma if sigma_call is None else sigma_call
+    sigma_p = sigma if sigma_put is None else sigma_put
+    return bs_price_put(S, k_put, r=r, q=q, sigma=sigma_p, T=T) + bs_price_call(S, k_call, r=r, q=q, sigma=sigma_c, T=T)
 
 
-def pricing_strangle_bs(S: float, k_put: float, k_call: float, r: float = DEFAULT_R, q: float = DEFAULT_Q, sigma: float = DEFAULT_SIGMA, T: float = DEFAULT_T) -> float:
+def pricing_strangle_bs(
+    S: float,
+    k_put: float,
+    k_call: float,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    sigma_call: float | None = None,
+    sigma_put: float | None = None,
+) -> float:
     """Alias explicite pour le pricing d'un strangle via Black-Scholes (somme put+call)."""
-    return price_strangle_bs(S, k_put, k_call, r=r, q=q, sigma=sigma, T=T)
+    return price_strangle_bs(S, k_put, k_call, r=r, q=q, sigma=sigma, T=T, sigma_call=sigma_call, sigma_put=sigma_put)
 
 
-def price_call_spread_bs(S: float, k_long: float, k_short: float, r: float = DEFAULT_R, q: float = DEFAULT_Q, sigma: float = DEFAULT_SIGMA, T: float = DEFAULT_T) -> float:
-    return bs_price_call(S, k_long, r=r, q=q, sigma=sigma, T=T) - bs_price_call(S, k_short, r=r, q=q, sigma=sigma, T=T)
+def price_call_spread_bs(
+    S: float,
+    k_long: float,
+    k_short: float,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    sigma_long: float | None = None,
+    sigma_short: float | None = None,
+) -> float:
+    sigma_l = sigma if sigma_long is None else sigma_long
+    sigma_s = sigma if sigma_short is None else sigma_short
+    return bs_price_call(S, k_long, r=r, q=q, sigma=sigma_l, T=T) - bs_price_call(S, k_short, r=r, q=q, sigma=sigma_s, T=T)
 
 
-def price_put_spread_bs(S: float, k_long: float, k_short: float, r: float = DEFAULT_R, q: float = DEFAULT_Q, sigma: float = DEFAULT_SIGMA, T: float = DEFAULT_T) -> float:
-    return bs_price_put(S, k_long, r=r, q=q, sigma=sigma, T=T) - bs_price_put(S, k_short, r=r, q=q, sigma=sigma, T=T)
+def price_put_spread_bs(
+    S: float,
+    k_long: float,
+    k_short: float,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    sigma_long: float | None = None,
+    sigma_short: float | None = None,
+) -> float:
+    sigma_l = sigma if sigma_long is None else sigma_long
+    sigma_s = sigma if sigma_short is None else sigma_short
+    return bs_price_put(S, k_long, r=r, q=q, sigma=sigma_l, T=T) - bs_price_put(S, k_short, r=r, q=q, sigma=sigma_s, T=T)
 
 
-def price_butterfly_bs(S: float, k1: float, k2: float, k3: float, r: float = DEFAULT_R, q: float = DEFAULT_Q, sigma: float = DEFAULT_SIGMA, T: float = DEFAULT_T) -> float:
-    return bs_price_call(S, k1, r=r, q=q, sigma=sigma, T=T) - 2.0 * bs_price_call(S, k2, r=r, q=q, sigma=sigma, T=T) + bs_price_call(S, k3, r=r, q=q, sigma=sigma, T=T)
+def price_butterfly_bs(
+    S: float,
+    k1: float,
+    k2: float,
+    k3: float,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    sigma_k1: float | None = None,
+    sigma_k2: float | None = None,
+    sigma_k3: float | None = None,
+) -> float:
+    sig1 = sigma if sigma_k1 is None else sigma_k1
+    sig2 = sigma if sigma_k2 is None else sigma_k2
+    sig3 = sigma if sigma_k3 is None else sigma_k3
+    return bs_price_call(S, k1, r=r, q=q, sigma=sig1, T=T) - 2.0 * bs_price_call(S, k2, r=r, q=q, sigma=sig2, T=T) + bs_price_call(S, k3, r=r, q=q, sigma=sig3, T=T)
 
 
-def price_condor_bs(S: float, k1: float, k2: float, k3: float, k4: float, r: float = DEFAULT_R, q: float = DEFAULT_Q, sigma: float = DEFAULT_SIGMA, T: float = DEFAULT_T) -> float:
+def price_condor_bs(
+    S: float,
+    k1: float,
+    k2: float,
+    k3: float,
+    k4: float,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    sigma_k1: float | None = None,
+    sigma_k2: float | None = None,
+    sigma_k3: float | None = None,
+    sigma_k4: float | None = None,
+) -> float:
+    sig1 = sigma if sigma_k1 is None else sigma_k1
+    sig2 = sigma if sigma_k2 is None else sigma_k2
+    sig3 = sigma if sigma_k3 is None else sigma_k3
+    sig4 = sigma if sigma_k4 is None else sigma_k4
     return (
-        bs_price_call(S, k1, r=r, q=q, sigma=sigma, T=T)
-        - bs_price_call(S, k2, r=r, q=q, sigma=sigma, T=T)
-        - bs_price_call(S, k3, r=r, q=q, sigma=sigma, T=T)
-        + bs_price_call(S, k4, r=r, q=q, sigma=sigma, T=T)
+        bs_price_call(S, k1, r=r, q=q, sigma=sig1, T=T)
+        - bs_price_call(S, k2, r=r, q=q, sigma=sig2, T=T)
+        - bs_price_call(S, k3, r=r, q=q, sigma=sig3, T=T)
+        + bs_price_call(S, k4, r=r, q=q, sigma=sig4, T=T)
     )
 
 
-def price_iron_butterfly_bs(S: float, k_put_long: float, k_center: float, k_call_long: float, r: float = DEFAULT_R, q: float = DEFAULT_Q, sigma: float = DEFAULT_SIGMA, T: float = DEFAULT_T) -> float:
+def price_iron_butterfly_bs(
+    S: float,
+    k_put_long: float,
+    k_center: float,
+    k_call_long: float,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    sigma_put_long: float | None = None,
+    sigma_put_center: float | None = None,
+    sigma_call_center: float | None = None,
+    sigma_call_long: float | None = None,
+) -> float:
+    sig_pl = sigma if sigma_put_long is None else sigma_put_long
+    sig_pc = sigma if sigma_put_center is None else sigma_put_center
+    sig_cc = sigma if sigma_call_center is None else sigma_call_center
+    sig_cl = sigma if sigma_call_long is None else sigma_call_long
     return (
-        bs_price_put(S, k_put_long, r=r, q=q, sigma=sigma, T=T)
-        - bs_price_put(S, k_center, r=r, q=q, sigma=sigma, T=T)
-        - bs_price_call(S, k_center, r=r, q=q, sigma=sigma, T=T)
-        + bs_price_call(S, k_call_long, r=r, q=q, sigma=sigma, T=T)
+        bs_price_put(S, k_put_long, r=r, q=q, sigma=sig_pl, T=T)
+        - bs_price_put(S, k_center, r=r, q=q, sigma=sig_pc, T=T)
+        - bs_price_call(S, k_center, r=r, q=q, sigma=sig_cc, T=T)
+        + bs_price_call(S, k_call_long, r=r, q=q, sigma=sig_cl, T=T)
     )
 
 
-def price_iron_condor_bs(S: float, k_put_long: float, k_put_short: float, k_call_short: float, k_call_long: float, r: float = DEFAULT_R, q: float = DEFAULT_Q, sigma: float = DEFAULT_SIGMA, T: float = DEFAULT_T) -> float:
+def price_iron_condor_bs(
+    S: float,
+    k_put_long: float,
+    k_put_short: float,
+    k_call_short: float,
+    k_call_long: float,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    sigma_put_long: float | None = None,
+    sigma_put_short: float | None = None,
+    sigma_call_short: float | None = None,
+    sigma_call_long: float | None = None,
+) -> float:
+    sig_pl = sigma if sigma_put_long is None else sigma_put_long
+    sig_ps = sigma if sigma_put_short is None else sigma_put_short
+    sig_cs = sigma if sigma_call_short is None else sigma_call_short
+    sig_cl = sigma if sigma_call_long is None else sigma_call_long
     return (
-        bs_price_put(S, k_put_long, r=r, q=q, sigma=sigma, T=T)
-        - bs_price_put(S, k_put_short, r=r, q=q, sigma=sigma, T=T)
-        - bs_price_call(S, k_call_short, r=r, q=q, sigma=sigma, T=T)
-        + bs_price_call(S, k_call_long, r=r, q=q, sigma=sigma, T=T)
+        bs_price_put(S, k_put_long, r=r, q=q, sigma=sig_pl, T=T)
+        - bs_price_put(S, k_put_short, r=r, q=q, sigma=sig_ps, T=T)
+        - bs_price_call(S, k_call_short, r=r, q=q, sigma=sig_cs, T=T)
+        + bs_price_call(S, k_call_long, r=r, q=q, sigma=sig_cl, T=T)
     )
 
 
