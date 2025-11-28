@@ -4698,8 +4698,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             tab_calendar, tab_diagonal = st.tabs(["Calendar spread", "Diagonal spread"])
 
         with tab_grp_exotics:
-            opt_label_exo, opt_char_exo = _choose_option_select("opt_choice_exo_tab", option_char)
-            option_label, option_char = opt_label_exo, opt_char_exo
             tab_digital, tab_asset_on, tab_chooser, tab_quanto, tab_rainbow = st.tabs(["Digital", "Asset-or-nothing", "Chooser", "Quanto", "Rainbow"])
 
         with tab_grp_basket:
