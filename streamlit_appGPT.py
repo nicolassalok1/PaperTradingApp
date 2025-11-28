@@ -10458,10 +10458,14 @@ with tab1:
                 pay_grid *= -1.0
             pnl_grid = pay_grid - avg_price if side == "long" else avg_price + pay_grid
             pay_close = compute_option_payoff(opt, ref)
+            if side == "short":
+                pay_close *= -1.0
+            pnl_total_line = pay_close * qty - avg_price * qty if side == "long" else avg_price * qty + pay_close * qty
 
             with st.expander(f"{key} – {opt.get('product_type') or opt.get('product') or opt.get('type') or 'Option'} ({underlying})", expanded=False):
                 st.caption(f"Qty: {qty:.0f} | Side: {side} | Strike: {strike:.4f} | Spot réf: {ref:.4f}")
                 st.metric("Payoff @ réf (expirée)", f"${pay_close:.4f}")
+                st.metric("P&L total (ligne)", f"${pnl_total_line:.4f}")
                 fig, ax = plt.subplots(figsize=(6, 3))
                 ax.plot(s_grid, pay_grid, label="Payoff (signé)")
                 ax.plot(s_grid, pnl_grid, label="P&L (vs. prime)", color="darkorange")
