@@ -5273,7 +5273,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                             )
 
                     k_grid, t_grid = np.meshgrid(k_vals, t_vals)
-                    price_grid = call_matrix if option_char == "c" else put_matrix
+                    # Utilise toujours la matrice cohérente avec le type Call/Put sélectionné dans l'onglet Heston.
+                    price_grid = call_matrix if opt_char_local == "c" else put_matrix
                     iv_grid = np.full_like(price_grid, np.nan, dtype=float)
                     for i_t, t_val in enumerate(t_vals):
                         for j_k, k_val in enumerate(k_vals):
