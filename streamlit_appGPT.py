@@ -4500,7 +4500,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
         )
 
         with tab_grp_vanilla:
-            tab_european, tab_american, tab_bermudan = st.tabs(["Européenne", "Américaine", "Bermuda"])
+            tab_european, tab_heston, tab_american, tab_bermudan = st.tabs(["Européenne", "Heston", "Américaine", "Bermuda"])
 
         with tab_grp_path:
             (
@@ -4694,7 +4694,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
         with tab_european:
             st.header("Option européenne")
             _render_option_text("Option européenne", "european_graph")
-            params_heston = _heston_params_from_state()
             calib_T_target = st.session_state.get("heston_calib_T_target")
             K_eu = float(common_strike_value)
             S0_eu = float(common_spot_value)
@@ -4802,6 +4801,90 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 f"T={float(T_slider):.4f}, r={common_rate_value:.4f}, "
                 f"d={float(d_common):.4f}, σ={common_sigma_value:.4f}"
             )
+            
+        with tab_heston:
+            st.header("Option européenne – Heston")
+            _render_option_text("Option européenne (Heston)", "european_graph_heston")
+            params_heston = _heston_params_from_state()
+            calib_T_target = st.session_state.get("heston_calib_T_target")
+            S0_h = float(common_spot_value)
+            K_h_common = float(common_strike_value)
+            r_h = float(common_rate_value)
+            d_h = float(d_common)
+            K_slider_h = st.slider(
+                "K (strike – visualisation Heston)",
+                min_value=max(0.1, S0_h - 20.0),
+                max_value=S0_h + 20.0,
+                value=float(round(S0_h)),
+                step=max(0.01, K_h_common * 0.01),
+                key=_k("eu_k_slider_heston"),
+            )
+            T_slider_h = st.slider(
+                "T (années – visualisation Heston)",
+                min_value=0.05,
+                max_value=2.0,
+                value=float(calib_T_target) if calib_T_target is not None else float(common_maturity_value),
+                step=0.01,
+                key=_k("eu_T_slider_heston"),
+            )
+            st.session_state["eu_T_slider_val"] = T_slider_h
+
+            opt_type_h = "call" if option_char == "c" else "put"
+            price_heston_display: float | None = None
+            try:
+                price_heston_display = _carr_madan_price(
+                    S0=float(S0_h),
+                    K=float(K_slider_h),
+                    T=float(T_slider_h),
+                    r=float(r_h),
+                    q=float(d_h),
+                    opt_char=option_char,
+                    params=params_heston,
+                )
+                st.session_state["eu_price_heston"] = price_heston_display
+            except Exception as exc:
+                st.error(f"Erreur Heston (Carr–Madan) : {exc}")
+
+            premium_h = price_heston_display or 0.0
+            s_grid = np.linspace(max(0.1, K_slider_h * 0.4), K_slider_h * 1.6, 200)
+            payoff_grid = np.maximum(s_grid - K_slider_h, 0.0) if opt_type_h == "call" else np.maximum(K_slider_h - s_grid, 0.0)
+            pnl_grid = payoff_grid - premium_h
+            payoff_s0 = float(np.interp(S0_h, s_grid, payoff_grid))
+            pnl_s0 = payoff_s0 - premium_h
+            fig_h, ax_h = plt.subplots(figsize=(7, 4))
+            ax_h.plot(s_grid, payoff_grid, label="Payoff")
+            ax_h.plot(s_grid, pnl_grid, label="P&L net", color="darkorange")
+            ax_h.axvline(K_slider_h, color="gray", linestyle="--", label=f"K = {K_slider_h:.2f}")
+            ax_h.axvline(S0_h, color="crimson", linestyle="-.", label=f"S0 = {S0_h:.2f}")
+            ax_h.axhline(0, color="black", linewidth=0.8)
+            ax_h.set_xlabel("Spot")
+            ax_h.set_ylabel("Payoff / P&L")
+            ax_h.set_title(f"Vanilla {opt_type_h.capitalize()} (Heston)")
+            ax_h.legend(loc="best")
+            st.pyplot(fig_h, clear_figure=True)
+
+            if price_heston_display is not None:
+                st.success(f"Prix Heston (Carr–Madan) {option_label} = {price_heston_display:.6f}")
+            misc_heston = {
+                "heston_params": {
+                    "kappa": float(st.session_state.get("heston_kappa_common", 2.0)),
+                    "theta": float(st.session_state.get("heston_theta_common", 0.04)),
+                    "eta": float(st.session_state.get("heston_eta_common", 0.5)),
+                    "rho": float(st.session_state.get("heston_rho_common", -0.7)),
+                    "v0": float(st.session_state.get("heston_v0_common", 0.04)),
+                }
+            }
+            render_add_to_dashboard_button(
+                product_label="Vanilla (Heston CM)",
+                option_char=option_char,
+                price_value=price_heston_display or 0.0,
+                strike=K_slider_h,
+                maturity=T_slider_h,
+                key_prefix=_k("save_heston_cm"),
+                spot=S0_h,
+                misc=misc_heston,
+            )
+
             st.subheader("Heston (référence)")
             st.divider()
             heston_params_table = {
@@ -4967,6 +5050,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         import traceback
 
                         st.code(traceback.format_exc())
+
             render_inputs_explainer(
                 "🔧 Paramètres utilisés – Heston européen",
                 (
@@ -4978,7 +5062,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 ),
             )
             st.caption("Pricing direct avec Carr–Madan (Heston calibré).")
-            price_cm = st.session_state.get("eu_price_heston")
+            price_cm = price_heston_display
             if price_cm is None:
                 try:
                     with st.spinner("Calcul Heston Carr–Madan..."):
@@ -4997,26 +5081,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     price_cm = None
             if price_cm is not None:
                 st.success(f"Prix Heston (Carr–Madan) {option_label} = {price_cm:.6f}")
-                misc_heston = {
-                    "heston_params": {
-                        "kappa": float(st.session_state.get("heston_kappa_common", 2.0)),
-                        "theta": float(st.session_state.get("heston_theta_common", 0.04)),
-                        "eta": float(st.session_state.get("heston_eta_common", 0.5)),
-                        "rho": float(st.session_state.get("heston_rho_common", -0.7)),
-                        "v0": float(st.session_state.get("heston_v0_common", 0.04)),
-                        }
-                    }
-                render_add_to_dashboard_button(
-                    product_label="Vanilla (Heston CM)",
-                    option_char=option_char,
-                    price_value=price_cm,
-                    strike=common_strike_value,
-                    maturity=common_maturity_value,
-                    key_prefix=_k("save_heston_cm"),
-                    spot=common_spot_value,
-                    misc=misc_heston,
-                )
-
             try:
                 with st.spinner("Calcul heatmap & surface IV Heston…"):
                     k_vals = heatmap_strike_values
@@ -5062,7 +5126,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 st.error(f"Erreur calcul heatmap / surface IV Heston : {exc}")
 
             st.divider()
-            
 
         with tab_american:
             st.header("Option américaine")
