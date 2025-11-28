@@ -3481,18 +3481,6 @@ def run_app_options():
     st.session_state["heatmap_maturity_span_value"] = float(heatmap_maturity_span)
 
     def render_option_tabs_for_type(option_label: str, option_char: str):
-        # Sélection globale Call / Put pour tous les sous-onglets Options
-        opt_default = st.session_state.get("option_type_global", option_label)
-        opt_select = st.selectbox(
-            "Choix Call / Put",
-            ["Call", "Put"],
-            index=0 if (opt_default or "").lower().startswith("c") else 1,
-            key="option_type_global_select",
-        )
-        option_label = opt_select
-        option_char = "c" if opt_select == "Call" else "p"
-        st.session_state["option_type_global"] = opt_select
-
         def _choose_option_select(key_suffix: str, default_char: str) -> tuple[str, str]:
             """Selectbox Call/Put locale sans réécrire d'autres clés de session."""
             default_label = "Call" if default_char.lower() == "c" else "Put"
