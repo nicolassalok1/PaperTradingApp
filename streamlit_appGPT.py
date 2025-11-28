@@ -208,6 +208,19 @@ def run_app_options():
         "modeBarButtonsToRemove": ["sendDataToCloud"],
     }
 
+    # Orange theme for "Ajouter au dashboard" buttons
+    st.markdown(
+        """
+        <style>
+        div.stButton > button {
+            background-color: #ff8c00 !important;
+            color: #fff !important;
+            border: none !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     def render_add_to_dashboard_button(
         product_label: str,
@@ -4761,27 +4774,38 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ax_pay.set_title(f"Barrier {'binaire' if binary_b else 'vanilla'} ({direction_b} / {knock_b})")
             st.pyplot(fig_pay, clear_figure=True)
 
-            st.markdown(
-                f"""
-**Prime ~ {premium:.4f}**
+            price = float(premium)
+            st.markdown("### Ajouter au dashboard")
+            st.metric("Prix calculé", f"${price:.6f}")
 
-- Payoff @ S0 = {payoff_s0:.4f}
-- P&L net = {pnl_s0:.4f}
-"""
-            )
+            underlying = (
+                st.session_state.get("heston_cboe_ticker")
+                or st.session_state.get("tkr_common")
+                or st.session_state.get("common_underlying")
+                or st.session_state.get("ticker_default")
+                or ""
+            ).strip().upper()
+            st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
+            today = datetime.date.today()
+            expiration_dt = today + datetime.timedelta(days=int((T_b or 0.0) * 365))
+            qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("barrier_all_qty"))
+            side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("barrier_all_side"))
 
-            if st.button("💾 Enregistrer cette barrière", key=_k("save_barrier_all"), type="primary"):
+            if st.button("Ajouter au dashboard", key=_k("barrier_all_add"), type="primary"):
                 payload = {
-                    "product": f"Barrier {'binary' if binary_b else 'vanilla'}",
+                    "underlying": underlying or "N/A",
                     "option_type": call_put_b,
-                    "T": float(T_b),
-                    "S0": float(s0_ref),
+                    "product_type": f"Barrier {'binary' if binary_b else 'vanilla'}",
+                    "type": f"Barrier {'binary' if binary_b else 'vanilla'}",
                     "strike": float(strike_b),
-                    "sigma": float(sigma_b),
-                    "r": float(r_b),
-                    "T_0": datetime.date.today().isoformat(),
-                    "price": premium,
-                    "status": "open",
+                    "expiration": expiration_dt.isoformat(),
+                    "quantity": int(qty),
+                    "avg_price": price,
+                    "side": side,
+                    "S0": float(s0_ref),
+                    "maturity_years": float(T_b),
+                    "T_0": today.isoformat(),
+                    "price": price,
                     "misc": {
                         "barrier": float(barrier_b),
                         "barrier_type": direction_b,
@@ -5382,15 +5406,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ax_pay.set_title(f"Lookback floating ({option_type_lb})")
             st.pyplot(fig_pay, clear_figure=True)
 
-            st.markdown(
-                f"""
-**Prime ~ {premium:.4f}**
-
-- Payoff @ S0 = {payoff_s0:.4f}
-- P&L net = {pnl_s0:.4f}
-"""
-            )
-
             price = float(premium)
             st.markdown("### Ajouter au dashboard")
             st.metric("Prix calculé", f"${price:.6f}")
@@ -5402,12 +5417,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 or st.session_state.get("ticker_default")
                 or ""
             ).strip().upper()
+            st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
             expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("lb_qty"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("lb_side"))
-            st.caption(f"Min={min_lb:.4f} | Max={max_lb:.4f} | Span={span_lb:.2f}")
-            st.caption(f"T (maturité commune, années): {float(common_maturity_value):.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("lb_add"), type="primary"):
                 payload = {
@@ -5505,14 +5519,48 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ax_pay.set_title(f"Asian arithmétique ({option_type_as})")
             st.pyplot(fig_pay, clear_figure=True)
 
-            st.markdown(
-                f"""
-**Prime ~ {premium:.4f}**
+            st.markdown("### Ajouter au dashboard")
+            st.metric("Prix calculé", f"${premium:.6f}")
+            underlying = (
+                st.session_state.get("heston_cboe_ticker")
+                or st.session_state.get("tkr_common")
+                or st.session_state.get("common_underlying")
+                or st.session_state.get("ticker_default")
+                or ""
+            ).strip().upper()
+            st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
+            today = datetime.date.today()
+            expiration_dt = today + datetime.timedelta(days=int((T_as or 0.0) * 365))
+            qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("asian_qty"))
+            side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("asian_side"))
 
-- Payoff @ S0 = {payoff_s0:.4f}
-- P&L net = {pnl_s0:.4f}
-"""
-            )
+            if st.button("Ajouter au dashboard", key=_k("asian_add"), type="primary"):
+                payload = {
+                    "underlying": underlying or "N/A",
+                    "option_type": option_type_as,
+                    "product_type": "Asian arithmétique",
+                    "type": "Asian arithmétique",
+                    "strike": float(strike_as),
+                    "expiration": expiration_dt.isoformat(),
+                    "quantity": int(qty),
+                    "avg_price": float(premium),
+                    "side": side,
+                    "S0": float(s0_path),
+                    "maturity_years": float(T_as),
+                    "T_0": today.isoformat(),
+                    "price": float(premium),
+                    "misc": {
+                        "avg_ref": float(avg_as),
+                        "sigma": float(sigma_as),
+                        "r": float(r_as),
+                        "spot_at_pricing": float(s0_path),
+                    },
+                }
+                try:
+                    option_id = add_option_to_dashboard(payload)
+                    st.success(f"Asian arithmétique ajoutée (id: {option_id})")
+                except Exception as exc:
+                    st.error(f"Erreur lors de l'enregistrement : {exc}")
 
         with tab_iron_condor:
             k_center = st.slider(
@@ -6934,16 +6982,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ax_pay.set_title(f"Calendar spread ({option_type_cal})")
             st.pyplot(fig_pay, clear_figure=True)
 
-            st.markdown(
-                f"""
-**Prime ~ {premium:.4f}**
-
-- Payoff @ S0 = {payoff_s0:.4f}
-- P&L net = {pnl_s0:.4f}
-- T court = {t_short:.2f} | T long = {t_long:.2f}
-"""
-            )
-
             price = float(premium)
             st.markdown("### Ajouter au dashboard")
             st.metric("Prix calculé", f"${price:.6f}")
@@ -6955,11 +6993,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 or st.session_state.get("ticker_default")
                 or ""
             ).strip().upper()
+            st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
             expiration_dt = today + datetime.timedelta(days=int((t_long or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("calendar_qty"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("calendar_side"))
-            st.caption(f"K={strike_cal:.4f} | T_short={t_short:.4f} | T_long={t_long:.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("calendar_add"), type="primary"):
                 payload = {
@@ -7093,16 +7131,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ax_pay.set_title(f"Diagonal spread ({option_type_diag})")
             st.pyplot(fig_pay, clear_figure=True)
 
-            st.markdown(
-                f"""
-**Prime ~ {premium:.4f}**
-
-- Payoff @ S0 = {payoff_s0:.4f}
-- P&L net = {pnl_s0:.4f}
-- T near = {t_near:.2f} | T far = {t_far:.2f}
-"""
-            )
-
             price = float(premium)
             st.markdown("### Ajouter au dashboard")
             st.metric("Prix calculé", f"${price:.6f}")
@@ -7114,11 +7142,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 or st.session_state.get("ticker_default")
                 or ""
             ).strip().upper()
+            st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
             expiration_dt = today + datetime.timedelta(days=int((t_far or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("diag_qty"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("diag_side"))
-            st.caption(f"K_near={k_near:.4f} | K_far={k_far:.4f} | T_near={t_near:.4f} | T_far={t_far:.4f}")
 
             if st.button("Ajouter au dashboard", key=_k("diag_add"), type="primary"):
                 payload = {
@@ -7218,14 +7246,50 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ax_pay.set_title(f"Asian géométrique ({option_type_ag})")
             st.pyplot(fig_pay, clear_figure=True)
 
-            st.markdown(
-                f"""
-**Prime ~ {premium:.4f}**
+            price = float(premium)
+            st.markdown("### Ajouter au dashboard")
+            st.metric("Prix calculé", f"${price:.6f}")
+            underlying = (
+                st.session_state.get("heston_cboe_ticker")
+                or st.session_state.get("tkr_common")
+                or st.session_state.get("common_underlying")
+                or st.session_state.get("ticker_default")
+                or ""
+            ).strip().upper()
+            st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
+            today = datetime.date.today()
+            expiration_dt = today + datetime.timedelta(days=int((T_ag or 0.0) * 365))
+            qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("asian_geo_qty"))
+            side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("asian_geo_side"))
 
-- Payoff @ S0 = {payoff_s0:.4f}
-- P&L net = {pnl_s0:.4f}
-"""
-            )
+            if st.button("Ajouter au dashboard", key=_k("asian_geo_add"), type="primary"):
+                payload = {
+                    "underlying": underlying or "N/A",
+                    "option_type": option_type_ag,
+                    "product_type": "Asian géométrique",
+                    "type": "Asian géométrique",
+                    "strike": float(strike_ag),
+                    "expiration": expiration_dt.isoformat(),
+                    "quantity": int(qty),
+                    "avg_price": price,
+                    "side": side,
+                    "S0": float(s0_path),
+                    "maturity_years": float(T_ag),
+                    "T_0": today.isoformat(),
+                    "price": price,
+                    "misc": {
+                        "avg_ref": float(avg_ag),
+                        "sigma": float(sigma_ag),
+                        "r": float(r_ag),
+                        "spot_at_pricing": float(s0_path),
+                    },
+                }
+                try:
+                    st.caption(f"[LOG] Écriture vers options_portfolio.json avec payload: {payload}")
+                    option_id = add_option_to_dashboard(payload)
+                    st.success(f"Asian géométrique ajoutée au dashboard (id: {option_id}).")
+                except Exception as exc:
+                    st.error(f"Erreur lors de l'enregistrement : {exc}")
 
 
         with tab_lookback_fixed:
@@ -7297,14 +7361,50 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ax_pay.set_title(f"Lookback fixed ({option_type_lbf})")
             st.pyplot(fig_pay, clear_figure=True)
 
-            st.markdown(
-                f"""
-**Prime ~ {premium:.4f}**
+            price = float(premium)
+            st.markdown("### Ajouter au dashboard")
+            st.metric("Prix calculé", f"${price:.6f}")
+            underlying = (
+                st.session_state.get("heston_cboe_ticker")
+                or st.session_state.get("tkr_common")
+                or st.session_state.get("common_underlying")
+                or st.session_state.get("ticker_default")
+                or ""
+            ).strip().upper()
+            st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
+            today = datetime.date.today()
+            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("lbf_qty"))
+            side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("lbf_side"))
 
-- Payoff @ S0 = {payoff_s0:.4f}
-- P&L net = {pnl_s0:.4f}
-"""
-            )
+            if st.button("Ajouter au dashboard", key=_k("lbf_add"), type="primary"):
+                payload = {
+                    "underlying": underlying or "N/A",
+                    "option_type": option_type_lbf,
+                    "product_type": "Lookback fixed",
+                    "type": "Lookback fixed",
+                    "strike": float(strike_lbf),
+                    "expiration": expiration_dt.isoformat(),
+                    "quantity": int(qty),
+                    "avg_price": price,
+                    "side": side,
+                    "S0": float(s0_path),
+                    "maturity_years": float(common_maturity_value),
+                    "T_0": today.isoformat(),
+                    "price": price,
+                    "misc": {
+                        "min_path": float(min_lbf),
+                        "max_path": float(max_lbf),
+                        "span": float(span_lbf),
+                        "spot_at_pricing": float(s0_path),
+                    },
+                }
+                try:
+                    st.caption(f"[LOG] Écriture vers options_portfolio.json avec payload: {payload}")
+                    option_id = add_option_to_dashboard(payload)
+                    st.success(f"Lookback fixed ajoutée au dashboard (id: {option_id}).")
+                except Exception as exc:
+                    st.error(f"Erreur lors de l'enregistrement : {exc}")
 
 
         with tab_cliquet:
@@ -7340,14 +7440,49 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ax_pay.set_title("Cliquet / Ratchet (approx)")
             st.pyplot(fig_pay, clear_figure=True)
 
-            st.markdown(
-                f"""
-**Prime ~ {premium:.4f}**
+            price = float(premium)
+            st.markdown("### Ajouter au dashboard")
+            st.metric("Prix calculé", f"${price:.6f}")
+            underlying = (
+                st.session_state.get("heston_cboe_ticker")
+                or st.session_state.get("tkr_common")
+                or st.session_state.get("common_underlying")
+                or st.session_state.get("ticker_default")
+                or ""
+            ).strip().upper()
+            st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
+            today = datetime.date.today()
+            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("cliquet_qty"))
+            side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("cliquet_side"))
 
-- Payoff @ S0 = {payoff_s0:.4f}
-- P&L net = {pnl_s0:.4f}
-"""
-            )
+            if st.button("Ajouter au dashboard", key=_k("cliquet_add"), type="primary"):
+                payload = {
+                    "underlying": underlying or "N/A",
+                    "option_type": "call",
+                    "product_type": "Cliquet / Ratchet",
+                    "type": "Cliquet / Ratchet",
+                    "strike": float(s0_path),
+                    "expiration": expiration_dt.isoformat(),
+                    "quantity": int(qty),
+                    "avg_price": price,
+                    "side": side,
+                    "S0": float(s0_path),
+                    "maturity_years": float(common_maturity_value),
+                    "T_0": today.isoformat(),
+                    "price": price,
+                    "misc": {
+                        "floor": float(floor_val),
+                        "cap": float(cap_val),
+                        "spot_at_pricing": float(s0_path),
+                    },
+                }
+                try:
+                    st.caption(f"[LOG] Écriture vers options_portfolio.json avec payload: {payload}")
+                    option_id = add_option_to_dashboard(payload)
+                    st.success(f"Cliquet / Ratchet ajouté au dashboard (id: {option_id}).")
+                except Exception as exc:
+                    st.error(f"Erreur lors de l'enregistrement : {exc}")
 
 
         with tab_quanto:
