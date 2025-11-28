@@ -62,6 +62,7 @@ PRICING_DIR = SCRIPTS_DIR / "pricing_scripts"
 NOTEBOOKS_SCRIPTS_DIR = APP_DIR / "notebooks" / "scripts"
 DATASETS_DIR = APP_DIR / "database" / "GPTab"
 DATASETS_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_OPTIONS_HISTORY_FILE = DATASETS_DIR / "options_last_history.csv"
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(PRICING_DIR))
 sys.path.insert(0, str(NOTEBOOKS_SCRIPTS_DIR))
@@ -3108,18 +3109,24 @@ def run_app_options():
     def ui_heston_full_pipeline(auto_run: bool = False):
 
 
-        # Ticker input + fetch action stacked vertically (pour éviter un layout en colonnes)
-        ticker = st.text_input(
-            "Ticker (sous-jacent)",
-            value=st.session_state.get("tkr_common", "SPY"),
-            key="heston_cboe_ticker",
-            help="Code du sous-jacent coté au CBOE utilisé pour la calibration Heston.",
-        ).strip().upper()
+        _, cached_hist = load_cached_option_history()
+        default_tkr = st.session_state.get("tkr_common", "SPY")
+        # Ticker input with refresh button beside it
+        col_tkr, col_fetch = st.columns([4, 1])
+        with col_tkr:
+            ticker = st.text_input(
+                "Ticker (sous-jacent)",
+                value=default_tkr,
+                key="heston_cboe_ticker",
+                help="Code du sous-jacent coté au CBOE utilisé pour la calibration Heston.",
+            ).strip().upper()
+        with col_fetch:
+            st.write("")  # spacing
+            fetch_btn = st.button("🔄 Refresh", type="primary", key="heston_cboe_fetch")
         st.session_state["tkr_common"] = ticker
         st.session_state["common_underlying"] = ticker
         rf_rate = float(st.session_state.get("common_rate", 0.02))
         div_yield = float(st.session_state.get("common_dividend", 0.0))
-        fetch_btn = st.button("Récupérer les données du ticker", type="primary", key="heston_cboe_fetch")
 
         col_cfg1, col_cfg2 = st.columns(2)
         with col_cfg1:
@@ -3214,6 +3221,62 @@ def run_app_options():
         if calls_df is None or puts_df is None or S0_ref is None:
             st.warning("⚠️ Charge d'abord les données du ticker (bouton « Récupérer les données du ticker ») pour activer l'onglet Options.")
             return
+
+        # Historique 1 an du ticker (close), avec cache persisté
+        st.subheader("Historique 1 an du ticker (prix de clôture)")
+        tkr_hist = st.session_state.get("heston_cboe_ticker", st.session_state.get("tkr_common", "")).strip().upper()
+        hist_df = pd.DataFrame()
+        cached_tkr_hist, cached_hist_df = load_cached_option_history()
+        if cached_tkr_hist and cached_tkr_hist.upper() == tkr_hist and cached_hist_df is not None and not cached_hist_df.empty:
+            hist_df = cached_hist_df
+        else:
+            if not tkr_hist:
+                st.info("Charge un ticker via la calibration Heston pour afficher l'historique 1 an.")
+            else:
+                try:
+                    cli_path = SCRIPTS_DIR / "fetch_history_cli.py"
+                    result = subprocess.run(
+                        [sys.executable, str(cli_path), "--ticker", tkr_hist, "--period", "1y", "--interval", "1d"],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    if result.returncode == 0 and result.stdout:
+                        hist_df = pd.read_csv(io.StringIO(result.stdout))
+                        if "Date" in hist_df.columns:
+                            hist_df["Date"] = pd.to_datetime(hist_df["Date"])
+                            hist_df.set_index("Date", inplace=True)
+                        save_cached_option_history(tkr_hist, hist_df)
+                    elif result.returncode != 0:
+                        st.warning("Impossible de récupérer l'historique 1 an (via CLI).")
+                except Exception as _hist_err:
+                    st.warning(f"Impossible de récupérer l'historique 1 an : {_hist_err}")
+
+        if not hist_df.empty and "Close" in hist_df.columns:
+            hist_fig = go.Figure()
+            hist_fig.add_trace(
+                go.Scatter(
+                    x=hist_df.index,
+                    y=hist_df["Close"],
+                    mode="lines",
+                    name="Close",
+                )
+            )
+            idx_dt = pd.to_datetime(hist_df.index)
+            start_dt = idx_dt.min()
+            end_dt = idx_dt.max()
+            start_label = start_dt.strftime("%Y-%m-%d") if hasattr(start_dt, "strftime") else str(start_dt)
+            end_label = end_dt.strftime("%Y-%m-%d") if hasattr(end_dt, "strftime") else str(end_dt)
+
+            hist_fig.update_layout(
+                title=f"{tkr_hist} - Close (1 an)",
+                xaxis_title="Date",
+                yaxis_title="Prix",
+            )
+            st.plotly_chart(hist_fig, width="stretch")
+            st.caption(f"Période: {start_label} → {end_label}")
+        else:
+            st.info("Pas d'historique disponible pour ce ticker.")
 
         col_nn, col_modes = st.columns(2)
         with col_nn:
@@ -3616,32 +3679,6 @@ def run_app_options():
                 title=f"{tkr_hist} - Close (1 an)",
                 xaxis_title="Date",
                 yaxis_title="Prix",
-                shapes=[
-                    dict(
-                        type="line",
-                        x0=0,
-                        x1=1,
-                        y0=K_common,
-                        y1=K_common,
-                        xref="paper",
-                        yref="y",
-                        line=dict(color="red", width=2, dash="dash"),
-                    )
-                ],
-                annotations=[
-                    dict(
-                        x=hist_df.index.max(),
-                        y=K_common,
-                        xanchor="left",
-                        yanchor="bottom",
-                        text=f"K = {K_common:.2f}",
-                        showarrow=True,
-                        arrowhead=1,
-                        ax=20,
-                        ay=0,
-                        font=dict(color="red"),
-                    )
-                ],
             )
             st.plotly_chart(hist_fig, width="stretch")
         else:
@@ -7891,6 +7928,25 @@ def get_spot_cboe_cached(symbol: str) -> float | None:
     except Exception:
         return None
 
+
+def load_cached_option_history() -> tuple[str | None, pd.DataFrame | None]:
+    """Load cached 1y close history for Options tab."""
+    if CACHE_OPTIONS_HISTORY_FILE.exists():
+        try:
+            df = pd.read_csv(CACHE_OPTIONS_HISTORY_FILE, parse_dates=["Date"], index_col="Date")
+            return None, df
+        except Exception:
+            return None, None
+    return None, None
+
+
+def save_cached_option_history(ticker: str, df: pd.DataFrame) -> None:
+    """Persist 1y close history for reuse across sessions."""
+    try:
+        CACHE_OPTIONS_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(CACHE_OPTIONS_HISTORY_FILE, index_label="Date")
+    except Exception:
+        pass
 def load_equities():
     """Load configured trading systems (equities) from disk; returns {} on failure."""
     try:
