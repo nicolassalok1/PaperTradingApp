@@ -256,7 +256,7 @@ def run_app_options():
     def render_add_to_dashboard_button(
         product_label: str,
         option_char: str,
-        price_value: float,
+        price_value: float | None,
         strike: float | None,
         maturity: float | None,
         key_prefix: str,
@@ -273,7 +273,8 @@ def run_app_options():
             return
 
         with st.expander(f"📥 Ajouter au dashboard ({product_label})", expanded=expanded):
-            st.metric("Prix calculé", f"${price_value:.6f}")
+            display_price = f"${price_value:.6f}" if price_value is not None else "-"
+            st.metric("Prix calculé", display_price)
             underlying = (
                 st.session_state.get("heston_cboe_ticker")
                 or st.session_state.get("tkr_common")
@@ -305,6 +306,7 @@ def run_app_options():
                 if isinstance(misc, dict):
                     base_misc.update(misc)
                 misc_payload = base_misc
+                price_val = float(price_value) if price_value is not None else 0.0
                 payload = {
                     "underlying": underlying or "N/A",
                     "option_type": "call" if option_char.lower() == "c" else "put",
@@ -314,13 +316,13 @@ def run_app_options():
                     "strike2": float(strike2_val) if strike2_val is not None else None,
                     "expiration": expiration_dt.isoformat(),
                     "quantity": int(qty),
-                    "avg_price": float(price_value),
+                    "avg_price": price_val,
                     "side": side,
                     "S0": float(spot or 0.0),
                     "maturity_years": maturity,
                     "legs": legs,
                     "T_0": today.isoformat(),
-                    "price": float(price_value),
+                    "price": price_val,
                     "misc": misc_payload,
                 }
                 try:
@@ -4845,15 +4847,16 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             except Exception as exc:
                 st.error(f"Erreur Heston (Carr–Madan) : {exc}")
 
-            premium_h = price_heston_display or 0.0
+            premium_h = price_heston_display
             s_grid = np.linspace(max(0.1, K_slider_h * 0.4), K_slider_h * 1.6, 200)
             payoff_grid = np.maximum(s_grid - K_slider_h, 0.0) if opt_type_h == "call" else np.maximum(K_slider_h - s_grid, 0.0)
-            pnl_grid = payoff_grid - premium_h
+            pnl_grid = payoff_grid - premium_h if premium_h is not None else None
             payoff_s0 = float(np.interp(S0_h, s_grid, payoff_grid))
-            pnl_s0 = payoff_s0 - premium_h
+            pnl_s0 = payoff_s0 - premium_h if premium_h is not None else None
             fig_h, ax_h = plt.subplots(figsize=(7, 4))
             ax_h.plot(s_grid, payoff_grid, label="Payoff")
-            ax_h.plot(s_grid, pnl_grid, label="P&L net", color="darkorange")
+            if pnl_grid is not None:
+                ax_h.plot(s_grid, pnl_grid, label="P&L net", color="darkorange")
             ax_h.axvline(K_slider_h, color="gray", linestyle="--", label=f"K = {K_slider_h:.2f}")
             ax_h.axvline(S0_h, color="crimson", linestyle="-.", label=f"S0 = {S0_h:.2f}")
             ax_h.axhline(0, color="black", linewidth=0.8)
@@ -4863,8 +4866,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ax_h.legend(loc="best")
             st.pyplot(fig_h, clear_figure=True)
 
-            if price_heston_display is not None:
-                st.success(f"Prix Heston (Carr–Madan) {option_label} = {price_heston_display:.6f}")
             misc_heston = {
                 "heston_params": {
                     "kappa": float(st.session_state.get("heston_kappa_common", 2.0)),
@@ -4874,17 +4875,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "v0": float(st.session_state.get("heston_v0_common", 0.04)),
                 }
             }
-            render_add_to_dashboard_button(
-                product_label="Vanilla (Heston CM)",
-                option_char=option_char,
-                price_value=price_heston_display or 0.0,
-                strike=K_slider_h,
-                maturity=T_slider_h,
-                key_prefix=_k("save_heston_cm"),
-                spot=S0_h,
-                misc=misc_heston,
-            )
-
             st.subheader("Heston (référence)")
             st.divider()
             heston_params_table = {
@@ -4894,7 +4884,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 "rho": float(st.session_state.get("heston_rho_common", -0.7)),
                 "v0": float(st.session_state.get("heston_v0_common", 0.04)),
             }
-            st.dataframe(pd.Series(heston_params_table, name="Paramètre").to_frame(), use_container_width=True, hide_index=False)
+            if st.session_state.get("carr_madan_calibrated", False):
+                st.dataframe(pd.Series(heston_params_table, name="Paramètre").to_frame(), use_container_width=True, hide_index=False)
+            else:
+                st.info("Calibre Heston pour afficher les paramètres.")
             st.subheader("🎯 Calibration NN Carr-Madan")
             span_mc = float(st.session_state.get("heatmap_span_value", 20.0))
             calls_df = st.session_state.get("heston_calls_df")
@@ -5079,8 +5072,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 except Exception as exc:
                     st.error(f"Erreur Carr–Madan : {exc}")
                     price_cm = None
-            if price_cm is not None:
-                st.success(f"Prix Heston (Carr–Madan) {option_label} = {price_cm:.6f}")
             try:
                 with st.spinner("Calcul heatmap & surface IV Heston…"):
                     k_vals = heatmap_strike_values
@@ -5124,6 +5115,18 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                             )
             except Exception as exc:
                 st.error(f"Erreur calcul heatmap / surface IV Heston : {exc}")
+
+            final_price = price_cm if price_cm is not None else None
+            render_add_to_dashboard_button(
+                product_label="Vanilla (Heston CM)",
+                option_char=option_char,
+                price_value=final_price,
+                strike=common_strike_value,
+                maturity=common_maturity_value,
+                key_prefix=_k("save_heston_cm_final"),
+                spot=common_spot_value,
+                misc=misc_heston,
+            )
 
             st.divider()
 
