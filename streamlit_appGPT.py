@@ -4826,9 +4826,40 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 calib_T_target = st.session_state.get("heston_calib_T_target")
                 col_nn, col_modes = st.columns(2)
                 with col_nn:
+                    calib_T_band_default = float(st.session_state.get("heston_cboe_calib_band", 0.04))
+
+                    unique_T = sorted(calls_df["T"].round(2).unique().tolist())
+                    if unique_T:
+                        if calib_T_target is None:
+                            t_slider_pref = st.session_state.get("eu_T_slider_val")
+                            if t_slider_pref is not None:
+                                idx_default = int(np.argmin(np.abs(np.array(unique_T) - float(t_slider_pref))))
+                            else:
+                                target_guess = max(MIN_IV_MATURITY, unique_T[0] + calib_T_band_default + 0.1)
+                                idx_default = int(np.argmin(np.abs(np.array(unique_T) - target_guess)))
+                        else:
+                            try:
+                                idx_default = unique_T.index(calib_T_target)
+                            except ValueError:
+                                idx_default = 0
+
+                        idx_default = max(0, min(idx_default, len(unique_T) - 1))
+                        calib_T_target = st.selectbox(
+                            "Maturité T cible pour la calibration (Time to Maturity)",
+                            unique_T,
+                            index=idx_default,
+                            format_func=lambda x: f"{x:.2f}",
+                            key=_k("heston_cboe_calib_target"),
+                            help="Maturité autour de laquelle la calibration Heston est centrée.",
+                        )
+                        st.session_state.heston_calib_T_target = calib_T_target
+                    else:
+                        st.warning("Pas de maturités disponibles dans les données CBOE.")
+                        calib_T_target = None
+
                     calib_T_band = st.number_input(
                         "Largeur bande T (±)",
-                        value=0.04,
+                        value=calib_T_band_default,
                         min_value=0.01,
                         max_value=0.5,
                         step=0.01,
@@ -4837,35 +4868,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         help="Largeur de la bande de maturités autour de la cible utilisée pour la calibration.",
                     )
                     st.session_state["heston_cboe_calib_band"] = calib_T_band
-
-                unique_T = sorted(calls_df["T"].round(2).unique().tolist())
-                if unique_T:
-                    if calib_T_target is None:
-                        t_slider_pref = st.session_state.get("eu_T_slider_val")
-                        if t_slider_pref is not None:
-                            idx_default = int(np.argmin(np.abs(np.array(unique_T) - float(t_slider_pref))))
-                        else:
-                            target_guess = max(MIN_IV_MATURITY, unique_T[0] + calib_T_band + 0.1)
-                            idx_default = int(np.argmin(np.abs(np.array(unique_T) - target_guess)))
-                    else:
-                        try:
-                            idx_default = unique_T.index(calib_T_target)
-                        except ValueError:
-                            idx_default = 0
-
-                    idx_default = max(0, min(idx_default, len(unique_T) - 1))
-                    calib_T_target = st.selectbox(
-                        "Maturité T cible pour la calibration (Time to Maturity)",
-                        unique_T,
-                        index=idx_default,
-                        format_func=lambda x: f"{x:.2f}",
-                        key=_k("heston_cboe_calib_target"),
-                        help="Maturité autour de laquelle la calibration Heston est centrée.",
-                    )
-                    st.session_state.heston_calib_T_target = calib_T_target
-                else:
-                    st.warning("Pas de maturités disponibles dans les données CBOE.")
-                    calib_T_target = None
 
                 with col_modes:
                     st.subheader("⚙️ Modes de calibration NN")
