@@ -4861,7 +4861,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             pnl_s0 = payoff_s0 - premium_h if premium_h is not None else None
             fig_h, ax_h = plt.subplots(figsize=(7, 4))
             ax_h.plot(s_grid, payoff_grid, label="Payoff")
-            if pnl_grid is not None:
+            if pnl_grid is not None and premium_h is not None:
                 ax_h.plot(s_grid, pnl_grid, label="P&L net", color="darkorange")
             ax_h.axvline(K_slider_h, color="gray", linestyle="--", label=f"K = {K_slider_h:.2f}")
             ax_h.axvline(S0_h, color="crimson", linestyle="-.", label=f"S0 = {S0_h:.2f}")
@@ -4913,12 +4913,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     unique_T = sorted(calls_df["T"].round(2).unique().tolist())
                     if unique_T:
                         if calib_T_target is None:
-                            t_slider_pref = st.session_state.get("eu_T_slider_val")
-                            if t_slider_pref is not None:
-                                idx_default = int(np.argmin(np.abs(np.array(unique_T) - float(t_slider_pref))))
-                            else:
-                                target_guess = max(MIN_IV_MATURITY, unique_T[0] + calib_T_band_default + 0.1)
-                                idx_default = int(np.argmin(np.abs(np.array(unique_T) - target_guess)))
+                            target_guess = st.session_state.get("eu_T_slider_val", common_maturity_value)
+                            idx_default = int(np.argmin(np.abs(np.array(unique_T) - float(target_guess))))
                         else:
                             try:
                                 idx_default = unique_T.index(calib_T_target)
@@ -5124,6 +5120,40 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                                 r=float(common_rate_value),
                                 option_type="call" if option_char == "c" else "put",
                             )
+                    st.markdown("**Heatmap prix Heston (K × T)**")
+                    _render_heatmap(
+                        price_grid,
+                        k_vals,
+                        t_vals,
+                        "Prix Heston (Carr–Madan)",
+                        xlabel="Strike K",
+                        ylabel="Maturité T",
+                        wrap_in_expander=False,
+                    )
+                    try:
+                        iv_masked = np.nan_to_num(iv_grid, nan=0.0, posinf=0.0, neginf=0.0)
+                        fig_iv = go.Figure(
+                            data=[
+                                go.Surface(
+                                    x=k_vals,
+                                    y=t_vals,
+                                    z=iv_masked,
+                                    colorscale="Viridis",
+                                )
+                            ]
+                        )
+                        fig_iv.update_layout(
+                            scene=dict(
+                                xaxis_title="Strike K",
+                                yaxis_title="Maturité T",
+                                zaxis_title="IV",
+                            ),
+                            height=500,
+                            margin=dict(l=0, r=0, b=0, t=0),
+                        )
+                        st.plotly_chart(fig_iv, use_container_width=True, key=_k("heston_iv_surface"))
+                    except Exception as _surf_exc:
+                        st.warning(f"Impossible d'afficher la surface IV : {_surf_exc}")
             except Exception as exc:
                 st.error(f"Erreur calcul heatmap / surface IV Heston : {exc}")
 
