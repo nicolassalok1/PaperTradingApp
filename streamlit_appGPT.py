@@ -3185,6 +3185,15 @@ def run_app_options():
         if fetch_btn:
             try:
                 calls_df, puts_df, S0_ref, rf_rate, div_yield = load_cboe_data(ticker)
+                try:
+                    t_for_rate = float(np.median(calls_df["T"])) if calls_df is not None and not calls_df.empty else 1.0
+                    rf_rate = float(get_r(t_for_rate) or rf_rate or 0.02)
+                except Exception:
+                    rf_rate = float(rf_rate or 0.02)
+                try:
+                    div_yield = float(get_q(ticker) or div_yield or 0.0)
+                except Exception:
+                    div_yield = float(div_yield or 0.0)
                 state.heston_calls_df = calls_df
                 state.heston_puts_df = puts_df
                 state.heston_S0_ref = S0_ref
