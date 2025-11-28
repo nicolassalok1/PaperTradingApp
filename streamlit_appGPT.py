@@ -5917,7 +5917,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             if st.button("Ajouter au dashboard", key=_k("digital_add_inline")):
                 payload = {
                     "underlying": underlying or "N/A",
-                    "option_type": opt_type,
+                    "option_type": opt_char_rain,
                     "product_type": "Digital",
                     "type": "Digital",
                     "strike": float(strike),
@@ -5928,7 +5928,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "S0": float(common_spot_value),
                     "maturity_years": common_maturity_value,
                     "legs": [
-                        {"option_type": opt_type, "strike": float(strike), "payout": 1.0, "digital": True},
+                        {"option_type": opt_char_rain, "strike": float(strike), "payout": 1.0, "digital": True},
                     ],
                     "T_0": today.isoformat(),
                     "price": price,
@@ -6012,7 +6012,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             if st.button("Ajouter au dashboard", key=_k("asset_on_add_inline")):
                 payload = {
                     "underlying": underlying or "N/A",
-                    "option_type": opt_type,
+                    "option_type": opt_char_rain,
                     "product_type": "Asset-or-nothing",
                     "type": "Asset-or-nothing",
                     "strike": float(strike),
@@ -6023,7 +6023,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "S0": float(common_spot_value),
                     "maturity_years": common_maturity_value,
                     "legs": [
-                        {"option_type": opt_type, "strike": float(strike), "asset_or_nothing": True},
+                        {"option_type": opt_char_rain, "strike": float(strike), "asset_or_nothing": True},
                     ],
                     "T_0": today.isoformat(),
                     "price": price,
@@ -6128,7 +6128,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             if st.button("Ajouter au dashboard", key=_k("forward_start_add_inline")):
                 payload = {
                     "underlying": underlying or "N/A",
-                    "option_type": opt_type,
+                    "option_type": opt_char_rain,
                     "product_type": "Forward-start",
                     "type": "Forward-start",
                     "strike": float(m_factor * spot_start),
@@ -6139,7 +6139,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "S0": float(common_spot_value),
                     "maturity_years": common_maturity_value,
                     "legs": [
-                        {"option_type": opt_type, "strike": float(m_factor * spot_start), "forward_start": True, "S_start": float(spot_start), "m": float(m_factor)},
+                        {"option_type": opt_char_rain, "strike": float(m_factor * spot_start), "forward_start": True, "S_start": float(spot_start), "m": float(m_factor)},
                     ],
                     "T_0": today.isoformat(),
                     "price": price,
@@ -7679,6 +7679,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
 
 
         with tab_quanto:
+            opt_label_quanto, opt_char_quanto = _choose_option_select("opt_choice_quanto", option_char)
+            option_label, option_char = opt_label_quanto, opt_char_quanto
             strike = st.slider(
                 "Strike",
                 min_value=0.5 * float(common_spot_value),
@@ -7746,7 +7748,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             if st.button("Ajouter au dashboard", key=_k("quanto_add_inline")):
                 payload = {
                     "underlying": underlying or "N/A",
-                    "option_type": opt_type,
+                    "option_type": opt_char_quanto,
                     "product_type": "Quanto",
                     "type": "Quanto",
                     "strike": float(strike),
@@ -7757,7 +7759,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "S0": float(common_spot_value),
                     "maturity_years": common_maturity_value,
                     "legs": [
-                        {"option_type": opt_type, "strike": float(strike), "fx_rate": float(fx_rate), "quanto": True},
+                        {"option_type": opt_char_rain, "strike": float(strike), "fx_rate": float(fx_rate), "quanto": True},
                     ],
                     "T_0": today.isoformat(),
                     "price": price,
@@ -7784,6 +7786,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     st.error(f"Erreur lors de l'ajout au dashboard (écriture JSON) : {exc}")
 
         with tab_rainbow:
+            opt_label_rain, opt_char_rain = _choose_option_select("opt_choice_rainbow", option_char)
+            option_label, option_char = opt_label_rain, opt_char_rain
             strike = st.slider(
                 "Strike",
                 min_value=0.5 * float(common_spot_value),
@@ -7870,7 +7874,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             if st.button("Ajouter au dashboard", key=_k("rainbow_add_inline")):
                 payload = {
                     "underlying": underlying or "N/A",
-                    "option_type": opt_type,
+                    "option_type": opt_char_rain,
                     "product_type": "Rainbow",
                     "type": "Rainbow",
                     "strike": float(strike),
@@ -7881,7 +7885,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "S0": float(common_spot_value),
                     "maturity_years": common_maturity_value,
                     "legs": [
-                        {"option_type": opt_type, "strike": float(strike), "secondary_spot": float(spot_b), "rainbow": True},
+                        {"option_type": opt_char_rain, "strike": float(strike), "secondary_spot": float(spot_b), "rainbow": True},
                     ],
                     "T_0": today.isoformat(),
                     "price": price,
