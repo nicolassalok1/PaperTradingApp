@@ -3481,6 +3481,18 @@ def run_app_options():
     st.session_state["heatmap_maturity_span_value"] = float(heatmap_maturity_span)
 
     def render_option_tabs_for_type(option_label: str, option_char: str):
+        # Sélection globale Call / Put pour tous les sous-onglets Options
+        opt_default = st.session_state.get("option_type_global", option_label)
+        opt_select = st.selectbox(
+            "Choix Call / Put",
+            ["Call", "Put"],
+            index=0 if (opt_default or "").lower().startswith("c") else 1,
+            key="option_type_global_select",
+        )
+        option_label = opt_select
+        option_char = "c" if opt_select == "Call" else "p"
+        st.session_state["option_type_global"] = opt_select
+
         # Quick payoff helper for dropdown explanations.
         def _payoff_plot(x_vals, y_vals, title, strike_lines=None):
             fig = go.Figure()
@@ -7864,11 +7876,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 except Exception as exc:  # pragma: no cover - UI feedback
                     st.error(f"Erreur lors de l'ajout au dashboard (écriture JSON) : {exc}")
 
-    tab_call, tab_put = st.tabs(["Call", "Put"])
-    for _label, _tab in (("Call", tab_call), ("Put", tab_put)):
-        _char = "c" if _label == "Call" else "p"
-        with _tab:
-            render_option_tabs_for_type(_label, _char)
+    render_option_tabs_for_type("Call", "c")
 
 # Alpaca API Setup
 key = os.getenv("APCA_API_KEY_ID") or "PKRQ4GPVDAPCYIH6QGR4HI5USK"
