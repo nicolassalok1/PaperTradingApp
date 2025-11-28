@@ -4505,9 +4505,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
         )
 
         with tab_grp_vanilla:
-            tab_european, tab_heston, tab_american, tab_bermudan = st.tabs(
-                ["Européenne", "Heston", "Américaine", "Bermuda"], default_index=1
-            )
+            tab_heston, tab_european, tab_american, tab_bermudan = st.tabs(["Heston", "Européenne", "Américaine", "Bermuda"])
 
         with tab_grp_path:
             (
