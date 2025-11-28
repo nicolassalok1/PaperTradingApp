@@ -3344,6 +3344,8 @@ def run_app_options():
     if not st.session_state.get("heston_cboe_loaded_once", False):
         return
 
+<<<<<<< ours
+=======
     st.markdown("### Paramètres de Black-Scholes-Merton")
 
     # Si les données CBOE ne sont pas chargées, on continue avec les valeurs par défaut,
@@ -3387,60 +3389,46 @@ def run_app_options():
         T_common = _safe_float(st.session_state.get("heston_calib_T_target"), _safe_float(st.session_state.get("T_common"), 1.0))
         st.session_state["T_common"] = T_common
         st.markdown(f"**T (maturité, années) — cible calibration** : {T_common:.4f}")
-        # K issu des strikes CBOE pour T sélectionné
-        K_common = st.session_state.get("K_common", float(S0_common))
-        K_cboe_options: list[float] = []
+        # K issu des strikes CBOE pour T sélectionné (choix auto, pas d'input)
+        K_common = float(st.session_state.get("K_common", S0_common))
         state = st.session_state
         calls_df = state.get("heston_calls_df")
         puts_df = state.get("heston_puts_df")
         sel_T = float(T_common)
+        K_candidates: list[float] = []
         if calls_df is not None:
-            K_cboe_options.extend(calls_df[calls_df["T"].round(2) == round(sel_T, 2)]["K"].tolist())
+            K_candidates.extend(calls_df[calls_df["T"].round(2) == round(sel_T, 2)]["K"].tolist())
         if puts_df is not None:
-            K_cboe_options.extend(puts_df[puts_df["T"].round(2) == round(sel_T, 2)]["K"].tolist())
-        K_cboe_options = sorted(set(K_cboe_options))
-        if K_cboe_options:
-            # Choix du strike proche du spot privilégié
-            default_idx = int(np.argmin(np.abs(np.array(K_cboe_options) - float(S0_common))))
-            K_pick = st.selectbox(
-                "K (strike) – CBOE",
-                options=K_cboe_options,
-                index=default_idx,
-                format_func=lambda x: f"{x:.2f}",
-                key="K_common_select",
-                help="Strikes disponibles pour la maturité sélectionnée (T maître).",
-            )
-            K_common = float(K_pick)
-            st.session_state["K_common"] = K_common
-            # Cherche une IV correspondante et met à jour sigma
-            iv_pick = np.nan
-            price_pick = np.nan
-            if calls_df is not None:
-                sub = calls_df[calls_df["T"].round(2) == round(sel_T, 2)]
-                row_call = sub.loc[(sub["K"] - K_common).abs().idxmin()] if not sub.empty else None
-                if row_call is not None:
-                    iv_pick = float(row_call.get("iv_market", np.nan))
-                    price_pick = float(row_call.get("C_mkt", np.nan))
-            if (not np.isfinite(iv_pick)) and puts_df is not None:
-                subp = puts_df[puts_df["T"].round(2) == round(sel_T, 2)]
-                row_put = subp.loc[(subp["K"] - K_common).abs().idxmin()] if not subp.empty else None
-                if row_put is not None:
-                    iv_pick = float(row_put.get("iv_market", np.nan))
-                    if not np.isfinite(price_pick):
-                        price_pick = float(row_put.get("P_mkt", np.nan))
-            if not np.isfinite(iv_pick):
-                # tentative de calcul à partir du prix si disponible
-                S_ref = float(state.get("heston_S0_ref", S0_common))
-                if np.isfinite(price_pick):
-                    iv_pick = implied_vol_option(price_pick, S_ref, K_common, sel_T, float(state.get("common_rate", r_common)), "call")
-            if np.isfinite(iv_pick) and iv_pick > 0:
-                st.session_state["sigma_common"] = float(iv_pick)
-                st.caption(f"IV CBOE retenue pour T={sel_T:.2f}, K={K_common:.2f} : σ ≈ {iv_pick:.4f}")
-            else:
-                st.caption("IV non trouvée pour ce strike/maturité, utilisez σ ci-dessous.")
+            K_candidates.extend(puts_df[puts_df["T"].round(2) == round(sel_T, 2)]["K"].tolist())
+        if K_candidates:
+            K_candidates = sorted(set(K_candidates))
+            K_common = float(K_candidates[int(np.argmin(np.abs(np.array(K_candidates) - float(S0_common))))])
+        st.session_state["K_common"] = K_common
+
+        iv_pick = np.nan
+        price_pick = np.nan
+        if calls_df is not None and K_candidates:
+            sub = calls_df[calls_df["T"].round(2) == round(sel_T, 2)]
+            row_call = sub.loc[(sub["K"] - K_common).abs().idxmin()] if not sub.empty else None
+            if row_call is not None:
+                iv_pick = float(row_call.get("iv_market", np.nan))
+                price_pick = float(row_call.get("C_mkt", np.nan))
+        if (not np.isfinite(iv_pick)) and puts_df is not None and K_candidates:
+            subp = puts_df[puts_df["T"].round(2) == round(sel_T, 2)]
+            row_put = subp.loc[(subp["K"] - K_common).abs().idxmin()] if not subp.empty else None
+            if row_put is not None:
+                iv_pick = float(row_put.get("iv_market", np.nan))
+                if not np.isfinite(price_pick):
+                    price_pick = float(row_put.get("P_mkt", np.nan))
+        if not np.isfinite(iv_pick):
+            S_ref = float(state.get("heston_S0_ref", S0_common))
+            if np.isfinite(price_pick):
+                iv_pick = implied_vol_option(price_pick, S_ref, K_common, sel_T, float(state.get("common_rate", r_common)), "call")
+        if np.isfinite(iv_pick) and iv_pick > 0:
+            st.session_state["sigma_common"] = float(iv_pick)
+            st.caption(f"IV CBOE retenue pour T={sel_T:.2f}, K={K_common:.2f} : σ ≈ {iv_pick:.4f}")
         else:
-            st.warning("Aucun strike CBOE pour la maturité sélectionnée. Ajustez T ou renseignez K/σ manuellement.")
-            st.session_state["K_common"] = K_common
+            st.caption("IV non trouvée pour ce strike/maturité, utilisez σ ci-dessous.")
         # Volatilité déduite (ou fallback session)
         sigma_common = float(st.session_state.get("sigma_common", 0.2))
         st.markdown(f"**σ (IV déduite)** : {sigma_common:.4f}")
@@ -3450,10 +3438,21 @@ def run_app_options():
         st.markdown(f"**q (dividende continu CBOE)** : {d_common:.4f}")
         heatmap_span = float(25.0)
         st.markdown(f"**Span autour du spot (heatmaps)** : {heatmap_span:.1f}")
+        bsm_table = pd.DataFrame.from_dict(
+            {
+                "S0": [float(S0_common)],
+                "K": [float(K_common)],
+                "T": [float(T_common)],
+                "r": [float(r_common)],
+                "d": [float(d_common)],
+            }
+        )
+        st.dataframe(bsm_table, use_container_width=True, hide_index=True)
 
     with col_right:
         pass  # plus d'affichage des paramètres Heston dans cette section
 
+>>>>>>> theirs
     heatmap_spot_values = _heatmap_axis(S0_common, heatmap_span)
     heatmap_strike_values = _heatmap_axis(K_common, heatmap_span)
     heatmap_maturity_span = float(max(0.01, T_common * 0.5))
@@ -3481,6 +3480,9 @@ def run_app_options():
     if not tkr_hist:
         st.info("Charge un ticker via la calibration Heston pour afficher l'historique 1 an.")
     else:
+        st.caption(
+            f"S₀ (spot) = {common_spot_value:.4f} | r (risk-free) = {common_rate_value:.4f} | d (dividende continu) = {float(d_common):.4f}"
+        )
         hist_df = pd.DataFrame()
         try:
             cli_path = SCRIPTS_DIR / "fetch_history_cli.py"
@@ -3617,6 +3619,97 @@ Le theta dépend du délai restant jusqu’à la fixation du strike, puis de la 
 Le prix dépend du ratio k et de la distribution anticipée du spot à T_start.
 La couverture nécessite de suivre le spot pré-fixation pour ajuster l’exposition.
 Le payoff final est un call ou un put vanilla évalué avec un strike défini plus tard, mais payé à l’échéance finale.""",
+    st.markdown("### Paramètres de Black-Scholes-Merton")
+
+    # Si les données CBOE ne sont pas chargées, on continue avec les valeurs par défaut,
+    # tout en signalant qu'une récupération est recommandée pour les modules Heston.
+    if not st.session_state.get("heston_cboe_loaded_once", False):
+        st.info('Clique sur "Récupérer les données du ticker" pour alimenter la calibration Heston (facultatif).')
+
+    if not st.session_state.get("heston_cboe_loaded_once", False):
+        st.info("Charge d'abord les données CBOE (via le bloc de calibration Heston) pour afficher les paramètres.")
+        mat_options = [st.session_state.get("T_common", 1.0)]
+    else:
+        mat_options = st.session_state.get("cboe_T_options")
+        if not mat_options:
+            # Essaie de reconstruire la liste depuis les données CBOE déjà en cache
+            calls_df = st.session_state.get("heston_calls_df")
+            puts_df = st.session_state.get("heston_puts_df")
+            frames = []
+            if calls_df is not None:
+                frames.append(calls_df[["T"]])
+            if puts_df is not None:
+                frames.append(puts_df[["T"]])
+            if frames:
+                mat_options = sorted(pd.concat(frames, axis=0)["T"].dropna().round(2).unique().tolist())
+                st.session_state["cboe_T_options"] = mat_options
+            else:
+                mat_options = [st.session_state.get("T_common", 1.0)]
+
+    col_left, col_right = st.columns(2)
+
+    def _safe_float(val, default):
+        try:
+            return float(default if val is None else val)
+        except Exception:
+            return float(default)
+
+    with col_left:
+        S0_common = _safe_float(st.session_state.get("heston_S0_ref"), _safe_float(st.session_state.get("S0_common"), 100.0))
+        T_common = _safe_float(st.session_state.get("heston_calib_T_target"), _safe_float(st.session_state.get("T_common"), 1.0))
+        st.session_state["T_common"] = T_common
+        K_common = float(st.session_state.get("K_common", S0_common))
+        state = st.session_state
+        calls_df = state.get("heston_calls_df")
+        puts_df = state.get("heston_puts_df")
+        sel_T = float(T_common)
+        K_candidates: list[float] = []
+        if calls_df is not None:
+            K_candidates.extend(calls_df[calls_df["T"].round(2) == round(sel_T, 2)]["K"].tolist())
+        if puts_df is not None:
+            K_candidates.extend(puts_df[puts_df["T"].round(2) == round(sel_T, 2)]["K"].tolist())
+        if K_candidates:
+            K_candidates = sorted(set(K_candidates))
+            K_common = float(K_candidates[int(np.argmin(np.abs(np.array(K_candidates) - float(S0_common))))])
+        st.session_state["K_common"] = K_common
+
+        iv_pick = np.nan
+        price_pick = np.nan
+        if calls_df is not None and K_candidates:
+            sub = calls_df[calls_df["T"].round(2) == round(sel_T, 2)]
+            row_call = sub.loc[(sub["K"] - K_common).abs().idxmin()] if not sub.empty else None
+            if row_call is not None:
+                iv_pick = float(row_call.get("iv_market", np.nan))
+                price_pick = float(row_call.get("C_mkt", np.nan))
+        if (not np.isfinite(iv_pick)) and puts_df is not None and K_candidates:
+            subp = puts_df[puts_df["T"].round(2) == round(sel_T, 2)]
+            row_put = subp.loc[(subp["K"] - K_common).abs().idxmin()] if not subp.empty else None
+            if row_put is not None:
+                iv_pick = float(row_put.get("iv_market", np.nan))
+                if not np.isfinite(price_pick):
+                    price_pick = float(row_put.get("P_mkt", np.nan))
+        if not np.isfinite(iv_pick):
+            S_ref = float(state.get("heston_S0_ref", S0_common))
+            if np.isfinite(price_pick):
+                iv_pick = implied_vol_option(price_pick, S_ref, K_common, sel_T, float(state.get("common_rate", r_common)), "call")
+        if np.isfinite(iv_pick) and iv_pick > 0:
+            st.session_state["sigma_common"] = float(iv_pick)
+        sigma_common = float(st.session_state.get("sigma_common", 0.2))
+        r_common = max(float(st.session_state.get("common_rate", 0.0)), 1e-6)
+        d_common = float(st.session_state.get("common_dividend", 0.0))
+        heatmap_span = float(25.0)
+        bsm_table = pd.DataFrame.from_dict(
+            {
+                "S0": [float(S0_common)],
+                "r": [float(r_common)],
+                "d": [float(d_common)],
+            }
+        )
+        st.dataframe(bsm_table, use_container_width=True, hide_index=True)
+
+    with col_right:
+        pass  # plus d'affichage des paramètres Heston dans cette section
+
                 "cliquet_graph": """Une option cliquet cumule des coupons périodiques capés et floorés, souvent avec réinitialisation du strike.
 Chaque période mesure un rendement qui est limité par un cap et un floor, puis ajouté au coupon cumulé.
 Le produit est fortement path-dependent, car la séquence de rendements successifs détermine le total payé.
@@ -4746,6 +4839,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             st.header("Option européenne")
             _render_option_text("Option européenne", "european_graph")
             params_heston = _heston_params_from_state()
+            calib_T_target = st.session_state.get("heston_calib_T_target")
             K_eu = float(common_strike_value)
             S0_eu = float(common_spot_value)
             T_eu = float(common_maturity_value)
@@ -4756,7 +4850,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 "K (strike – visualisation)",
                 min_value=max(0.1, S0_eu - 20.0),
                 max_value=S0_eu + 20.0,
-                value=K_eu,
+                value=float(round(S0_eu)),
                 step=max(0.01, K_eu * 0.01),
                 key=_k("eu_k_slider"),
             )
@@ -4764,7 +4858,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 "T (années – visualisation BSM)",
                 min_value=0.05,
                 max_value=2.0,
-                value=float(common_maturity_value),
+                value=float(calib_T_target) if calib_T_target is not None else float(common_maturity_value),
                 step=0.01,
                 key=_k("eu_T_slider"),
             )
@@ -4852,6 +4946,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 f"d={float(d_common):.4f}, σ={common_sigma_value:.4f}"
             )
             st.subheader("Heston (référence)")
+            st.divider()
             heston_params_table = {
                 "kappa": float(st.session_state.get("heston_kappa_common", 2.0)),
                 "theta": float(st.session_state.get("heston_theta_common", 0.04)),
@@ -4860,6 +4955,153 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 "v0": float(st.session_state.get("heston_v0_common", 0.04)),
             }
             st.dataframe(pd.Series(heston_params_table, name="Paramètre").to_frame(), use_container_width=True, hide_index=False)
+            st.subheader("🎯 Calibration NN Carr-Madan")
+            span_mc = float(st.session_state.get("heatmap_span_value", 20.0))
+            calls_df = st.session_state.get("heston_calls_df")
+            puts_df = st.session_state.get("heston_puts_df")
+            S0_ref = st.session_state.get("heston_S0_ref", common_spot_value)
+            rf_rate = float(st.session_state.get("common_rate", 0.02))
+            div_yield = float(st.session_state.get("common_dividend", 0.0))
+            if calls_df is None or puts_df is None or getattr(calls_df, "empty", True):
+                st.warning("Charge d’abord les données CBOE (Refresh) pour activer la calibration Heston.")
+                calib_T_target = None
+            else:
+                calib_T_target = st.session_state.get("heston_calib_T_target")
+                col_nn, col_modes = st.columns(2)
+                with col_nn:
+                    calib_T_band = st.number_input(
+                        "Largeur bande T (±)",
+                        value=0.04,
+                        min_value=0.01,
+                        max_value=0.5,
+                        step=0.01,
+                        format="%.2f",
+                        key=_k("heston_cboe_calib_band"),
+                        help="Largeur de la bande de maturités autour de la cible utilisée pour la calibration.",
+                    )
+                    st.session_state["heston_cboe_calib_band"] = calib_T_band
+
+                    unique_T = sorted(calls_df["T"].round(2).unique().tolist())
+                    if unique_T:
+                        if calib_T_target is None:
+                            target_guess = max(MIN_IV_MATURITY, unique_T[0] + calib_T_band + 0.1)
+                            idx_default = int(np.argmin(np.abs(np.array(unique_T) - target_guess)))
+                        else:
+                            try:
+                                idx_default = unique_T.index(calib_T_target)
+                            except ValueError:
+                                idx_default = 0
+
+                        calib_T_target = st.selectbox(
+                            "Maturité T cible pour la calibration (Time to Maturity)",
+                            unique_T,
+                            index=idx_default,
+                            format_func=lambda x: f"{x:.2f}",
+                            key=_k("heston_cboe_calib_target"),
+                            help="Maturité autour de laquelle la calibration Heston est centrée.",
+                        )
+                        st.session_state.heston_calib_T_target = calib_T_target
+                    else:
+                        st.warning("Pas de maturités disponibles dans les données CBOE.")
+                        calib_T_target = None
+
+                with col_modes:
+                    st.subheader("⚙️ Modes de calibration NN")
+                    mode = st.radio(
+                        "Choisir un mode",
+                        ["Rapide", "Bonne", "Excellente"],
+                        index=0,
+                        horizontal=True,
+                        key=_k("heston_cboe_mode"),
+                        help="Choisit un compromis entre vitesse de calibration et précision de l’ajustement.",
+                    )
+                    if mode == "Rapide":
+                        max_iters = 300
+                        learning_rate = 0.01
+                    elif mode == "Bonne":
+                        max_iters = 1000
+                        learning_rate = 0.005
+                    else:
+                        max_iters = 2000
+                        learning_rate = 0.001
+                    st.markdown(
+                        f"**Itérations NN** : `{max_iters}`  \n"
+                        f"**Learning rate** : `{learning_rate}`"
+                    )
+
+                calib_band_range = (
+                    max(MIN_IV_MATURITY, calib_T_target - calib_T_band),
+                    calib_T_target + calib_T_band,
+                ) if calib_T_target is not None else None
+
+                run_button = st.button("🚀 Lancer l'analyse", type="primary", width="stretch", key=_k("heston_cboe_run"))
+                st.divider()
+
+                if run_button:
+                    if calib_band_range is None or calib_T_target is None:
+                        st.error("Veuillez choisir une maturité T cible après avoir chargé les données.")
+                        st.stop()
+
+                    try:
+                        st.info(f"📡 Données CBOE chargées pour {st.session_state.get('heston_cboe_ticker', '')} (cache)")
+                        st.success(f"{len(calls_df)} calls, {len(puts_df)} puts | S0 ≈ {S0_ref:.2f}")
+                        st.write(f"Maturité T cible pour la calibration : {calib_T_target:.2f} ans")
+
+                        st.info("🧠 Calibration ciblée...")
+                        progress_bar = st.progress(0.0)
+                        status_text = st.empty()
+                        loss_log: list[float] = []
+
+                        def progress_cb(current: int, total: int, loss_val: float) -> None:
+                            progress_bar.progress(current / total)
+                            status_text.text(f"⏳ Iter {current}/{total} | Loss = {loss_val:.6f}")
+                            loss_log.append(loss_val)
+                            st.session_state["heston_calib_progress"] = current / total
+
+                        calib_slice = calls_df[
+                            (calls_df["T"].round(2).between(*calib_band_range))
+                            & (calls_df["K"].between(S0_ref - span_mc, S0_ref + span_mc))
+                            & (calls_df["C_mkt"] > 0.05)
+                            & (calls_df["iv_market"] > 0)
+                        ]
+                        if len(calib_slice) < 5:
+                            calib_slice = calls_df.copy()
+
+                        params_cm = calibrate_heston_nn(
+                            calib_slice,
+                            r=rf_rate,
+                            q=div_yield,
+                            max_iters=int(max_iters),
+                            lr=learning_rate,
+                            spot_override=S0_ref,
+                            progress_callback=progress_cb,
+                        )
+                        progress_bar.empty()
+                        status_text.empty()
+
+                        params_dict = {
+                            "kappa": float(params_cm.kappa.detach()),
+                            "theta": float(params_cm.theta.detach()),
+                            "sigma": float(params_cm.sigma.detach()),
+                            "rho": float(params_cm.rho.detach()),
+                            "v0": float(params_cm.v0.detach()),
+                        }
+                        st.session_state["heston_kappa_common"] = params_dict["kappa"]
+                        st.session_state["heston_theta_common"] = params_dict["theta"]
+                        st.session_state["heston_eta_common"] = params_dict["sigma"]
+                        st.session_state["heston_rho_common"] = params_dict["rho"]
+                        st.session_state["heston_v0_common"] = params_dict["v0"]
+                        st.success("✓ Calibration terminée")
+                        st.dataframe(pd.Series(params_dict, name="Paramètre").to_frame())
+                        st.balloons()
+                        st.success("🎉 Analyse terminée")
+                        params_heston = _heston_params_from_state()
+
+                    except Exception as exc:
+                        st.error(f"❌ Erreur : {exc}")
+                        import traceback
+
+                        st.code(traceback.format_exc())
             render_inputs_explainer(
                 "🔧 Paramètres utilisés – Heston européen",
                 (
@@ -4951,15 +5193,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                                 r=float(common_rate_value),
                                 option_type="call" if option_char == "c" else "put",
                             )
-                    iv_fig = make_iv_surface_figure(k_grid, t_grid, iv_grid, title_suffix=" (Heston Carr–Madan)")
-                    st.pyplot(iv_fig)
-                    _render_heatmaps_for_current_option(
-                        "Heston Carr–Madan (K, T)",
-                        call_matrix,
-                        put_matrix,
-                        k_vals,
-                        t_vals,
-                    )
             except Exception as exc:
                 st.error(f"Erreur calcul heatmap / surface IV Heston : {exc}")
 
