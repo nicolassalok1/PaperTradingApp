@@ -166,6 +166,7 @@ OPTIONS_PORTFOLIO_FILE = OPTIONS_BOOK_FILE  # legacy name kept for compatibility
 EXPIRED_OPTIONS_FILE = OPTIONS_BOOK_FILE    # legacy name kept for compatibility
 CUSTOM_OPTIONS_FILE = JSON_DIR / "custom_options.json"
 FORWARDS_FILE = JSON_DIR / "forwards.json"
+DASHBOARD_CACHE_FILE = JSON_DIR / "Dashboard_cache.json"
 LEGACY_EXPIRED_FILE = JSON_DIR / "expired_options.json"
 load_dotenv()
 
@@ -8935,6 +8936,90 @@ def save_sell_systems(sell_systems):
         json.dump(sell_systems, f, indent=2)
 
 
+def _parse_dashboard_refresh_date(ts: str | None) -> datetime.date | None:
+    """Convert ISO datetime strings to date objects for cache freshness checks."""
+    if not ts:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(str(ts)).date()
+    except Exception:
+        return None
+
+
+def load_dashboard_cache() -> dict:
+    """Read Dashboard_cache.json; returns {} on failure."""
+    try:
+        with open(DASHBOARD_CACHE_FILE, "r") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    except Exception:
+        return {}
+
+
+def save_dashboard_cache(cache: dict) -> None:
+    """Persist dashboard price cache to disk (best-effort)."""
+    try:
+        DASHBOARD_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(DASHBOARD_CACHE_FILE, "w") as f:
+            json.dump(cache, f, indent=2)
+    except Exception:
+        pass
+
+
+def dashboard_cache_last_refresh(cache: dict | None = None) -> datetime.date | None:
+    """Return the last refresh date stored in the dashboard cache."""
+    cache = cache or load_dashboard_cache()
+    return _parse_dashboard_refresh_date(cache.get("last_refresh"))
+
+
+def collect_dashboard_tickers(
+    portfolio: dict | None = None,
+    forwards: dict | None = None,
+    custom_options: dict | None = None,
+    expired_options: dict | None = None,
+) -> set[str]:
+    """Aggregate all tickers shown on the Dashboard tab."""
+    tickers: set[str] = set()
+    if isinstance(portfolio, dict):
+        tickers.update((sym or "").strip().upper() for sym in portfolio.keys())
+    if isinstance(forwards, dict):
+        for fwd in forwards.values():
+            tickers.add((fwd.get("symbol") or "").strip().upper())
+    if isinstance(custom_options, dict):
+        for opt in custom_options.values():
+            if str(opt.get("status", "open")).lower() != "open":
+                continue
+            tickers.add((opt.get("underlying") or "").strip().upper())
+    if isinstance(expired_options, dict):
+        for opt in expired_options.values():
+            tickers.add((opt.get("underlying") or "").strip().upper())
+    return {t for t in tickers if t}
+
+
+def refresh_dashboard_cache(tickers: set[str], cache: dict | None = None) -> dict:
+    """Fetch live prices for provided tickers and persist them with a timestamp."""
+    base_cache = cache or load_dashboard_cache()
+    prices = dict(base_cache.get("prices") or {})
+    for sym in sorted(tickers):
+        sym_clean = (sym or "").strip().upper()
+        if not sym_clean:
+            continue
+        try:
+            live_price = float(get_data(sym_clean).get("price", -1.0) or -1.0)
+        except Exception:
+            continue
+        if live_price > 0:
+            prices[sym_clean] = live_price
+    payload = {
+        "last_refresh": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "prices": prices,
+    }
+    save_dashboard_cache(payload)
+    return payload
+
+
 def load_options_book():
     """
     Load the unified options book from disk, preferring the current file and
@@ -10648,15 +10733,51 @@ if st.session_state.pop("_switch_to_dashboard", False):
 
 # Tab 1: Dashboard
 with tab1:
+    # Préchargement des données Dashboard et du cache prix
+    my_portfolio = load_portfolio()
+    forwards_dash = load_forwards()
+    custom_opts = {k: v for k, v in load_options_book().items() if v.get("status", "open") == "open"}
+    expired_options_data = load_expired_options()
+    dashboard_tickers = collect_dashboard_tickers(
+        portfolio=my_portfolio,
+        forwards=forwards_dash,
+        custom_options=custom_opts,
+        expired_options=expired_options_data,
+    )
+    dashboard_cache = load_dashboard_cache()
+    today = datetime.date.today()
+    cached_prices = dashboard_cache.get("prices") or {}
+    cached_symbols = set(cached_prices.keys())
+    cache_refresh_date = dashboard_cache_last_refresh(dashboard_cache)
+    if cache_refresh_date != today or dashboard_tickers - cached_symbols:
+        dashboard_cache = refresh_dashboard_cache(dashboard_tickers, cache=dashboard_cache)
+        cached_prices = dashboard_cache.get("prices") or {}
+    dashboard_prices = cached_prices
+    last_refresh_ts = dashboard_cache.get("last_refresh")
+
+    def _dashboard_price(sym: str, fallback: float = 0.0) -> float:
+        """Return cached dashboard price when available, otherwise live price."""
+        sym_clean = (sym or "").strip().upper()
+        if sym_clean and dashboard_prices:
+            cached_val = dashboard_prices.get(sym_clean)
+            try:
+                if cached_val is not None:
+                    return float(cached_val)
+            except Exception:
+                pass
+        live_price = float(get_data(sym_clean).get("price", fallback) or fallback)
+        if live_price > 0 and sym_clean:
+            dashboard_prices[sym_clean] = live_price
+        return live_price
+
     # Quick P&L synthesis (spot, options, forwards) before AI widget
-    spot_portfolio = load_portfolio()
     spot_total_pnl = 0.0
     spot_total_notional = 0.0
-    for symbol, data in spot_portfolio.items():
+    for symbol, data in my_portfolio.items():
         avg_price = float(data.get("avg_price", 0.0) or 0.0)
         quantity = float(data.get("quantity", 0.0) or 0.0)
         side = (data.get("side") or "long").lower()
-        current_price = float(get_data(symbol).get("price", avg_price) or avg_price)
+        current_price = _dashboard_price(symbol, avg_price)
         position_value = quantity * current_price
         notional = avg_price * quantity
         if side == "long":
@@ -10669,12 +10790,12 @@ with tab1:
     # Options P&L : uniquement réalisé (options expirées), aucun pricing live au chargement
     open_options_pnl = 0.0
     realized_options_pnl = sum(
-        float(opt.get("pnl_total", 0.0) or 0.0) for opt in load_expired_options().values()
+        float(opt.get("pnl_total", 0.0) or 0.0) for opt in expired_options_data.values()
     )
     total_options_pnl = realized_options_pnl
 
     # Forwards P&L
-    fwd_positions = load_forwards()
+    fwd_positions = forwards_dash
     total_forward_pnl = 0.0
     total_forward_notional = 0.0
     for fwd in fwd_positions.values():
@@ -10684,7 +10805,7 @@ with tab1:
         side = (fwd.get("side") or "long").lower()
         mult = 1.0 if side == "long" else -1.0
         sym = fwd.get("symbol", "")
-        spot_now = float(get_data(sym).get("price", 0.0) or 0.0) if sym else 0.0
+        spot_now = _dashboard_price(sym, 0.0) if sym else 0.0
         price_fwd = float(fwd.get("forward_price", 0.0) or 0.0)
         total_forward_pnl += mult * (spot_now - price_fwd) * qty
         total_forward_notional += abs(price_fwd * qty)
@@ -10740,7 +10861,6 @@ with tab1:
         Plus bas, la section *Configured Trading Systems* montre vos robots actifs ou en attente.
         """)
     st.subheader("💰 My Portfolio")
-    my_portfolio = load_portfolio()
     
     if my_portfolio:
         portfolio_data = []
@@ -10749,12 +10869,11 @@ with tab1:
         total_notional = 0
 
         for symbol, data in my_portfolio.items():
-            current_price_data = get_data(symbol)
             avg_price = data['avg_price']
             quantity = data['quantity']
             side = data.get('side', 'long')
 
-            current_price = current_price_data['price'] if current_price_data['price'] > 0 else avg_price
+            current_price = _dashboard_price(symbol, avg_price)
             position_value = quantity * current_price
 
             if side == 'long':
@@ -10802,10 +10921,32 @@ with tab1:
         df_my_portfolio = df_my_portfolio[[c for c in col_order if c in df_my_portfolio.columns]]
         st.dataframe(df_my_portfolio, width="stretch", hide_index=True)
 
+        refresh_cols = st.columns([1, 3])
+        with refresh_cols[0]:
+            if st.button("🔄 Rafraîchir les prix Dashboard", key="btn_refresh_dashboard_prices"):
+                refreshed_cache = refresh_dashboard_cache(
+                    collect_dashboard_tickers(my_portfolio, forwards_dash, custom_opts, expired_options_data)
+                )
+                dashboard_prices = refreshed_cache.get("prices") or {}
+                last_refresh_ts = refreshed_cache.get("last_refresh")
+                st.success("Prix du dashboard rafraîchis.")
+                try:
+                    st.rerun()
+                except Exception:
+                    pass
+        with refresh_cols[1]:
+            refresh_label = "jamais" if not last_refresh_ts else str(last_refresh_ts)
+            try:
+                if last_refresh_ts:
+                    dt_refresh = datetime.datetime.fromisoformat(str(last_refresh_ts))
+                    refresh_label = dt_refresh.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                refresh_label = str(last_refresh_ts)
+            st.caption(f"Dernier refresh: {refresh_label}")
+
         # Forward portfolio section
         st.markdown("---")
         st.markdown("### 🚀 Forward Portfolio")
-        forwards_dash = load_forwards()
         if forwards_dash:
             fwd_rows = []
             today_dash = datetime.date.today()
@@ -10821,7 +10962,7 @@ with tab1:
                 except Exception:
                     maturity_dt = None
                     days_to_mat = None
-                spot_now = float(get_data(sym).get("price", 0.0) or 0.0) if sym else 0.0
+                spot_now = _dashboard_price(sym, 0.0) if sym else 0.0
                 mult = 1.0 if side == "long" else -1.0
                 pnl_unit = mult * (spot_now - price_fwd)
                 pnl_total = pnl_unit * qty
@@ -10845,9 +10986,6 @@ with tab1:
 
         st.markdown("---")
         st.markdown("### 🧾 Custom option purchases (acheté depuis pricing)")
-        custom_opts = {
-            k: v for k, v in load_options_book().items() if v.get("status", "open") == "open"
-        }
         if custom_opts:
             def _price_from_pricing_py(pos: dict, chain_entry: dict | None = None):
                 """Pricing via notebooks/scripts/pricing.py helpers (BS approximations)."""
@@ -10865,7 +11003,7 @@ with tab1:
                     spot = float(chain_entry.get("spot", spot) or spot)
                 if spot <= 0 and underlying:
                     try:
-                        spot = float(get_data(underlying).get("price", 0.0) or 0.0)
+                        spot = _dashboard_price(underlying, 0.0)
                     except Exception:
                         spot = 0.0
 
@@ -11128,12 +11266,20 @@ with tab1:
         def _spot_live(sym: str) -> float | None:
             if not sym:
                 return None
-            if sym in spot_cache:
-                return spot_cache[sym]
-            spot_val = get_spot_cboe_cached(sym)
+            sym_clean = (sym or "").strip().upper()
+            if sym_clean in spot_cache:
+                return spot_cache[sym_clean]
+            if dashboard_prices.get(sym_clean) is not None:
+                try:
+                    cached_val = float(dashboard_prices[sym_clean])
+                    spot_cache[sym_clean] = cached_val
+                    return cached_val
+                except Exception:
+                    pass
+            spot_val = get_spot_cboe_cached(sym_clean)
             if spot_val is None or spot_val <= 0:
-                spot_val = float(get_data(sym).get("price", 0.0) or 0.0)
-            spot_cache[sym] = spot_val
+                spot_val = _dashboard_price(sym_clean, 0.0)
+            spot_cache[sym_clean] = spot_val
             return spot_val
 
         if not custom_opts:
@@ -11528,7 +11674,7 @@ with tab1:
             except Exception:
                 maturity_dt = None
             days_to_mat = (maturity_dt - today).days if maturity_dt else None
-            spot_now = float(get_data(sym).get("price", 0.0) or 0.0) if sym else 0.0
+            spot_now = _dashboard_price(sym, 0.0) if sym else 0.0
             mult = 1.0 if side == "long" else -1.0
             pnl_unit = mult * (spot_now - price_fwd)
             pnl_total = pnl_unit * qty
@@ -11554,7 +11700,7 @@ with tab1:
                 qty = int(fwd.get("quantity", 0) or 0)
                 price_fwd = float(fwd.get("forward_price", 0.0) or 0.0)
                 side = (fwd.get("side") or "long").lower()
-                spot_now = float(get_data(sym).get("price", 0.0) or 0.0) if sym else 0.0
+                spot_now = _dashboard_price(sym, 0.0) if sym else 0.0
                 mult = 1.0 if side == "long" else -1.0
                 pnl_unit = mult * (spot_now - price_fwd)
                 pnl_total = pnl_unit * qty
@@ -11572,7 +11718,7 @@ with tab1:
     # Expired options at the end of the dashboard
     st.markdown("---")
     st.markdown("### ✅ Options expirées / clôturées")
-    expired_options = load_expired_options()
+    expired_options = dict(expired_options_data)
     legacy_book = load_options_book_legacy_only()
     for opt_id, entry in legacy_book.items():
         if opt_id not in expired_options and entry.get("status") in {"expired", "closed"}:
@@ -11617,12 +11763,20 @@ with tab1:
         def _spot_live_exp(sym: str) -> float | None:
             if not sym:
                 return None
-            if sym in spot_cache_exp:
-                return spot_cache_exp[sym]
-            spot_val = get_spot_cboe_cached(sym)
+            sym_clean = (sym or "").strip().upper()
+            if sym_clean in spot_cache_exp:
+                return spot_cache_exp[sym_clean]
+            if dashboard_prices.get(sym_clean) is not None:
+                try:
+                    cached_val = float(dashboard_prices[sym_clean])
+                    spot_cache_exp[sym_clean] = cached_val
+                    return cached_val
+                except Exception:
+                    pass
+            spot_val = get_spot_cboe_cached(sym_clean)
             if spot_val is None or spot_val <= 0:
-                spot_val = float(get_data(sym).get("price", 0.0) or 0.0)
-            spot_cache_exp[sym] = spot_val
+                spot_val = _dashboard_price(sym_clean, 0.0)
+            spot_cache_exp[sym_clean] = spot_val
             return spot_val
 
         for key, opt in expired_options.items():
