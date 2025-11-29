@@ -715,6 +715,7 @@ def view_cliquet(
     n_periods: int = 12,
     n_paths: int = 4000,
     seed: int = 42,
+    k_ref: float | None = None,
 ):
     def _cliquet_mc(
         S0: float,
@@ -748,9 +749,10 @@ def view_cliquet(
             payoffs.append(sum(coupons))
         return float(disc * np.mean(payoffs))
 
-    premium = _cliquet_mc(s0, r, q, sigma, T, n_periods, cap, floor, n_paths, seed)
+    base = float(k_ref) if k_ref is not None else float(s0)
+    premium = _cliquet_mc(base, r, q, sigma, T, n_periods, cap, floor, n_paths, seed)
     s_grid = np.linspace(s0 * (1.0 - span), s0 * (1.0 + span), n)
-    payoff_grid = np.array([payoff_cliquet(s, s0, floor=floor, cap=cap) for s in s_grid])
+    payoff_grid = np.array([payoff_cliquet(s, base, floor=floor, cap=cap) for s in s_grid])
     pnl_grid = payoff_grid - premium
     bes = _find_breakevens_from_grid(s_grid, pnl_grid)
     return {"s_grid": s_grid, "payoff": payoff_grid, "pnl": pnl_grid, "premium": premium, "breakevens": bes}

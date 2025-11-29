@@ -4729,26 +4729,25 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     spy_close = _fetch_spy_history()
                 except Exception as exc2:
                     st.error(f"Impossible de récupérer les clôtures SPY (fallback) : {exc2}")
-            if spy_close is not None and not spy_close.empty:
-                s0_ref = float(spy_close.iloc[-1])
-            else:
+            if spy_close is None or spy_close.empty:
                 spy_close = pd.Series([s0_ref], index=pd.Index([datetime.date.today()]), name="Close")
 
+            strike_anchor_bar = float(common_spot_value)
             col1, col2, col3 = st.columns(3)
             with col1:
                 strike_b = st.slider(
                     "Strike",
-                    min_value=0.6 * s0_ref,
-                    max_value=1.4 * s0_ref,
-                    value=float(round(s0_ref)),
+                    min_value=0.6 * strike_anchor_bar,
+                    max_value=1.4 * strike_anchor_bar,
+                    value=float(round(strike_anchor_bar)),
                     step=0.5,
                     key=_k("barrier_all_strike"),
                 )
                 barrier_b = st.slider(
                     "Barrière",
-                    min_value=0.5 * s0_ref,
-                    max_value=1.8 * s0_ref,
-                    value=float(round(s0_ref)),
+                    min_value=0.5 * strike_anchor_bar,
+                    max_value=1.8 * strike_anchor_bar,
+                    value=float(round(strike_anchor_bar)),
                     step=0.5,
                     key=_k("barrier_all_level"),
                 )
@@ -5764,9 +5763,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             spy_close_path = fetch_spy_history()
         except Exception:
             spy_close_path = None
-        if spy_close_path is not None and not getattr(spy_close_path, "empty", True):
-            s0_path = float(spy_close_path.iloc[-1])
-        else:
+        if spy_close_path is None or getattr(spy_close_path, "empty", True):
             spy_close_path = pd.Series([s0_path], index=pd.Index([datetime.date.today()]), name="Close")
 
         with tab_lookback:
@@ -5776,7 +5773,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 option_type_lb = st.selectbox("Type", ["call", "put"], key=_k("lb_type"))
                 min_lb = st.slider(
                     "Min path",
-                    min_value=0.5 * s0_path,
+                    min_value=0.8 * s0_path,
                     max_value=1.0 * s0_path,
                     value=float(round(s0_path)),
                     step=0.5,
@@ -5785,7 +5782,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 max_lb = st.slider(
                     "Max path",
                     min_value=1.0 * s0_path,
-                    max_value=1.6 * s0_path,
+                    max_value=1.2 * s0_path,
                     value=float(round(s0_path)),
                     step=0.5,
                     key=_k("lb_max"),
@@ -7671,19 +7668,18 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     spy_close = _fetch_spy_history()
                 except Exception as exc2:
                     st.error(f"Impossible de récupérer les clôtures SPY (fallback) : {exc2}")
-            if spy_close is not None and not spy_close.empty:
-                s0_ref = float(spy_close.iloc[-1])
-            else:
+            if spy_close is None or spy_close.empty:
                 spy_close = pd.Series([s0_ref], index=pd.Index([datetime.date.today()]), name="Close")
 
+            strike_anchor_cal = float(common_spot_value)
             col1, col2 = st.columns(2)
             with col1:
                 option_type_cal = st.selectbox("Type", ["call", "put"], key=_k("calendar_type"))
                 strike_cal = st.slider(
                     "Strike",
-                    min_value=0.6 * s0_ref,
-                    max_value=1.4 * s0_ref,
-                    value=float(round(s0_ref)),
+                    min_value=0.6 * strike_anchor_cal,
+                    max_value=1.4 * strike_anchor_cal,
+                    value=float(round(strike_anchor_cal)),
                     step=0.5,
                     key=_k("calendar_strike"),
                 )
@@ -7808,27 +7804,26 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     spy_close = _fetch_spy_history()
                 except Exception as exc2:
                     st.error(f"Impossible de récupérer les clôtures SPY (fallback) : {exc2}")
-            if spy_close is not None and not spy_close.empty:
-                s0_ref = float(spy_close.iloc[-1])
-            else:
+            if spy_close is None or spy_close.empty:
                 spy_close = pd.Series([s0_ref], index=pd.Index([datetime.date.today()]), name="Close")
 
+            strike_anchor_diag = float(common_spot_value)
             col1, col2 = st.columns(2)
             with col1:
                 option_type_diag = st.selectbox("Type", ["call", "put"], key=_k("diag_type"))
                 k_near = st.slider(
                     "Strike near",
-                    min_value=0.6 * s0_ref,
-                    max_value=1.4 * s0_ref,
-                    value=float(round(s0_ref)),
+                    min_value=0.6 * strike_anchor_diag,
+                    max_value=1.4 * strike_anchor_diag,
+                    value=float(round(strike_anchor_diag)),
                     step=0.5,
                     key=_k("diag_k_near"),
                 )
                 k_far = st.slider(
                     "Strike far",
-                    min_value=0.6 * s0_ref,
-                    max_value=1.6 * s0_ref,
-                    value=float(round(s0_ref) * 1.02),
+                    min_value=0.6 * strike_anchor_diag,
+                    max_value=1.6 * strike_anchor_diag,
+                    value=float(round(strike_anchor_diag) * 1.02),
                     step=0.5,
                     key=_k("diag_k_far"),
                 )
@@ -8064,7 +8059,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 option_type_lbf = st.selectbox("Type", ["call", "put"], key=_k("lbf_type"))
                 min_lbf = st.slider(
                     "Min path",
-                    min_value=0.5 * s0_path,
+                    min_value=0.8 * s0_path,
                     max_value=1.0 * s0_path,
                     value=float(round(s0_path)),
                     step=0.5,
@@ -8073,7 +8068,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 max_lbf = st.slider(
                     "Max path",
                     min_value=1.0 * s0_path,
-                    max_value=1.6 * s0_path,
+                    max_value=1.2 * s0_path,
                     value=float(round(s0_path)),
                     step=0.5,
                     key=_k("lbf_max"),
@@ -8081,8 +8076,8 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             with col2:
                 strike_lbf = st.slider(
                     "Strike",
-                    min_value=0.6 * s0_path,
-                    max_value=1.5 * s0_path,
+                    min_value=0.8 * s0_path,
+                    max_value=1.2 * s0_path,
                     value=float(round(s0_path)),
                     step=0.5,
                     key=_k("lbf_k"),
@@ -8176,6 +8171,15 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             clq_label, clq_char = _choose_option_select("opt_choice_cliquet_tab", option_char)
             option_label, option_char = clq_label, clq_char
             st.subheader("Cliquet / Ratchet – vue Notebook")
+            k_cliquet_anchor = float(common_spot_value)
+            strike_clq = st.slider(
+                "Strike / niveau de référence",
+                min_value=0.6 * k_cliquet_anchor,
+                max_value=1.4 * k_cliquet_anchor,
+                value=float(round(k_cliquet_anchor)),
+                step=0.5,
+                key=_k("cliquet_k"),
+            )
             floor_val = st.slider("Floor", min_value=-0.5, max_value=0.5, value=0.0, step=0.01, key=_k("cliquet_floor"))
             cap_val = st.slider("Cap", min_value=0.0, max_value=0.5, value=0.1, step=0.01, key=_k("cliquet_cap"))
 
@@ -8189,6 +8193,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 sigma=float(common_sigma_value),
                 n_periods=12,
                 n_paths=4000,
+                k_ref=float(strike_clq),
             )
             premium = float(view_dyn.get("premium", 0.0))
             s_grid = view_dyn["s_grid"]
@@ -8239,7 +8244,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "option_type": option_char,
                     "product_type": "Cliquet / Ratchet",
                     "type": "Cliquet / Ratchet",
-                    "strike": float(s0_path),
+                    "strike": float(strike_clq),
                     "expiration": expiration_dt.isoformat(),
                     "quantity": int(qty),
                     "avg_price": price,
@@ -8251,6 +8256,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "misc": {
                         "floor": float(floor_val),
                         "cap": float(cap_val),
+                        "strike_ref": float(strike_clq),
                         "spot_at_pricing": float(s0_path),
                     },
                 }
