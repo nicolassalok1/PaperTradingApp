@@ -10475,9 +10475,106 @@ with st.expander("📘 Tutoriel d'utilisation de l'outil"):
 with st.sidebar:
     st.header("⚙️ Settings")
     st.info("Data is refreshed automatically on each interaction")
-    if st.button("🔄 Refresh Data"):
-        st.cache_data.clear()
-        st.rerun()
+
+    st.divider()
+    st.subheader("🧹 Maintenance / Reset")
+
+    def _safe_unlink(path: Path) -> None:
+        try:
+            path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    def _safe_truncate(path: Path) -> None:
+        try:
+            if path.exists():
+                path.write_text("")
+        except Exception:
+            pass
+
+    def _reset_all():
+        try:
+            # Options caches
+            for p in [
+                CACHE_OPTIONS_HISTORY_FILE,
+                CACHE_OPTIONS_CALLS_FILE,
+                CACHE_OPTIONS_PUTS_FILE,
+                CACHE_OPTIONS_META_FILE,
+                DATASETS_DIR / "train.csv",
+                DATASETS_DIR / "test.csv",
+                DATASETS_DIR / "closing_prices.csv",
+                Path(NOTEBOOKS_SCRIPTS_DIR) / "GPT" / "closing_cache.csv",
+            ]:
+                _safe_truncate(p)
+            # Books & expirées
+            save_options_book({})
+            _safe_truncate(LEGACY_EXPIRED_FILE)
+            # Forwards / trading systems / portfolio
+            save_forwards({})
+            save_sell_systems({})
+            save_portfolio({})
+            _safe_truncate(JSON_DIR / "equities.json")
+            _safe_truncate(HESTON_PARAMS_FILE)
+            st.cache_data.clear()
+            st.success("Reset complet : caches options, book, expirées, forwards, trading systems, portfolio, equities.json, heston_params.json.")
+        except Exception as exc:
+            st.error(f"Reset complet impossible : {exc}")
+
+    if st.button("🗑️ Vider cache Options (calls/puts/meta)", key="btn_clear_opt_cache"):
+        for p in [
+            CACHE_OPTIONS_HISTORY_FILE,
+            CACHE_OPTIONS_CALLS_FILE,
+            CACHE_OPTIONS_PUTS_FILE,
+            CACHE_OPTIONS_META_FILE,
+            DATASETS_DIR / "train.csv",
+            DATASETS_DIR / "test.csv",
+            DATASETS_DIR / "closing_prices.csv",
+            Path(NOTEBOOKS_SCRIPTS_DIR) / "GPT" / "closing_cache.csv",
+        ]:
+            _safe_truncate(p)
+        st.success("Caches options (calls/puts/meta/history/train/test/closing) vidés.")
+
+    if st.button("🗑️ Vider book Options (open + expired)", key="btn_clear_opt_book"):
+        try:
+            save_options_book({})
+            _safe_truncate(LEGACY_EXPIRED_FILE)
+            st.success("Options (open + expired) réinitialisées.")
+        except Exception as exc:
+            st.error(f"Impossible de vider le book options : {exc}")
+
+    if st.button("🗑️ Vider options expirées uniquement", key="btn_clear_opt_expired"):
+        try:
+            active = load_options_portfolio()
+            save_options_book(active)
+            _safe_truncate(LEGACY_EXPIRED_FILE)
+            st.success("Options expirées supprimées (open conservées).")
+        except Exception as exc:
+            st.error(f"Impossible de vider les expirées : {exc}")
+
+    if st.button("🗑️ Vider forwards", key="btn_clear_forwards"):
+        try:
+            save_forwards({})
+            st.success("Forwards réinitialisés.")
+        except Exception as exc:
+            st.error(f"Impossible de vider les forwards : {exc}")
+
+    if st.button("🗑️ Vider trading systems", key="btn_clear_trading_systems"):
+        try:
+            save_sell_systems({})
+            _safe_truncate(JSON_DIR / "equities.json")
+            st.success("Trading systems réinitialisés.")
+        except Exception as exc:
+            st.error(f"Impossible de vider les trading systems : {exc}")
+
+    if st.button("🗑️ Vider portfolio (spot)", key="btn_clear_portfolio"):
+        try:
+            save_portfolio({})
+            st.success("Portfolio spot réinitialisé.")
+        except Exception as exc:
+            st.error(f"Impossible de vider le portfolio : {exc}")
+
+    if st.button("🧨 Reset total (tout vider)", key="btn_reset_all"):
+        _reset_all()
 
 # Main tabs
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
