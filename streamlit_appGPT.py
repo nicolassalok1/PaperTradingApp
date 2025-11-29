@@ -87,6 +87,14 @@ CACHE_OPTIONS_PUTS_FILE = CACHE_CSV_DIR / "options_last_puts.csv"
 CACHE_OPTIONS_META_FILE = JSON_DIR / "options_last_meta.json"
 LEGACY_OPTIONS_META_FILE = DATASETS_DIR / "options_last_meta.json"
 HESTON_PARAMS_FILE = JSON_DIR / "heston_params.json"
+LEGACY_HESTON_PARAM_FILES = [
+    DATASETS_DIR / "paraml_heston.json",
+    DATASETS_DIR / "param_heston.json",
+    DATASETS_DIR / "params_heston.json",
+    DATASETS_DIR / "heston_params.json",
+    APP_DIR / "database" / "jsons" / "paraml_heston.json",
+    APP_DIR / "database" / "jsons" / "heston_params.json",
+]
 BASKET_CLOSING_FILE = CACHE_CSV_DIR / "basket_closing_prices.csv"
 CLOSING_CACHE_FILE = CACHE_CSV_DIR / "closing_cache.csv"
 TRAIN_FILE = CACHE_CSV_DIR / "train.csv"
@@ -115,7 +123,22 @@ def _migrate_csv_caches() -> None:
             pass
 
 
+def _migrate_heston_params_cache() -> None:
+    """Ensure legacy Heston params caches are copied to the new JSON path."""
+    if HESTON_PARAMS_FILE.exists():
+        return
+    for legacy_path in LEGACY_HESTON_PARAM_FILES:
+        try:
+            if legacy_path.exists():
+                HESTON_PARAMS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(legacy_path, HESTON_PARAMS_FILE)
+                return
+        except Exception:
+            continue
+
+
 _migrate_csv_caches()
+_migrate_heston_params_cache()
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(PRICING_DIR))
 sys.path.insert(0, str(PRICING_SCRIPT_DIR))
@@ -4824,7 +4847,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
         )
 
         with tab_grp_vanilla:
-            tab_heston, tab_european, tab_american, tab_bermudan = st.tabs(["Européenne par Heston", "Européenne (masquée)", "Américaine", "Bermuda"])
+            tab_heston, tab_american, tab_bermudan = st.tabs(["Européenne par Heston", "Américaine", "Bermuda"])
 
         with tab_grp_path:
             (
@@ -8832,6 +8855,7 @@ def load_options_meta() -> dict:
 
 def load_heston_params_from_json(ticker: str) -> dict | None:
     """Charge les paramètres Heston persistés ; compatibilité avec l'ancien format par ticker."""
+    _migrate_heston_params_cache()
     tkr = (ticker or "").strip().upper()
     if not tkr or not HESTON_PARAMS_FILE.exists():
         return None
@@ -8858,6 +8882,7 @@ def save_heston_params_to_json(ticker: str, params: dict) -> None:
     tkr = (ticker or "").strip().upper()
     if not tkr:
         return
+    _migrate_heston_params_cache()
     try:
         HESTON_PARAMS_FILE.parent.mkdir(parents=True, exist_ok=True)
         payload = dict(params) if isinstance(params, dict) else {}
@@ -8978,22 +9003,26 @@ def collect_dashboard_tickers(
     portfolio: dict | None = None,
     forwards: dict | None = None,
     custom_options: dict | None = None,
-    expired_options: dict | None = None,
 ) -> set[str]:
     """Aggregate all tickers shown on the Dashboard tab."""
     tickers: set[str] = set()
+    today = datetime.date.today()
     if isinstance(portfolio, dict):
         tickers.update((sym or "").strip().upper() for sym in portfolio.keys())
     if isinstance(forwards, dict):
         for fwd in forwards.values():
+            matur_str = fwd.get("maturity")
+            try:
+                matur_dt = datetime.date.fromisoformat(matur_str) if matur_str else None
+            except Exception:
+                matur_dt = None
+            if matur_dt is not None and matur_dt < today:
+                continue
             tickers.add((fwd.get("symbol") or "").strip().upper())
     if isinstance(custom_options, dict):
         for opt in custom_options.values():
             if str(opt.get("status", "open")).lower() != "open":
                 continue
-            tickers.add((opt.get("underlying") or "").strip().upper())
-    if isinstance(expired_options, dict):
-        for opt in expired_options.values():
             tickers.add((opt.get("underlying") or "").strip().upper())
     return {t for t in tickers if t}
 
@@ -9001,7 +9030,7 @@ def collect_dashboard_tickers(
 def refresh_dashboard_cache(tickers: set[str], cache: dict | None = None) -> dict:
     """Fetch live prices for provided tickers and persist them with a timestamp."""
     base_cache = cache or load_dashboard_cache()
-    prices = dict(base_cache.get("prices") or {})
+    prices = {k: v for k, v in (base_cache.get("prices") or {}).items() if k in tickers}
     for sym in sorted(tickers):
         sym_clean = (sym or "").strip().upper()
         if not sym_clean:
@@ -10742,7 +10771,6 @@ with tab1:
         portfolio=my_portfolio,
         forwards=forwards_dash,
         custom_options=custom_opts,
-        expired_options=expired_options_data,
     )
     dashboard_cache = load_dashboard_cache()
     today = datetime.date.today()
@@ -10925,7 +10953,7 @@ with tab1:
         with refresh_cols[0]:
             if st.button("🔄 Rafraîchir les prix Dashboard", key="btn_refresh_dashboard_prices"):
                 refreshed_cache = refresh_dashboard_cache(
-                    collect_dashboard_tickers(my_portfolio, forwards_dash, custom_opts, expired_options_data)
+                    collect_dashboard_tickers(my_portfolio, forwards_dash, custom_opts)
                 )
                 dashboard_prices = refreshed_cache.get("prices") or {}
                 last_refresh_ts = refreshed_cache.get("last_refresh")
