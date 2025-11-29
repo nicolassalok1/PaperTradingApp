@@ -3623,30 +3623,12 @@ def run_app_options():
                 "S0_ref cache": [meta_cache.get("S0_ref")],
                 "r cache": [meta_cache.get("r")],
                 "q cache": [meta_cache.get("q")],
-                "S0 courant": [common_spot_value],
             }
         )
         st.dataframe(meta_table, use_container_width=True, hide_index=True)
-        hist_df = pd.DataFrame()
-        try:
-            cli_path = SCRIPTS_DIR / "fetch_history_cli.py"
-            result = subprocess.run(
-                [sys.executable, str(cli_path), "--ticker", tkr_hist, "--period", "1y", "--interval", "1d"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if result.returncode == 0 and result.stdout:
-                hist_df = pd.read_csv(io.StringIO(result.stdout))
-                if "Date" in hist_df.columns:
-                    hist_df["Date"] = pd.to_datetime(hist_df["Date"])
-                    hist_df.set_index("Date", inplace=True)
-            elif result.returncode != 0:
-                st.warning("Impossible de récupérer l'historique 1 an (via CLI).")
-        except Exception as _hist_err:
-            st.warning(f"Impossible de récupérer l'historique 1 an : {_hist_err}")
+        _, hist_df = load_cached_option_history()
 
-        if not hist_df.empty and "Close" in hist_df.columns:
+        if hist_df is not None and not hist_df.empty and "Close" in hist_df.columns:
             hist_fig = go.Figure()
             hist_fig.add_trace(
                 go.Scatter(
@@ -3670,7 +3652,7 @@ def run_app_options():
             )
             st.plotly_chart(hist_fig, width="stretch")
         else:
-            st.info("Pas d'historique disponible pour ce ticker.")
+            st.info("Pas d'historique disponible pour ce ticker dans le cache. Clique sur Refresh (Heston) pour le télécharger.")
 
     heatmap_spot_values = _heatmap_axis(S0_common, heatmap_span)
     heatmap_strike_values = _heatmap_axis(K_common, heatmap_span)
