@@ -1,1 +1,31 @@
-{}
+{
+  "opt_1764389885276": {
+    "underlying": "SPY",
+    "option_type": "call",
+    "product_type": "Asian arithm\u00e9tique",
+    "type": "Asian arithm\u00e9tique",
+    "strike": 683.0,
+    "expiration": "2026-11-29",
+    "quantity": 1.0,
+    "avg_price": 42.44244444092652,
+    "side": "long",
+    "S0": 683.39,
+    "maturity_years": 1.0,
+    "T_0": "2025-11-29",
+    "price": 42.44244444092652,
+    "misc": {
+      "avg_ref": 683.0,
+      "sigma_used": 0.182,
+      "r": 0.036903,
+      "spot_at_pricing": 683.39
+    },
+    "id": "opt_1764389885276",
+    "status": "open",
+    "created_at": "2025-11-29 05:18:05",
+    "last_updated": "2025-11-29 05:18:05",
+    "product": "Asian arithm\u00e9tique",
+    "strike2": null,
+    "legs": null,
+    "T_0_price": 42.44244444092652
+  }
+}
