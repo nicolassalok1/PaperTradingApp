@@ -3,7 +3,7 @@ Streamlit-based trading and options pricing dashboard.
 
 Responsibilities:
 - Render the multi-tab UI (dashboard, trading systems, forwards, options pricing).
-- Persist portfolios/systems/options in local JSON files under ./database/jsons.
+- Persist portfolios/systems/options in local JSON files under ./database/GPTab/jsons.
 - Call external services: Alpaca (positions/orders/prices), yfinance (price history),
   OpenAI ChatGPT, CBOE, and various pricing libraries (torch, tensorflow, scipy, etc.).
 
@@ -58,17 +58,25 @@ import re
 import inspect
 import time
 import threading
+import shutil
 
 # Configuration
 APP_DIR = Path(__file__).resolve().parent
-JSON_DIR = APP_DIR / "database" / "jsons"
+DATASETS_DIR = APP_DIR / "database" / "GPTab"
+DATASETS_DIR.mkdir(parents=True, exist_ok=True)
+JSON_DIR = DATASETS_DIR / "jsons"
+OLD_JSON_DIR = APP_DIR / "database" / "jsons"
+try:
+    if OLD_JSON_DIR.exists() and not JSON_DIR.exists():
+        shutil.copytree(OLD_JSON_DIR, JSON_DIR, dirs_exist_ok=True)
+except Exception:
+    pass
 JSON_DIR.mkdir(parents=True, exist_ok=True)
 # Scripts/pricing now sous scripts/scriptsGPT
 SCRIPTS_DIR = APP_DIR / "scripts" / "scriptsGPT"
 PRICING_DIR = SCRIPTS_DIR / "pricing_scripts"
 NOTEBOOKS_SCRIPTS_DIR = APP_DIR / "notebooks" / "scripts"
-DATASETS_DIR = APP_DIR / "database" / "GPTab"
-DATASETS_DIR.mkdir(parents=True, exist_ok=True)
+PRICING_SCRIPT_DIR = DATASETS_DIR / "pricing_script"
 CACHE_OPTIONS_HISTORY_FILE = DATASETS_DIR / "options_last_history.csv"
 CACHE_OPTIONS_CALLS_FILE = DATASETS_DIR / "options_last_calls.csv"
 CACHE_OPTIONS_PUTS_FILE = DATASETS_DIR / "options_last_puts.csv"
@@ -77,6 +85,7 @@ HESTON_PARAMS_FILE = JSON_DIR / "heston_params.json"
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(PRICING_DIR))
 sys.path.insert(0, str(NOTEBOOKS_SCRIPTS_DIR))
+sys.path.insert(0, str(PRICING_SCRIPT_DIR))
 from rates_utils import get_r, get_q
 from pricing import (
     bs_price_call,
@@ -3380,11 +3389,16 @@ def run_app_options():
 
         if fetch_btn:
             try:
+                ticker_fetch = (st.session_state.get("heston_cboe_ticker") or ticker or "SPY").strip().upper()
+                ticker = ticker_fetch
+                # Ne pas réécrire la clé du widget texte pour éviter les erreurs Streamlit
+                st.session_state["tkr_common"] = ticker_fetch
+                st.session_state["common_underlying"] = ticker_fetch
                 try:
                     load_cboe_data.clear()
                 except Exception:
                     pass
-                calls_df, puts_df, S0_ref, rf_rate, div_yield = load_cboe_data(ticker)
+                calls_df, puts_df, S0_ref, rf_rate, div_yield = load_cboe_data(ticker_fetch)
                 if ((calls_df is None or calls_df.empty) and (puts_df is None or puts_df.empty)):
                     st.error("🔴 Aucun résultat pour ce ticker (CBOE). Vérifie le code et réessaie.")
                     st.session_state["heston_cboe_loaded_once"] = False
@@ -3403,9 +3417,9 @@ def run_app_options():
                 state.heston_S0_ref = S0_ref
                 st.session_state["common_rate"] = float(rf_rate)
                 st.session_state["common_dividend"] = float(div_yield)
-                st.info(f"📡 Données CBOE chargées pour {ticker} (cache)")
+                st.info(f"📡 Données CBOE chargées pour {ticker_fetch} (cache)")
                 st.success(f"{len(calls_df)} calls, {len(puts_df)} puts | S0 ≈ {S0_ref:.2f}")
-                save_cached_option_chain(ticker, calls_df, puts_df, S0_ref, rf_rate, div_yield)
+                save_cached_option_chain(ticker_fetch, calls_df, puts_df, S0_ref, rf_rate, div_yield)
                 maturity_list = sorted(calls_df["T"].round(2).unique().tolist())
                 st.session_state["cboe_T_options"] = maturity_list
                 st.session_state["sidebar_maturity_options"] = maturity_list
@@ -3456,7 +3470,7 @@ def run_app_options():
                     with CACHE_OPTIONS_META_FILE.open("w") as f:
                         json.dump(
                             {
-                                "ticker": ticker,
+                                "ticker": ticker_fetch,
                                 "S0_ref": float(S0_ref),
                                 "r": float(rf_rate),
                                 "q": float(div_yield),
@@ -3467,7 +3481,7 @@ def run_app_options():
                     pass
                 st.session_state["heston_cboe_loaded_once"] = True
                 # Refresh cached 1y history for this ticker
-                fetch_option_history_to_cache(ticker)
+                fetch_option_history_to_cache(ticker_fetch)
                 st.rerun()
             except Exception as exc:
                 st.error(f"❌ Erreur lors du téléchargement des données CBOE : {exc}")
@@ -4734,18 +4748,18 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             st.subheader("Barrières (vanilla / binaire) – vue Notebook")
             spy_close = None
             s0_ref = float(common_spot_value)
+            hist_tkr = (
+                st.session_state.get("common_underlying")
+                or st.session_state.get("tkr_common")
+                or st.session_state.get("heston_cboe_ticker")
+                or "SPY"
+            ).strip().upper()
             try:
                 from pricing import fetch_spy_history
 
-                spy_close = fetch_spy_history()
+                spy_close = fetch_spy_history(ticker=hist_tkr)
             except Exception as exc:
                 st.error(f"Impossible de récupérer les clôtures SPY : {exc}")
-                try:
-                    from pricing import fetch_spy_history as _fetch_spy_history  # fallback import
-
-                    spy_close = _fetch_spy_history()
-                except Exception as exc2:
-                    st.error(f"Impossible de récupérer les clôtures SPY (fallback) : {exc2}")
             if spy_close is None or spy_close.empty:
                 spy_close = pd.Series([s0_ref], index=pd.Index([datetime.date.today()]), name="Close")
 
@@ -5100,6 +5114,12 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             pnl_grid = payoff_grid - premium_h if premium_h is not None else None
             payoff_s0 = float(np.interp(S0_h, s_grid, payoff_grid))
             pnl_s0 = payoff_s0 - premium_h if premium_h is not None else None
+            st.caption(
+                f"Paramètres utilisés pour le prix Heston : "
+                f"S0={S0_h:.4f}, K={float(K_slider_h):.4f}, "
+                f"T={float(T_slider_h):.4f}, r={r_h:.4f}, "
+                f"q={float(d_h):.4f}"
+            )
             fig_h, ax_h = plt.subplots(figsize=(7, 4))
             ax_h.plot(s_grid, payoff_grid, label="Payoff")
             if pnl_grid is not None and premium_h is not None:
@@ -5838,10 +5858,16 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
         # Données SPY 1 an pour les onglets path-dependent (valeur de référence S0)
         spy_close_path = None
         s0_path = float(common_spot_value)
+        hist_tkr = (
+            st.session_state.get("common_underlying")
+            or st.session_state.get("tkr_common")
+            or st.session_state.get("heston_cboe_ticker")
+            or "SPY"
+        ).strip().upper()
         try:
             from pricing import fetch_spy_history
 
-            spy_close_path = fetch_spy_history()
+            spy_close_path = fetch_spy_history(ticker=hist_tkr)
         except Exception:
             spy_close_path = None
         if spy_close_path is None or getattr(spy_close_path, "empty", True):
@@ -7760,18 +7786,18 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             st.subheader("Calendar spread – vue Notebook")
             spy_close = None
             s0_ref = float(common_spot_value)
+            hist_tkr = (
+                st.session_state.get("common_underlying")
+                or st.session_state.get("tkr_common")
+                or st.session_state.get("heston_cboe_ticker")
+                or "SPY"
+            ).strip().upper()
             try:
                 from pricing import fetch_spy_history
 
-                spy_close = fetch_spy_history()
+                spy_close = fetch_spy_history(ticker=hist_tkr)
             except Exception as exc:
                 st.error(f"Impossible de récupérer les clôtures SPY : {exc}")
-                try:
-                    from pricing import fetch_spy_history as _fetch_spy_history
-
-                    spy_close = _fetch_spy_history()
-                except Exception as exc2:
-                    st.error(f"Impossible de récupérer les clôtures SPY (fallback) : {exc2}")
             if spy_close is None or spy_close.empty:
                 spy_close = pd.Series([s0_ref], index=pd.Index([datetime.date.today()]), name="Close")
 
@@ -7896,18 +7922,18 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             st.subheader("Diagonal spread – vue Notebook")
             spy_close = None
             s0_ref = float(common_spot_value)
+            hist_tkr = (
+                st.session_state.get("common_underlying")
+                or st.session_state.get("tkr_common")
+                or st.session_state.get("heston_cboe_ticker")
+                or "SPY"
+            ).strip().upper()
             try:
                 from pricing import fetch_spy_history
 
-                spy_close = fetch_spy_history()
+                spy_close = fetch_spy_history(ticker=hist_tkr)
             except Exception as exc:
                 st.error(f"Impossible de récupérer les clôtures SPY : {exc}")
-                try:
-                    from pricing import fetch_spy_history as _fetch_spy_history
-
-                    spy_close = _fetch_spy_history()
-                except Exception as exc2:
-                    st.error(f"Impossible de récupérer les clôtures SPY (fallback) : {exc2}")
             if spy_close is None or spy_close.empty:
                 spy_close = pd.Series([s0_ref], index=pd.Index([datetime.date.today()]), name="Close")
 
@@ -10515,7 +10541,7 @@ with st.sidebar:
                 DATASETS_DIR / "train.csv",
                 DATASETS_DIR / "test.csv",
                 DATASETS_DIR / "basket_closing_prices.csv",
-                Path(NOTEBOOKS_SCRIPTS_DIR) / "GPT" / "closing_cache.csv",
+                DATASETS_DIR / "closing_cache.csv",
             ]:
                 _safe_truncate(p)
             # Books & expirées
@@ -10541,9 +10567,13 @@ with st.sidebar:
             DATASETS_DIR / "train.csv",
             DATASETS_DIR / "test.csv",
             DATASETS_DIR / "basket_closing_prices.csv",
-            Path(NOTEBOOKS_SCRIPTS_DIR) / "GPT" / "closing_cache.csv",
+            DATASETS_DIR / "closing_cache.csv",
         ]:
             _safe_truncate(p)
+        try:
+            pass
+        except Exception:
+            pass
         st.success("Caches options (calls/puts/meta/history/train/test/closing) vidés.")
 
     if st.button("🗑️ Vider book Options (open + expired)", key="btn_clear_opt_book"):

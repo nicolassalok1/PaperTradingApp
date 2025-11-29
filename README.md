@@ -11,7 +11,7 @@ Une app Streamlit qui regroupe trois modules :
 - `streamlit_appVol.py` et `database/RLtab/` : app RL & Finance Lab + datasets.
 - `streamlit_appGPT.py` et `scripts/scriptsGPT/` : app AI Trading Bot + scripts/pricing.
 - `database/GPTab/` : datasets de l’onglet Volatility/Trading.
-- `database/jsons/` : stockage local (portefeuille, options, forwards…).
+- `database/GPTab/jsons/` : stockage local (portefeuille, options, forwards…).
 - `tests/` : scripts de vérification/fixtures.
 
 ## Installation
@@ -32,7 +32,7 @@ Onglets disponibles : Volatility Tools / RL & Finance Lab / AI Trading Bot.
 - `HTTP_PROXY` / `HTTPS_PROXY` : si nécessaire derrière un proxy.
 
 ## Données locales
-- Les portefeuilles/options/forwards sont stockés dans `database/jsons/`. Ils sont créés/écrasés par l’UI.
+- Les portefeuilles/options/forwards sont stockés dans `database/GPTab/jsons/`. Ils sont créés/écrasés par l’UI.
 - Les jeux de données RL/quant sont dans `database/RLtab/` (sous-dossiers data). Les notebooks ont été déplacés sous `notebooks/`.
 - Les datasets Trading/IV sont dans `database/GPTab/`.
 
