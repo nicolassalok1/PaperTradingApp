@@ -5455,10 +5455,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
 
             if st.session_state.get("carr_madan_calibrated", False):
                 final_price = price_cm if price_cm is not None else None
-                st.caption(
-                    f"Prévisualisation ajout dashboard Heston — Prix: {final_price if final_price is not None else '-'} | "
-                    f"K: {common_strike_value:.4f} | T: {common_maturity_value:.4f} | S0: {common_spot_value:.4f}"
-                )
                 render_add_to_dashboard_button(
                     product_label="Vanilla (Heston CM)",
                     option_char=opt_char_local,
