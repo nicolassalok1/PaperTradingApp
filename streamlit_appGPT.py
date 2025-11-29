@@ -3296,11 +3296,25 @@ def run_app_options():
         # Forcer l'usage du ticker cache Options si présent (ex: BTC)
         if meta_tkr:
             ticker = meta_tkr
+        # Si le ticker saisi change par rapport à la session, reset immédiat des params Heston
+        prev_tkr = st.session_state.get("_last_heston_fetch_ticker")
+        if prev_tkr and prev_tkr != ticker:
+            for k in ["heston_kappa_common", "heston_theta_common", "heston_eta_common", "heston_rho_common", "heston_v0_common"]:
+                st.session_state.pop(k, None)
+            st.session_state["carr_madan_calibrated"] = False
         fetch_btn = st.button("🔄 Refresh", type="primary", key="heston_cboe_fetch")
         st.session_state["tkr_common"] = ticker
         st.session_state["common_underlying"] = ticker
         rf_rate = float(st.session_state.get("common_rate", 0.02))
         div_yield = float(st.session_state.get("common_dividend", 0.0))
+        if fetch_btn:
+            prev_tkr = st.session_state.get("_last_heston_fetch_ticker")
+            if prev_tkr != ticker:
+                # Reset Heston params only when ticker changes
+                for k in ["heston_kappa_common", "heston_theta_common", "heston_eta_common", "heston_rho_common", "heston_v0_common"]:
+                    st.session_state.pop(k, None)
+                st.session_state["carr_madan_calibrated"] = False
+            st.session_state["_last_heston_fetch_ticker"] = ticker
 
         col_cfg1, col_cfg2 = st.columns(2)
         with col_cfg1:
@@ -5382,6 +5396,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 if st.session_state.get("heston_calibrating", False):
                     st.info("🧠 Calibration Heston en cours... (le reste de l'onglet réapparaîtra après).")
                     st.stop()
+
+            if not st.session_state.get("carr_madan_calibrated", False):
+                st.error("🔴 Calibre Heston (bouton « Lancer l'analyse ») pour afficher la suite.")
+                st.stop()
 
             render_inputs_explainer(
                 "🔧 Paramètres utilisés – Heston européen",
