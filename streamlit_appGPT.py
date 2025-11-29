@@ -234,7 +234,24 @@ def run_app_options():
     from Heston.heston_torch import HestonParams, carr_madan_call_torch
 
     torch.set_default_dtype(torch.float64)
-    HES_DEVICE = torch.device("cpu")
+    def _pick_heston_device():
+        """Sélectionne le device pour la calibration NN : CUDA si dispo, sinon CPU."""
+        try:
+            if torch.cuda.is_available():
+                return torch.device("cuda")
+        except Exception:
+            pass
+        return torch.device("cpu")
+
+    HES_DEVICE = _pick_heston_device()
+    try:
+        HES_DEVICE_LABEL = (
+            f"cuda ({torch.cuda.get_device_name(0)})"
+            if HES_DEVICE.type == "cuda"
+            else HES_DEVICE.type
+        )
+    except Exception:
+        HES_DEVICE_LABEL = str(HES_DEVICE)
     MIN_IV_MATURITY = 0.1
 
 
@@ -3282,11 +3299,44 @@ def run_app_options():
             state.heston_puts_df = None
             state.heston_S0_ref = None
             state.heston_calib_T_target = None
+        calls_df = state.heston_calls_df
+        puts_df = state.heston_puts_df
+        S0_ref = state.heston_S0_ref
+        calib_T_target = state.heston_calib_T_target
 
         # Ne jamais auto-télécharger : l'utilisateur déclenche le fetch explicitement
         auto_fetch = False
         fetch_btn = fetch_btn or auto_fetch
         st.divider()
+
+        # Pré-remplit le spot commun depuis options_last_meta.json si le ticker correspond
+        meta_cache = load_options_meta()
+        meta_ticker = (meta_cache.get("ticker") or "").strip().upper()
+        meta_spot = meta_cache.get("S0_ref")
+        meta_r = meta_cache.get("r")
+        meta_q = meta_cache.get("q")
+        if meta_ticker == ticker and meta_spot is not None:
+            try:
+                spot_from_meta = float(meta_spot)
+                st.session_state["S0_common"] = spot_from_meta
+                st.session_state["common_spot"] = spot_from_meta
+                state.heston_S0_ref = spot_from_meta
+                S0_ref = spot_from_meta
+            except Exception:
+                pass
+            try:
+                if meta_r is not None:
+                    st.session_state["common_rate"] = float(meta_r)
+                if meta_q is not None:
+                    st.session_state["common_dividend"] = float(meta_q)
+            except Exception:
+                pass
+        elif not fetch_btn:
+            st.warning(
+                "⚠️ Aucun cache options_last_meta.json pour ce ticker. "
+                "Saisis un ticker valide puis clique sur « Refresh » pour initialiser le spot commun."
+            )
+            return
 
         # Tente de charger d'éventuels paramètres Heston persistés pour ce ticker
         cached_heston_params = load_heston_params_from_json(ticker)
@@ -5080,6 +5130,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 st.warning("Charge d’abord les données CBOE (Refresh) pour activer la calibration Heston.")
                 calib_T_target = None
             else:
+                st.caption(f"Device calibration NN : **{HES_DEVICE_LABEL}**")
                 calib_T_target = st.session_state.get("heston_calib_T_target")
                 col_nn, col_modes = st.columns(2)
                 with col_nn:
@@ -8651,6 +8702,16 @@ def load_cached_option_chain(ticker: str) -> tuple[pd.DataFrame | None, pd.DataF
         return calls_df, puts_df, float(meta.get("S0_ref") or 0.0), float(meta.get("r") or 0.0), float(meta.get("q") or 0.0)
     except Exception:
         return None, None, None, None, None
+
+
+def load_options_meta() -> dict:
+    """Charge le meta cache options (options_last_meta.json) si disponible."""
+    try:
+        with open(CACHE_OPTIONS_META_FILE, "r") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
 
 def load_heston_params_from_json(ticker: str) -> dict | None:
