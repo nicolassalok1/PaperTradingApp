@@ -5797,6 +5797,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 )
             with col2:
                 span_lb = st.slider("Span payoff (%)", min_value=0.1, max_value=1.0, value=0.5, step=0.05, key=_k("lb_span"))
+                T_lb = st.slider("T (années)", min_value=0.05, max_value=2.0, value=float(common_maturity_value), step=0.05, key=_k("lb_T"))
 
             view_dyn = view_lookback(
                 s0_path,
@@ -5805,6 +5806,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 option_type=option_type_lb,
                 span=span_lb,
                 k_ref=float(strike_lb),
+                T=float(T_lb),
             )
             premium = float(view_dyn.get("premium", 0.0))
             price_display = abs(premium)
@@ -5866,7 +5868,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price,
                     "side": side,
                     "S0": float(s0_path),
-                    "maturity_years": common_maturity_value,
+                    "maturity_years": float(T_lb),
                     "T_0": today.isoformat(),
                     "price": price,
                     "misc": {
@@ -5874,6 +5876,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         "max_path": float(max_lb),
                         "strike_ref": float(strike_lb),
                         "span": float(span_lb),
+                        "T": float(T_lb),
                         "spot_at_pricing": float(s0_path),
                     },
                 }
@@ -8094,6 +8097,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     key=_k("lbf_k"),
                 )
                 span_lbf = st.slider("Span payoff (%)", min_value=0.1, max_value=1.0, value=0.5, step=0.05, key=_k("lbf_span"))
+                T_lbf = st.slider("T (années)", min_value=0.05, max_value=2.0, value=float(common_maturity_value), step=0.05, key=_k("lbf_T"))
 
             view_dyn = view_lookback_fixed(
                 s0_path,
@@ -8102,6 +8106,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 strike_lbf,
                 option_type=option_type_lbf,
                 span=span_lbf,
+                T=float(T_lbf),
             )
             premium = float(view_dyn.get("premium", 0.0))
             s_grid = view_dyn["s_grid"]
@@ -8144,7 +8149,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ).strip().upper()
             st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
-            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            expiration_dt = today + datetime.timedelta(days=int((T_lbf or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("lbf_qty"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("lbf_side"))
 
@@ -8160,13 +8165,14 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price,
                     "side": side,
                     "S0": float(s0_path),
-                    "maturity_years": float(common_maturity_value),
+                    "maturity_years": float(T_lbf),
                     "T_0": today.isoformat(),
                     "price": price,
                     "misc": {
                         "min_path": float(min_lbf),
                         "max_path": float(max_lbf),
                         "span": float(span_lbf),
+                        "T": float(T_lbf),
                         "spot_at_pricing": float(s0_path),
                     },
                 }
@@ -8193,12 +8199,13 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             )
             floor_val = st.slider("Floor", min_value=-0.5, max_value=0.5, value=0.0, step=0.01, key=_k("cliquet_floor"))
             cap_val = st.slider("Cap", min_value=0.0, max_value=0.5, value=0.1, step=0.01, key=_k("cliquet_cap"))
+            T_clq = st.slider("T (années)", min_value=0.05, max_value=2.0, value=float(common_maturity_value), step=0.05, key=_k("cliquet_T"))
 
             view_dyn = view_cliquet(
                 s0_path,
                 floor=floor_val,
                 cap=cap_val,
-                T=float(common_maturity_value),
+                T=float(T_clq),
                 r=float(common_rate_value),
                 q=float(d_common),
                 sigma=float(common_sigma_value),
@@ -8245,7 +8252,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
             ).strip().upper()
             st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
             today = datetime.date.today()
-            expiration_dt = today + datetime.timedelta(days=int((common_maturity_value or 0.0) * 365))
+            expiration_dt = today + datetime.timedelta(days=int((T_clq or 0.0) * 365))
             qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("cliquet_qty"))
             side = st.selectbox("Sens", ["long", "short"], index=0, key=_k("cliquet_side"))
 
@@ -8261,13 +8268,14 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     "avg_price": price,
                     "side": side,
                     "S0": float(s0_path),
-                    "maturity_years": float(common_maturity_value),
+                    "maturity_years": float(T_clq),
                     "T_0": today.isoformat(),
                     "price": price,
                     "misc": {
                         "floor": float(floor_val),
                         "cap": float(cap_val),
                         "strike_ref": float(strike_clq),
+                        "T": float(T_clq),
                         "spot_at_pricing": float(s0_path),
                     },
                 }

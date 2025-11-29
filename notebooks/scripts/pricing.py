@@ -661,6 +661,7 @@ def view_lookback(
     max_path: float,
     span: float = 0.5,
     n: int = 300,
+    T: float = DEFAULT_T,
     k_ref: float | None = None,
     **kwargs,
 ):
@@ -678,7 +679,16 @@ def payoff_lookback_fixed(min_path: float, max_path: float, strike: float, optio
     return max(max_path - strike, 0.0)
 
 
-def view_lookback_fixed(spot_ref: float, min_path: float, max_path: float, strike: float, span: float = 0.5, n: int = 300, **kwargs):
+def view_lookback_fixed(
+    spot_ref: float,
+    min_path: float,
+    max_path: float,
+    strike: float,
+    span: float = 0.5,
+    n: int = 300,
+    T: float = DEFAULT_T,
+    **kwargs,
+):
     premium = float(payoff_lookback_fixed(min_path, max_path, strike, option_type=kwargs.get("option_type", "call")))
     s_grid = np.linspace(spot_ref * (1.0 - span), spot_ref * (1.0 + span), n)
     payoff_grid = np.full_like(s_grid, premium)
