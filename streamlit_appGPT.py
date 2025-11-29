@@ -5175,7 +5175,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 calib_T_target = st.session_state.get("heston_calib_T_target")
                 col_nn, col_modes = st.columns(2)
                 with col_nn:
-                    calib_T_band_default = float(st.session_state.get("heston_cboe_calib_band", 0.2))
+                    calib_T_band_default = float(st.session_state.get("heston_cboe_calib_band", 0.05))
 
                     unique_T = sorted(calls_df["T"].round(2).unique().tolist())
                     if unique_T:
@@ -5205,10 +5205,10 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     calib_T_band = st.number_input(
                         "Largeur bande T (±)",
                         value=calib_T_band_default,
-                        min_value=0.05,
+                        min_value=0.0001,
                         max_value=0.5,
-                        step=0.05,
-                        format="%.2f",
+                        step=0.01,
+                        format="%.4f",
                         key=_k("heston_cboe_calib_band"),
                         help="Largeur de la bande de maturités autour de la cible utilisée pour la calibration.",
                     )
