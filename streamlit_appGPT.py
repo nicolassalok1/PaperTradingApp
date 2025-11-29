@@ -299,6 +299,10 @@ def run_app_options():
     from Lookback.european_call import european_call_option
     from Lookback.lookback_call import lookback_call_option
     from Heston.heston_torch import HestonParams, carr_madan_call_torch
+    try:
+        tf.reset_default_graph = tf.compat.v1.reset_default_graph
+    except Exception:
+        pass
 
     torch.set_default_dtype(torch.float64)
     def _pick_heston_device():
@@ -5036,8 +5040,6 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 strike_common=common_strike_value,
                 key_prefix=_k("basket"),
             )
-        with tab_european:
-            st.info("Onglet Européenne (BSM) masqué pour le moment.")
 
         with tab_heston:
             st.header("Option européenne – Heston")
