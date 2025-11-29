@@ -5218,7 +5218,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     st.subheader("⚙️ Modes de calibration NN")
                     mode = st.radio(
                         "Choisir un mode",
-                        ["Rapide", "Bonne", "Excellente"],
+                        ["Rapide", "Bonne", "Excellente", "Custom"],
                         index=0,
                         horizontal=True,
                         key=_k("heston_cboe_mode"),
@@ -5230,9 +5230,27 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                     elif mode == "Bonne":
                         max_iters = 1000
                         learning_rate = 0.005
-                    else:
+                    elif mode == "Excellente":
                         max_iters = 2000
                         learning_rate = 0.001
+                    else:
+                        max_iters = st.number_input(
+                            "Itérations NN (custom)",
+                            min_value=50,
+                            max_value=10000,
+                            value=500,
+                            step=50,
+                            key=_k("heston_cboe_max_iters_custom"),
+                        )
+                        learning_rate = st.number_input(
+                            "Learning rate (custom)",
+                            min_value=1e-5,
+                            max_value=0.1,
+                            value=0.005,
+                            step=0.0005,
+                            format="%.5f",
+                            key=_k("heston_cboe_lr_custom"),
+                        )
                     st.markdown(
                         f"**Itérations NN** : `{max_iters}`  \n"
                         f"**Learning rate** : `{learning_rate}`"
