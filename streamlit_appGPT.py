@@ -2331,7 +2331,7 @@ def run_app_options():
         render_unlock_sidebar_button("tab_basket", "🔓 Réactiver T (onglet Basket)")
 
         min_assets, max_assets = 2, 10
-        closing_path = DATASETS_DIR / "closing_prices.csv"
+        closing_path = DATASETS_DIR / "basket_closing_prices.csv"
         prices_df_cached, csv_tickers = load_closing_prices_with_tickers(closing_path)
 
         def _normalize_tickers(candidates: list[str]) -> list[str]:
@@ -2396,7 +2396,7 @@ def run_app_options():
         interval = st.selectbox("Intervalle", ["1d", "1h"], index=0, key=_k("corr_interval"))
 
         st.caption(
-            "Le calcul de corrélation utilise les prix de clôture présents dans database/GPTab/closing_prices.csv (régénéré via yfinance). "
+            "Le calcul de corrélation utilise les prix de clôture présents dans database/GPTab/basket_closing_prices.csv (régénéré via yfinance). "
             "En cas d'échec, une matrice de corrélation inventée sera utilisée."
         )
         regen_csv = st.button("Mettre à jour la Matrice de Corrélation", key=_k("btn_regen_closing"))
@@ -2406,7 +2406,7 @@ def run_app_options():
                 closing_path.parent.mkdir(parents=True, exist_ok=True)
                 prices_df_cached.to_csv(closing_path, index=False)
                 csv_tickers = [c for c in prices_df_cached.columns if str(c).lower() != "date"]
-                st.info(f"database/GPTab/closing_prices.csv généré via yfinance ({len(prices_df_cached)} lignes)")
+                st.info(f"database/GPTab/basket_closing_prices.csv généré via yfinance ({len(prices_df_cached)} lignes)")
                 if csv_tickers:
                     st.session_state["basket_tickers"] = _normalize_tickers(csv_tickers)
                     tickers = st.session_state["basket_tickers"]
@@ -2418,12 +2418,12 @@ def run_app_options():
             if prices_df_cached is None:
                 prices_df_cached, _ = load_closing_prices_with_tickers(closing_path)
             if prices_df_cached is None:
-                raise FileNotFoundError("Impossible de charger database/GPTab/closing_prices.csv.")
+                raise FileNotFoundError("Impossible de charger database/GPTab/basket_closing_prices.csv.")
             corr_df = compute_corr_from_prices(prices_df_cached)
             st.success(f"Corrélation calculée à partir de {closing_path.name}")
             st.dataframe(corr_df)
         except Exception as exc:
-            st.warning(f"Impossible de calculer la corrélation depuis database/GPTab/closing_prices.csv : {exc}")
+            st.warning(f"Impossible de calculer la corrélation depuis database/GPTab/basket_closing_prices.csv : {exc}")
             corr_df = pd.DataFrame(
                 [
                     [1.0, 0.6, 0.4],
@@ -3380,7 +3380,15 @@ def run_app_options():
 
         if fetch_btn:
             try:
+                try:
+                    load_cboe_data.clear()
+                except Exception:
+                    pass
                 calls_df, puts_df, S0_ref, rf_rate, div_yield = load_cboe_data(ticker)
+                if ((calls_df is None or calls_df.empty) and (puts_df is None or puts_df.empty)):
+                    st.error("🔴 Aucun résultat pour ce ticker (CBOE). Vérifie le code et réessaie.")
+                    st.session_state["heston_cboe_loaded_once"] = False
+                    return
                 try:
                     t_for_rate = float(np.median(calls_df["T"])) if calls_df is not None and not calls_df.empty else 1.0
                     rf_rate = float(get_r(t_for_rate) or rf_rate or 0.02)
@@ -10506,7 +10514,7 @@ with st.sidebar:
                 CACHE_OPTIONS_META_FILE,
                 DATASETS_DIR / "train.csv",
                 DATASETS_DIR / "test.csv",
-                DATASETS_DIR / "closing_prices.csv",
+                DATASETS_DIR / "basket_closing_prices.csv",
                 Path(NOTEBOOKS_SCRIPTS_DIR) / "GPT" / "closing_cache.csv",
             ]:
                 _safe_truncate(p)
@@ -10532,7 +10540,7 @@ with st.sidebar:
             CACHE_OPTIONS_META_FILE,
             DATASETS_DIR / "train.csv",
             DATASETS_DIR / "test.csv",
-            DATASETS_DIR / "closing_prices.csv",
+            DATASETS_DIR / "basket_closing_prices.csv",
             Path(NOTEBOOKS_SCRIPTS_DIR) / "GPT" / "closing_cache.csv",
         ]:
             _safe_truncate(p)
