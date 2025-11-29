@@ -5278,13 +5278,19 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         st.session_state["heston_v0_common"] = params_dict["v0"]
                         st.session_state["carr_madan_calibrated"] = True
                         # Persist Heston params dans un JSON par ticker
+                        ticker_local = (
+                            st.session_state.get("heston_cboe_ticker")
+                            or st.session_state.get("tkr_common")
+                            or st.session_state.get("common_underlying")
+                            or ""
+                        ).strip().upper()
                         params_to_save = params_dict | {
-                            "ticker": ticker,
+                            "ticker": ticker_local,
                             "S0_ref": float(S0_ref),
                             "rf_rate": float(rf_rate),
                             "dividend_yield": float(div_yield),
                         }
-                        save_heston_params_to_json(ticker, params_to_save)
+                        save_heston_params_to_json(ticker_local, params_to_save)
                         st.success("✓ Calibration terminée")
                         st.dataframe(pd.Series(params_dict, name="Paramètre").to_frame())
                         st.balloons()
@@ -5341,7 +5347,7 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 try:
                     heatmap_status = st.info("Calcul surface IV Heston…")
                     # Centre la grille autour des sliders K/T actuels
-                    k_vals = _heatmap_axis(float(K_slider_h), span_mc)
+                    k_vals = _heatmap_axis(float(S0_h), 15.0)
                     t_vals = _heatmap_axis(float(T_slider_h), t_band_h)
 
                     call_matrix = np.zeros((len(t_vals), len(k_vals)), dtype=float)
