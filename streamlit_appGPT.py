@@ -5446,6 +5446,44 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                                 "displaylogo": False,
                             },
                         )
+                        # Surface de prix Heston (mêmes axes, Z = prix)
+                        price_masked = np.nan_to_num(price_grid, nan=0.0, posinf=0.0, neginf=0.0)
+                        fig_px = go.Figure(
+                            data=[
+                                go.Surface(
+                                    x=k_vals,
+                                    y=t_vals,
+                                    z=price_masked,
+                                    colorscale="Plasma",
+                                    showscale=True,
+                                )
+                            ]
+                        )
+                        fig_px.update_layout(
+                            scene=dict(
+                                xaxis_title="Strike K",
+                                yaxis_title="Maturité T",
+                                zaxis_title="Prix Heston",
+                                camera=dict(eye=dict(x=1.5, y=1.5, z=0.8)),
+                                xaxis=dict(autorange=True),
+                                yaxis=dict(autorange=True),
+                                zaxis=dict(autorange=True),
+                            ),
+                            scene_dragmode="orbit",
+                            height=500,
+                            margin=dict(l=0, r=0, b=0, t=0),
+                            hovermode=False,
+                        )
+                        st.plotly_chart(
+                            fig_px,
+                            use_container_width=True,
+                            key=_k("heston_price_surface"),
+                            config={
+                                "scrollZoom": False,
+                                "modeBarButtonsToRemove": ["zoom3d", "pan3d", "resetCameraDefault3d", "resetCameraLastSave3d"],
+                                "displaylogo": False,
+                            },
+                        )
                     except Exception as _surf_exc:
                         st.warning(f"Impossible d'afficher la surface IV : {_surf_exc}")
                 except Exception as exc:
