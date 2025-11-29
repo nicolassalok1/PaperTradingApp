@@ -64,6 +64,8 @@ import shutil
 APP_DIR = Path(__file__).resolve().parent
 DATASETS_DIR = APP_DIR / "database" / "GPTab"
 DATASETS_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_CSV_DIR = DATASETS_DIR / "cache_CSV"
+CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
 JSON_DIR = DATASETS_DIR / "jsons"
 OLD_JSON_DIR = APP_DIR / "database" / "jsons"
 try:
@@ -79,12 +81,41 @@ SCRIPTS_DIR = APP_DIR / "scripts" / "scriptsGPT"
 PRICING_DIR = SCRIPTS_DIR / "pricing_scripts"
 NOTEBOOKS_SCRIPTS_DIR = APP_DIR / "notebooks" / "scripts"
 PRICING_SCRIPT_DIR = DATASETS_DIR / "pricing_script"
-CACHE_OPTIONS_HISTORY_FILE = DATASETS_DIR / "options_last_history.csv"
-CACHE_OPTIONS_CALLS_FILE = DATASETS_DIR / "options_last_calls.csv"
-CACHE_OPTIONS_PUTS_FILE = DATASETS_DIR / "options_last_puts.csv"
+CACHE_OPTIONS_HISTORY_FILE = CACHE_CSV_DIR / "options_last_history.csv"
+CACHE_OPTIONS_CALLS_FILE = CACHE_CSV_DIR / "options_last_calls.csv"
+CACHE_OPTIONS_PUTS_FILE = CACHE_CSV_DIR / "options_last_puts.csv"
 CACHE_OPTIONS_META_FILE = JSON_DIR / "options_last_meta.json"
 LEGACY_OPTIONS_META_FILE = DATASETS_DIR / "options_last_meta.json"
 HESTON_PARAMS_FILE = JSON_DIR / "heston_params.json"
+BASKET_CLOSING_FILE = CACHE_CSV_DIR / "basket_closing_prices.csv"
+CLOSING_CACHE_FILE = CACHE_CSV_DIR / "closing_cache.csv"
+TRAIN_FILE = CACHE_CSV_DIR / "train.csv"
+TEST_FILE = CACHE_CSV_DIR / "test.csv"
+
+# Migration : déplacer les CSV depuis database/GPTab vers database/GPTab/cache_CSV
+def _migrate_csv_caches() -> None:
+    legacy_files = [
+        "options_last_history.csv",
+        "options_last_calls.csv",
+        "options_last_puts.csv",
+        "basket_closing_prices.csv",
+        "closing_cache.csv",
+        "closing_prices.csv",
+        "train.csv",
+        "test.csv",
+    ]
+    for fname in legacy_files:
+        old_path = DATASETS_DIR / fname
+        new_path = CACHE_CSV_DIR / fname
+        try:
+            if old_path.exists() and not new_path.exists():
+                new_path.parent.mkdir(parents=True, exist_ok=True)
+                old_path.replace(new_path)
+        except Exception:
+            pass
+
+
+_migrate_csv_caches()
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(PRICING_DIR))
 sys.path.insert(0, str(PRICING_SCRIPT_DIR))
@@ -2343,7 +2374,7 @@ def run_app_options():
         render_unlock_sidebar_button("tab_basket", "🔓 Réactiver T (onglet Basket)")
 
         min_assets, max_assets = 2, 10
-        closing_path = DATASETS_DIR / "basket_closing_prices.csv"
+        closing_path = BASKET_CLOSING_FILE
         prices_df_cached, csv_tickers = load_closing_prices_with_tickers(closing_path)
 
         def _normalize_tickers(candidates: list[str]) -> list[str]:
@@ -2408,8 +2439,8 @@ def run_app_options():
         interval = st.selectbox("Intervalle", ["1d", "1h"], index=0, key=_k("corr_interval"))
 
         st.caption(
-            "Le calcul de corrélation utilise les prix de clôture présents dans database/GPTab/basket_closing_prices.csv (régénéré via yfinance). "
-            "En cas d'échec, une matrice de corrélation inventée sera utilisée."
+            "Le calcul de corrélation utilise les prix de clôture présents dans database/GPTab/cache_CSV/basket_closing_prices.csv "
+            "(régénéré via yfinance). En cas d'échec, une matrice de corrélation inventée sera utilisée."
         )
         regen_csv = st.button("Mettre à jour la Matrice de Corrélation", key=_k("btn_regen_closing"))
         try:
@@ -2418,7 +2449,7 @@ def run_app_options():
                 closing_path.parent.mkdir(parents=True, exist_ok=True)
                 prices_df_cached.to_csv(closing_path, index=False)
                 csv_tickers = [c for c in prices_df_cached.columns if str(c).lower() != "date"]
-                st.info(f"database/GPTab/basket_closing_prices.csv généré via yfinance ({len(prices_df_cached)} lignes)")
+                st.info(f"database/GPTab/cache_CSV/basket_closing_prices.csv généré via yfinance ({len(prices_df_cached)} lignes)")
                 if csv_tickers:
                     st.session_state["basket_tickers"] = _normalize_tickers(csv_tickers)
                     tickers = st.session_state["basket_tickers"]
@@ -2430,12 +2461,12 @@ def run_app_options():
             if prices_df_cached is None:
                 prices_df_cached, _ = load_closing_prices_with_tickers(closing_path)
             if prices_df_cached is None:
-                raise FileNotFoundError("Impossible de charger database/GPTab/basket_closing_prices.csv.")
+                raise FileNotFoundError("Impossible de charger database/GPTab/cache_CSV/basket_closing_prices.csv.")
             corr_df = compute_corr_from_prices(prices_df_cached)
             st.success(f"Corrélation calculée à partir de {closing_path.name}")
             st.dataframe(corr_df)
         except Exception as exc:
-            st.warning(f"Impossible de calculer la corrélation depuis database/GPTab/basket_closing_prices.csv : {exc}")
+            st.warning(f"Impossible de calculer la corrélation depuis database/GPTab/cache_CSV/basket_closing_prices.csv : {exc}")
             corr_df = pd.DataFrame(
                 [
                     [1.0, 0.6, 0.4],
@@ -2471,9 +2502,9 @@ def run_app_options():
         x_train, y_train, x_test, y_test = split_data_nn(df, split_ratio=split_ratio)
         Path("data").mkdir(parents=True, exist_ok=True)
         if st.session_state.get("carr_madan_calibrated", False):
-            pd.concat([x_train, y_train], axis=1).to_csv(DATASETS_DIR / "train.csv", index=False)
-            pd.concat([x_test, y_test], axis=1).to_csv(DATASETS_DIR / "test.csv", index=False)
-            st.info("train.csv et test.csv générés (suite calibration Carr–Madan).")
+            pd.concat([x_train, y_train], axis=1).to_csv(TRAIN_FILE, index=False)
+            pd.concat([x_test, y_test], axis=1).to_csv(TEST_FILE, index=False)
+            st.info("train.csv et test.csv générés dans cache_CSV (suite calibration Carr–Madan).")
         else:
             st.info("Calibre d'abord le NN Carr–Madan pour générer train.csv et test.csv.")
 
@@ -10479,10 +10510,11 @@ with st.sidebar:
                 CACHE_OPTIONS_PUTS_FILE,
                 CACHE_OPTIONS_META_FILE,
                 LEGACY_OPTIONS_META_FILE,
-                DATASETS_DIR / "train.csv",
-                DATASETS_DIR / "test.csv",
-                DATASETS_DIR / "basket_closing_prices.csv",
-                DATASETS_DIR / "closing_cache.csv",
+                TRAIN_FILE,
+                TEST_FILE,
+                BASKET_CLOSING_FILE,
+                CLOSING_CACHE_FILE,
+                CACHE_CSV_DIR / "closing_prices.csv",
             ]:
                 _safe_truncate(p)
             # Books & expirées
@@ -10506,10 +10538,11 @@ with st.sidebar:
             CACHE_OPTIONS_PUTS_FILE,
             CACHE_OPTIONS_META_FILE,
             LEGACY_OPTIONS_META_FILE,
-            DATASETS_DIR / "train.csv",
-            DATASETS_DIR / "test.csv",
-            DATASETS_DIR / "basket_closing_prices.csv",
-            DATASETS_DIR / "closing_cache.csv",
+            TRAIN_FILE,
+            TEST_FILE,
+            BASKET_CLOSING_FILE,
+            CLOSING_CACHE_FILE,
+            CACHE_CSV_DIR / "closing_prices.csv",
         ]:
             _safe_truncate(p)
         try:
