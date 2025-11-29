@@ -39,3 +39,22 @@ Onglets disponibles : Volatility Tools / RL & Finance Lab / AI Trading Bot.
 ## Notes
 - L’app charge des dépendances lourdes (torch, tensorflow, plotly…). Prévois quelques minutes d’installation.
 - Si tu ne veux pas installer Alpaca/OpenAI, garde les variables non définies : l’UI gère les erreurs mais les fonctions liées ne marcheront pas.
+
+## Déploiement Streamlit Cloud
+1. Vérifie en local : `pip install -r requirements.txt` puis `streamlit run streamlit_app.py`.
+2. Assure-toi que les datasets `database/` sont versionnés (ils sont utilisés en lecture/écriture par l’app).
+3. Ajoute `runtime.txt` à la racine avec la version Python recommandée pour le build Cloud (ex. `3.10`).
+4. Pousse la branche sur GitHub, puis crée l’app sur https://share.streamlit.io en pointant vers `streamlit_app.py`.
+5. Déclare les secrets dans l’onglet **Settings > Secrets** de Streamlit Cloud :
+   ```
+   OPENAI_API_KEY = "sk-..."
+   APCA_API_KEY_ID = "..."
+   APCA_API_SECRET_KEY = "..."
+   ```
+6. Redémarre l’app depuis le dashboard Streamlit si tu modifies `requirements.txt` ou les secrets.
+7. Persistance : les fichiers écrits dans `database/GPTab/jsons/` restent entre runs mais seront réinitialisés lors d’un redeploy; sauvegarde-les si besoin (export depuis l’UI ou copie manuelle).
+
+## Déploiement self-host (VM/serveur)
+- Démarre avec : `streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port 8501`.
+- Optionnel : place `.streamlit/secrets.toml` à la racine pour tes clés (même contenu que l’exemple ci-dessus).
+- Si tu utilises un reverse-proxy (Nginx, Caddy), active le WebSocket pass-through et limite le timeout à ≥ 120s pour les calculs lourds.

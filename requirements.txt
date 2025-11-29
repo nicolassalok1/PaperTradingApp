@@ -3,6 +3,7 @@ numpy
 pandas
 python-dotenv
 requests
+urllib3>=1.26.18,<2
 
 # Finance & data APIs
 alpaca-trade-api
