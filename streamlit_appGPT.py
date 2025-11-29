@@ -3271,7 +3271,9 @@ def run_app_options():
 
 
         _, cached_hist = load_cached_option_history()
-        default_tkr = st.session_state.get("tkr_common") or get_last_cached_option_ticker() or "SPY"
+        meta_options = load_options_meta()
+        meta_tkr = (meta_options.get("ticker") or "").strip().upper()
+        default_tkr = meta_tkr or st.session_state.get("tkr_common") or get_last_cached_option_ticker() or "SPY"
         # Ticker input with refresh button beside it
         ticker = st.text_input(
             "Ticker (sous-jacent)",
@@ -3279,6 +3281,9 @@ def run_app_options():
             key="heston_cboe_ticker",
             help="Code du sous-jacent coté au CBOE utilisé pour la calibration Heston.",
         ).strip().upper()
+        # Forcer l'usage du ticker cache Options si présent (ex: BTC)
+        if meta_tkr:
+            ticker = meta_tkr
         fetch_btn = st.button("🔄 Refresh", type="primary", key="heston_cboe_fetch")
         st.session_state["tkr_common"] = ticker
         st.session_state["common_underlying"] = ticker
@@ -5118,6 +5123,11 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                 st.dataframe(pd.Series(heston_params_table, name="Paramètre").to_frame(), use_container_width=True, hide_index=False)
             else:
                 st.info("Calibre Heston pour afficher les paramètres.")
+            st.caption(
+                f"Paramètres de calibration utilisés : Ticker={st.session_state.get('heston_cboe_ticker', '')} | "
+                f"S0={S0_h:.4f} | K slider={K_slider_h:.4f} | T slider={T_slider_h:.4f} | "
+                f"r={r_h:.4f} | q={d_h:.4f} | Bande T=±{t_band_h:.2f}"
+            )
             st.subheader("🎯 Calibration NN Carr-Madan")
             span_mc = float(st.session_state.get("heatmap_span_value", 20.0))
             calls_df = st.session_state.get("heston_calls_df")
@@ -5224,17 +5234,27 @@ Le payoff final est une tente inversée centrée sur le strike, avec profit au c
                         st.error("Veuillez choisir une maturité T cible après avoir chargé les données.")
                         st.stop()
 
-                    calib_slice = calls_df[
-                        (calls_df["T"].round(2).between(*calib_band_range))
-                        & (calls_df["K"].between(S0_ref - span_mc, S0_ref + span_mc))
-                        & (calls_df["C_mkt"] > 0.05)
-                        & (calls_df["iv_market"] > 0)
+                    df_selected = calls_df if opt_type_h == "call" else puts_df
+                    if df_selected is None or df_selected.empty:
+                        df_selected = calls_df
+                    if df_selected is None or df_selected.empty:
+                        st.error("Pas de points pour la calibration (calls/puts).")
+                        st.stop()
+                    df_selected = df_selected.copy()
+                    if opt_type_h == "put" and "C_mkt" not in df_selected.columns and "P_mkt" in df_selected.columns:
+                        df_selected["C_mkt"] = df_selected["P_mkt"]
+
+                    calib_slice = df_selected[
+                        (df_selected["T"].round(2).between(*calib_band_range))
+                        & (df_selected["K"].between(S0_ref - span_mc, S0_ref + span_mc))
+                        & (df_selected["C_mkt"] > 0.05)
+                        & (df_selected["iv_market"] > 0)
                     ]
                     if len(calib_slice) < 5:
-                        calib_slice = calls_df.copy()
+                        calib_slice = df_selected.copy()
 
                     st.info(f"📡 Données CBOE chargées pour {st.session_state.get('heston_cboe_ticker', '')} (cache)")
-                    st.success(f"{len(calls_df)} calls, {len(puts_df)} puts | S0 ≈ {S0_ref:.2f}")
+                    st.success(f"{len(calls_df)} calls, {len(puts_df)} puts | S0 ≈ {S0_ref:.2f} | Calibration sur {'calls' if opt_type_h == 'call' else 'puts'}")
                     st.write(f"Maturité T cible pour la calibration : {calib_T_target:.2f} ans")
 
                     progress_bar = st.progress(0.0)
