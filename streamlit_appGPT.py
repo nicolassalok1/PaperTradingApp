@@ -3602,7 +3602,7 @@ def run_app_options():
         st.info("Charge un ticker via la calibration Heston pour afficher l'historique 1 an.")
     else:
         header_table = pd.DataFrame.from_dict(
-            {"S0": [common_spot_value], "r": [common_rate_value], "d": [float(d_common)]}
+            {"Ticker (cache)": [st.session_state.get("heston_cboe_ticker", "")], "S0": [common_spot_value], "r": [common_rate_value], "d": [float(d_common)]}
         )
         st.dataframe(header_table, use_container_width=True, hide_index=True)
         hist_df = pd.DataFrame()
@@ -11095,55 +11095,61 @@ with tab1:
                         "Error": str(exc),
                     })
 
-        if rows_custom:
-            df_custom = pd.DataFrame(rows_custom)
-            st.dataframe(df_custom, width="stretch", hide_index=True)
+        if "rows_custom" not in locals():
+            rows_custom = []
+        df_custom = pd.DataFrame(rows_custom) if rows_custom else pd.DataFrame(
+            columns=["ID/Contract", "Product", "Underlying", "Type", "Side", "Strike", "Strike2", "Expiration", "Quantity", "Misc (json)"]
+        )
+        st.dataframe(df_custom, width="stretch", hide_index=True)
 
-            st.markdown("#### Profils payoff / P&L (options ouvertes)")
-            spot_cache: dict[str, float | None] = {}
+        st.markdown("#### Profils payoff / P&L (options ouvertes)")
+        spot_cache: dict[str, float | None] = {}
 
-            def _spot_live(sym: str) -> float | None:
-                if not sym:
-                    return None
-                if sym in spot_cache:
-                    return spot_cache[sym]
-                spot_val = get_spot_cboe_cached(sym)
-                if spot_val is None or spot_val <= 0:
-                    spot_val = float(get_data(sym).get("price", 0.0) or 0.0)
-                spot_cache[sym] = spot_val
-                return spot_val
+        def _spot_live(sym: str) -> float | None:
+            if not sym:
+                return None
+            if sym in spot_cache:
+                return spot_cache[sym]
+            spot_val = get_spot_cboe_cached(sym)
+            if spot_val is None or spot_val <= 0:
+                spot_val = float(get_data(sym).get("price", 0.0) or 0.0)
+            spot_cache[sym] = spot_val
+            return spot_val
 
-            for key, pos in custom_opts.items():
-                underlying = (pos.get("underlying") or "").upper()
-                avg_price = float(pos.get("avg_price", pos.get("T_0_price", 0.0)) or 0.0)
-                side = (pos.get("side") or "long").lower()
-                current_spot = _spot_live(underlying) or float(pos.get("S0", 0.0) or 0.0)
-                strike = float(pos.get("strike", 0.0) or 0.0)
-                base_ref = current_spot if current_spot > 0 else (strike if strike > 0 else 1.0)
-                s_grid = np.linspace(max(0.01, 0.5 * base_ref), 1.5 * base_ref, 180)
-                pay_grid = np.array([compute_option_payoff(pos, s) for s in s_grid], dtype=float)
-                if side == "short":
-                    pay_grid *= -1.0
-                pnl_grid = pay_grid - avg_price if side == "long" else avg_price + pay_grid
+        if not custom_opts:
+            st.info("Aucune option custom enregistrée.")
 
-                _, _, _, mark_price, method = _price_from_pricing_py(pos, None)
+        for key, pos in custom_opts.items():
+            underlying = (pos.get("underlying") or "").upper()
+            avg_price = float(pos.get("avg_price", pos.get("T_0_price", 0.0)) or 0.0)
+            side = (pos.get("side") or "long").lower()
+            current_spot = _spot_live(underlying) or float(pos.get("S0", 0.0) or 0.0)
+            strike = float(pos.get("strike", 0.0) or 0.0)
+            base_ref = current_spot if current_spot > 0 else (strike if strike > 0 else 1.0)
+            s_grid = np.linspace(max(0.01, 0.5 * base_ref), 1.5 * base_ref, 180)
+            pay_grid = np.array([compute_option_payoff(pos, s) for s in s_grid], dtype=float)
+            if side == "short":
+                pay_grid *= -1.0
+            pnl_grid = pay_grid - avg_price if side == "long" else avg_price + pay_grid
 
-                with st.expander(f"{key} – {pos.get('product_type', pos.get('product')) or 'Option'} ({underlying})"):
-                    st.caption(f"Spot (CBOE/cache): {current_spot:.4f}" if current_spot else "Spot indisponible")
-                    st.metric("Payoff actuel", f"${(pay_grid[np.searchsorted(s_grid, current_spot, side='left') - 1] if current_spot else 0.0):.4f}", help=f"Méthode: {method}")
-                    fig, ax = plt.subplots(figsize=(6, 3))
-                    ax.plot(s_grid, pay_grid, label="Payoff (signé)")
-                    ax.plot(s_grid, pnl_grid, label="P&L (vs. prime)", color="darkorange")
-                    if strike > 0:
-                        ax.axvline(strike, color="gray", linestyle="--", label=f"K = {strike:.2f}")
-                    if current_spot:
-                        ax.axvline(current_spot, color="crimson", linestyle="-.", label=f"S_now = {current_spot:.2f}")
-                    ax.axhline(0, color="black", linewidth=0.8)
-                    ax.set_xlabel("Spot")
-                    ax.set_ylabel("Payoff / P&L")
-                    ax.legend(loc="best")
-                    ax.grid(alpha=0.3, linestyle="--")
-                    st.pyplot(fig, clear_figure=True)
+            _, _, _, mark_price, method = _price_from_pricing_py(pos, None)
+
+            with st.expander(f"{key} – {pos.get('product_type', pos.get('product')) or 'Option'} ({underlying})"):
+                st.caption(f"Spot (CBOE/cache): {current_spot:.4f}" if current_spot else "Spot indisponible")
+                st.metric("Payoff actuel", f"${(pay_grid[np.searchsorted(s_grid, current_spot, side='left') - 1] if current_spot else 0.0):.4f}", help=f"Méthode: {method}")
+                fig, ax = plt.subplots(figsize=(6, 3))
+                ax.plot(s_grid, pay_grid, label="Payoff (signé)")
+                ax.plot(s_grid, pnl_grid, label="P&L (vs. prime)", color="darkorange")
+                if strike > 0:
+                    ax.axvline(strike, color="gray", linestyle="--", label=f"K = {strike:.2f}")
+                if current_spot:
+                    ax.axvline(current_spot, color="crimson", linestyle="-.", label=f"S_now = {current_spot:.2f}")
+                ax.axhline(0, color="black", linewidth=0.8)
+                ax.set_xlabel("Spot")
+                ax.set_ylabel("Payoff / P&L")
+                ax.legend(loc="best")
+                ax.grid(alpha=0.3, linestyle="--")
+                st.pyplot(fig, clear_figure=True)
 
             with st.expander("Manage custom options", expanded=False):
                 for key, pos in custom_opts.items():
