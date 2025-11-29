@@ -19,7 +19,6 @@ Une app Streamlit qui regroupe trois modules :
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
-
 ## Lancement
 ```bash
 streamlit run streamlit_app.py
