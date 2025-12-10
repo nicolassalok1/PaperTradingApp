@@ -1,60 +1,114 @@
-# Volatility & RL Dashboards
+# PaperTradingApp — MVC Architecture Specification
 
-Une app Streamlit qui regroupe trois modules :
-- **Volatility Tools** : analyse IV, pricing straddles et earnings crush (Yahoo Finance).
-- **RL & Finance Lab** : notebooks interactifs et démos RL/quant (pricing, hedging, signals, stratégies, NLP sentiment).
-- **AI Trading Bot** : tableau de bord trading/options (Alpaca, pricing avancé, persistance JSON locale).
+This document defines the official MVC structure of the PaperTradingApp and the
+rules that MUST be followed by all contributors.
 
-## Arborescence
-- `streamlit_app.py` : point d’entrée qui assemble les modules en onglets.
-- `scripts/` : app Volatility Tools.
-- `streamlit_appVol.py` et `database/RLtab/` : app RL & Finance Lab + datasets.
-- `streamlit_appGPT.py` et `scripts/scriptsGPT/` : app AI Trading Bot + scripts/pricing.
-- `database/GPTab/` : datasets de l’onglet Volatility/Trading.
-- `database/GPTab/jsons/` : stockage local (portefeuille, options, forwards…).
-- `tests/` : scripts de vérification/fixtures.
+---
 
-## Installation
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-```
 
-## Lancement
-```bash
-streamlit run streamlit_app.py
-```
-Onglets disponibles : Volatility Tools / RL & Finance Lab / AI Trading Bot.
+## 1. Layer Responsibilities
 
-## Variables d’environnement utiles
-- `OPENAI_API_KEY` : pour les appels ChatGPT dans l’onglet AI Trading Bot.
-- `APCA_API_KEY_ID` et `APCA_API_SECRET_KEY` : clés Alpaca (paper ou live) si tu actives les calls API.
-- `HTTP_PROXY` / `HTTPS_PROXY` : si nécessaire derrière un proxy.
+### MODEL (`app/model`)
+Pure domain logic:
+- pricing engines
+- hedging engines
+- backtesting engines
+- yield curve builder
+- market data fetchers
+- portfolio repository, valuation, stats
+- Heston / Greeks / heatmaps / surfaces
+- trading systems, logs, execution
+- dashboard domain logic
 
-## Données locales
-- Les portefeuilles/options/forwards sont stockés dans `database/GPTab/jsons/`. Ils sont créés/écrasés par l’UI.
-- Les jeux de données RL/quant sont dans `database/RLtab/` (sous-dossiers data). Les notebooks ont été déplacés sous `notebooks/`.
-- Les datasets Trading/IV sont dans `database/GPTab/`.
+Model rules:
+- MAY read/write local database (JSON/Cache/CSV)
+- MAY call external APIs (Alpaca, yfinance, FRED…)
+- MUST NOT contain Streamlit or UI logic.
 
-## Notes
-- L’app charge des dépendances lourdes (torch, tensorflow, plotly…). Prévois quelques minutes d’installation.
-- Si tu ne veux pas installer Alpaca/OpenAI, garde les variables non définies : l’UI gère les erreurs mais les fonctions liées ne marcheront pas.
+---
 
-## Déploiement Streamlit Cloud
-1. Vérifie en local : `pip install -r requirements.txt` puis `streamlit run streamlit_app.py`.
-2. Assure-toi que les datasets `database/` sont versionnés (ils sont utilisés en lecture/écriture par l’app).
-3. Ajoute `runtime.txt` à la racine avec la version Python recommandée pour le build Cloud (ex. `3.10`).
-4. Pousse la branche sur GitHub, puis crée l’app sur https://share.streamlit.io en pointant vers `streamlit_app.py`.
-5. Déclare les secrets dans l’onglet **Settings > Secrets** de Streamlit Cloud :
-   ```
-   OPENAI_API_KEY = "sk-..."
-   APCA_API_KEY_ID = "..."
-   APCA_API_SECRET_KEY = "..."
-   ```
-6. Redémarre l’app depuis le dashboard Streamlit si tu modifies `requirements.txt` ou les secrets.
-7. Persistance : les fichiers écrits dans `database/GPTab/jsons/` restent entre runs mais seront réinitialisés lors d’un redeploy; sauvegarde-les si besoin (export depuis l’UI ou copie manuelle).
+### CONTROLLER (`app/controller`)
+Thin glue layer:
+- receives input from the view
+- sanitizes parameters
+- calls the right MODEL service
+- returns data objects ready for the view
 
-## Déploiement self-host (VM/serveur)
-- Démarre avec : `streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port 8501`.
-- Optionnel : place `.streamlit/secrets.toml` à la racine pour tes clés (même contenu que l’exemple ci-dessus).
-- Si tu utilises un reverse-proxy (Nginx, Caddy), active le WebSocket pass-through et limite le timeout à ≥ 120s pour les calculs lourds.
+Controllers MUST NOT:
+- perform domain logic
+- access DB directly
+- call external APIs directly
+- perform formatting/UI work
+
+---
+
+### VIEW (`app/vue`)
+Streamlit UI:
+- pages
+- components
+- user interactions
+- rendering only
+
+View rules:
+- MUST NOT import app.model.* directly
+- MUST NOT manipulate business objects directly
+- MUST communicate ONLY with controllers
+
+---
+
+### UTILS (`app/utils`)
+Minimal stateless helpers:
+- io.py
+- math_utils.py
+- paths.py
+
+And nothing else.
+
+Legacy files (`cache_manager`, `data_loader`, `repository`, `options_text`, `iv_cache`)
+were removed via U2 cleanup.
+
+---
+
+## 2. MVC Integrity Checks
+
+### Forbidden:
+- View → Model direct import
+- Controller → View import
+- Model → View import
+- utils/ containing domain logic or persistence
+
+### Allowed:
+- View → Controller
+- Controller → Model
+- Model → utils (stateless only)
+
+---
+
+## 3. Maintenance Pipeline
+
+A non-breaking cleaning pipeline is provided under `/scripts/mvc_autofix.yml`.
+It detects and fixes:
+- legacy utils
+- invalid imports
+- broken MVC
+- stale compatibility files
+- missing controller boundaries
+
+To run it manually:
+python scripts/run_mvc_autofix.py
+
+
+---
+
+## 4. Folder Structure Reference
+
+
+
+app/
+controller/ → routing logic
+model/ → domain logic
+utils/ → pure helpers
+vue/ → Streamlit pages and components
+
+
+This structure is now validated and clean.

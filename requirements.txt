@@ -1,30 +1,49 @@
+############################################################
 # Core & utilities
-numpy
-pandas
-python-dotenv
-requests
+############################################################
+numpy==1.26.4
+pandas==2.1.4
+python-dotenv==1.0.1
+requests==2.31.0
 urllib3>=1.26.18,<2
+tqdm==4.66.2
+pyyaml==6.0
+ujson==5.9.0
 
-# Finance & data APIs
-alpaca-trade-api
-yfinance
+############################################################
+# Finance & data APIs (Alpaca + Yahoo + official Alpaca SDK)
+############################################################
+alpaca-py==0.12.0                # NEW official SDK required for RL/Hedger/Portfolio Allocation
+yfinance==0.2.43
 
-# Visualization
-matplotlib
-plotly
-seaborn
-wordcloud
+############################################################
+# Visualization & Dashboard
+############################################################
+altair==5.3.0
+matplotlib==3.8.4
+plotly==5.22.0
+seaborn==0.13.2
+wordcloud==1.9.3
+streamlit==1.38.0
+websockets==11.0.3
+playwright==1.40.0
 
-# Machine Learning / DL
-numba
-scipy
-tensorflow
-torch
-scikit-learn
+############################################################
+# RL, Greeks, Optimization, Backtesting
+############################################################
+numba==0.59.1
+scipy==1.11.4
+scikit-learn==1.3.2
+statsmodels==0.14.1
 
-# Streamlit app
-streamlit
-websockets>=14.0
+############################################################
+# Deep Learning (Torch + TensorFlow for RL/Pipeline)
+############################################################
+tensorflow==2.15.0
+torch==2.2.2
+torchvision==0.17.2
 
+############################################################
 # AI assistant
-openai
+############################################################
+openai==1.13.3

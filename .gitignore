@@ -127,6 +127,9 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
+.secrets/
+alpaca_keys.json
 .venv
 env/
 venv/
@@ -148,6 +151,10 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Data and generated caches
+data/*
+database/*
 
 # Pyre type checker
 .pyre/
