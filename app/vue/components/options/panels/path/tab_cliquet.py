@@ -72,7 +72,6 @@ def render_tab_cliquet():
     ax_ts.set_title(f"Clôtures {hist_tkr} (Cliquet)")
     ax_ts.legend(loc="best")
     fig_ts.autofmt_xdate()
-    show_and_close(fig_ts)
 
     fig_pay, ax_pay = plt.subplots(figsize=(7, 4))
     ax_pay.plot(s_grid, payoff_grid, label="Payoff cliquet")
@@ -83,7 +82,7 @@ def render_tab_cliquet():
     ax_pay.set_xlabel("Spot")
     ax_pay.set_ylabel("Payoff / P&L")
     ax_pay.set_title("Cliquet / Ratchet (approx)")
-    show_and_close(fig_pay)
+    render_figures_grid([fig_ts, fig_pay])
 
     price = float(premium)
     st.markdown("### Ajouter au dashboard")

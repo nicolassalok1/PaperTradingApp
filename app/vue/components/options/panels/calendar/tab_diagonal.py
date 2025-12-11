@@ -108,6 +108,7 @@ def render_tab_diagonal():
     pnl_s0 = payoff_s0 - premium
 
     forward_start_date = datetime.date.today() + datetime.timedelta(days=int(t_near * 365))
+    figs = []
     if close_series is not None and hasattr(close_series, "empty") and not close_series.empty:
         fig_ts, ax_ts = plt.subplots(figsize=(8, 3))
         ax_ts.plot(close_series.index, close_series.values, label=f"{hist_tkr} close (1y)")
@@ -123,7 +124,7 @@ def render_tab_diagonal():
         ax_ts.set_title(f"Clôtures {hist_tkr} (strikes / start)")
         ax_ts.legend(loc="best")
         fig_ts.autofmt_xdate()
-        show_and_close(fig_ts)
+        figs.append(fig_ts)
     else:
         st.info(
             "Ajoute un ticker commun en haut de l'onglet Options pour tracer l'historique 1 an."
@@ -140,7 +141,8 @@ def render_tab_diagonal():
     ax_pay.set_xlabel("Spot")
     ax_pay.set_ylabel("Payoff / P&L")
     ax_pay.set_title(f"Diagonal spread ({option_type_diag})")
-    show_and_close(fig_pay)
+    figs.append(fig_pay)
+    render_figures_grid(figs)
 
     price = float(premium)
     st.markdown("### Ajouter au dashboard")

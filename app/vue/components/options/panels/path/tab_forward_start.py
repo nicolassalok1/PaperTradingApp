@@ -48,6 +48,7 @@ def render_tab_forward_start():
     )
     opt_type = "call" if option_char.lower() == "c" else "put"
     strike_forward = m_factor * spot_start
+    figs = []
     fig_ts, ax_ts = plt.subplots(figsize=(8, 3))
     ax_ts.plot(close_series.index, close_series.values, label=f"{hist_tkr} close (1y)")
     ax_ts.axhline(spot_start, color="gray", linestyle="--", label=f"S_start = {spot_start:.2f}")
@@ -61,7 +62,7 @@ def render_tab_forward_start():
     ax_ts.set_title(f"Clôtures {hist_tkr} (Forward-start)")
     ax_ts.legend(loc="best")
     fig_ts.autofmt_xdate()
-    show_and_close(fig_ts)
+    figs.append(fig_ts)
     view_dyn = view_forward_start(
         S0,
         spot_start,
@@ -86,7 +87,8 @@ def render_tab_forward_start():
     ax.set_ylabel("Payoff / P&L")
     ax.set_title("Forward-start (payoff & P&L avec prime BS)")
     ax.legend(loc="lower right")
-    show_and_close(fig)
+    figs.append(fig)
+    render_figures_grid(figs)
 
     st.session_state[_k("forward_start_pre_price")] = premium
     price = float(premium)

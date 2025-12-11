@@ -23,7 +23,7 @@ if (-not (Get-Variable -Name "__test_transcript_active" -Scope Global -ErrorActi
         $global:__test_transcript_active = $true
         $startedTranscript = $true
     } catch {
-        Write-Warning "Transcript start failed for $scriptName: $_"
+        Write-Warning ("Transcript start failed for {0}: {1}" -f $scriptName, $_)
     }
 }
 

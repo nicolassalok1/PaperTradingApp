@@ -89,7 +89,6 @@ def render_tab_heston():
     ax_ts.set_title(f"Clotures {ticker}")
     ax_ts.legend(loc="best")
     fig_ts.autofmt_xdate()
-    show_and_close(fig_ts)
 
     s_grid = np.linspace(0.4 * spot_ref, 1.6 * spot_ref, 200)
     if option_type == "call":
@@ -108,7 +107,7 @@ def render_tab_heston():
     ax_pay.set_ylabel("Payoff / P&L")
     ax_pay.set_title(f"Payoff {option_type} (CBOE + BS)")
     ax_pay.legend(loc="best")
-    show_and_close(fig_pay)
+    render_figures_grid([fig_ts, fig_pay])
 
     if st.button("Ajouter au dashboard", key=_k("heston_add_clean"), type="primary"):
         payload = {

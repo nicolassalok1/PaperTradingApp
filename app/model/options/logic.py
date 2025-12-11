@@ -1141,39 +1141,80 @@ def load_closing_prices_with_tickers(path: Path) -> tuple[pd.DataFrame | None, l
 
 def load_close_series_for_ticker(ticker: str, fallback_value: float | None = None) -> pd.Series:
     """
-    Charge une sÃƒÂ©rie de clÃƒÂ´tures pour un ticker depuis cache_csv/closing_cache.csv.
-    Si absent ou invalide, tÃƒÂ©lÃƒÂ©charge via yfinance et met ÃƒÂ  jour le cache.
+    Charge une série de clôtures pour un ticker.
+    - Lit cache_csv/closing_cache.csv si la colonne du ticker est présente.
+    - Sinon télécharge via fetch_closing_prices (1y, 1d), normalise Date/Close, met à jour le cache.
+    - Sinon retourne une série fallback si fournie.
     """
     ticker_norm = (ticker or "").strip().upper()
-    try:
-        if CLOSING_CACHE_FILE.exists():
-            df_cache = pd.read_csv(CLOSING_CACHE_FILE, parse_dates=True)
-            date_col = next(
-                (c for c in df_cache.columns if str(c).lower() in {"date", "datetime", "index"}),
-                None,
-            )
-            price_cols = [
-                c for c in df_cache.columns if str(c).lower() not in {"date", "datetime", "index"}
-            ]
-            price_col = ticker_norm if ticker_norm in df_cache.columns else None
-            if price_col:
-                dates = (
-                    pd.to_datetime(df_cache[date_col]) if date_col else pd.RangeIndex(len(df_cache))
-                )
-                series = pd.Series(df_cache[price_col].values, index=dates, name="Close")
-                if not series.empty:
-                    return series
-    except Exception:
-        pass
+
+    def _to_series(df: pd.DataFrame) -> pd.Series:
+        if df is None or df.empty:
+            return pd.Series(dtype=float)
+        date_col = next(
+            (c for c in df.columns if str(c).lower() in {"date", "datetime", "index"}),
+            df.columns[0],
+        )
+        close_col = next(
+            (
+                c
+                for c in df.columns
+                if str(c).lower() in {"close", "adjclose", "adj_close", "adj close"}
+            ),
+            None,
+        )
+        if close_col is None and len(df.columns) > 1:
+            close_col = df.columns[-1]
+        dates = pd.to_datetime(df[date_col], errors="coerce")
+        series = pd.Series(df[close_col].values, index=dates, name="Close")
+        return series.dropna()
+
+    def _load_from_cache() -> pd.Series:
+        try:
+            if not CLOSING_CACHE_FILE.exists():
+                return pd.Series(dtype=float)
+            df_cache = pd.read_csv(CLOSING_CACHE_FILE, parse_dates=["Date"])
+            if ticker_norm not in df_cache.columns:
+                return pd.Series(dtype=float)
+            dates = pd.to_datetime(df_cache["Date"], errors="coerce")
+            series = pd.Series(df_cache[ticker_norm].values, index=dates, name="Close")
+            return series.dropna()
+        except Exception:
+            return pd.Series(dtype=float)
+
+    def _write_cache(series: pd.Series) -> None:
+        if series is None or series.empty:
+            return
+        try:
+            CLOSING_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            if CLOSING_CACHE_FILE.exists():
+                df_cache = pd.read_csv(CLOSING_CACHE_FILE, parse_dates=["Date"])
+            else:
+                df_cache = pd.DataFrame({"Date": series.index})
+            df_series = pd.DataFrame({"Date": series.index, ticker_norm: series.values})
+            df_cache["Date"] = pd.to_datetime(df_cache["Date"], errors="coerce")
+            merged = df_cache.merge(df_series, on="Date", how="outer")
+            merged = merged.sort_values("Date")
+            merged.to_csv(CLOSING_CACHE_FILE, index=False)
+        except Exception:
+            pass
+
+    # 1) Cache
+    series = _load_from_cache()
+    if series is not None and not series.empty:
+        return series
+
+    # 2) Download (already cached to cache/ohlc_*)
     try:
         df_dl = fetch_closing_prices(ticker_norm, period="1y", interval="1d")
-        if df_dl is not None and not df_dl.empty and ticker_norm in df_dl.columns:
-            CLOSING_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            df_dl.to_csv(CLOSING_CACHE_FILE, index=False)
-            dates = pd.to_datetime(df_dl.iloc[:, 0])
-            return pd.Series(df_dl[ticker_norm].values, index=dates, name="Close")
+        series = _to_series(df_dl)
+        if series is not None and not series.empty:
+            _write_cache(series)
+            return series
     except Exception:
         pass
+
+    # 3) Fallback
     if fallback_value is not None:
         return pd.Series([fallback_value], index=pd.Index([datetime.date.today()]), name="Close")
     return pd.Series(dtype=float)

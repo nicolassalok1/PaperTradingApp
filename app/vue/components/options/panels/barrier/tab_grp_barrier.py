@@ -100,6 +100,7 @@ def render_tab_grp_barrier():
         payoff_s0 = float(np.interp(s0_ref, s_grid, payoff_grid))
         pnl_s0 = payoff_s0 - premium
 
+    figs = []
     if close_series is not None and hasattr(close_series, "empty") and not close_series.empty:
         fig_ts, ax_ts = plt.subplots(figsize=(8, 3))
         ax_ts.plot(close_series.index, close_series.values, label=f"{hist_tkr} close (1y)")
@@ -111,7 +112,7 @@ def render_tab_grp_barrier():
         ax_ts.set_title(f"Clôtures {hist_tkr} (strike/barrière)")
         ax_ts.legend(loc="best")
         fig_ts.autofmt_xdate()
-        show_and_close(fig_ts)
+        figs.append(fig_ts)
     else:
         st.info(
             "Ajoute un ticker commun en haut de l'onglet Options pour afficher l'historique 1 an."
@@ -128,7 +129,8 @@ def render_tab_grp_barrier():
     ax_pay.set_xlabel("Spot")
     ax_pay.set_ylabel("Payoff / P&L")
     ax_pay.set_title(f"Barrier {'binaire' if binary_b else 'vanilla'} ({direction_b} / {knock_b})")
-    show_and_close(fig_pay)
+    figs.append(fig_pay)
+    render_figures_grid(figs)
 
     price = float(premium)
     st.markdown("### Ajouter au dashboard")

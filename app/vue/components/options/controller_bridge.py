@@ -207,6 +207,23 @@ def render_static_line_chart(series, title: str | None = None, y_label: str | No
     return True
 
 
+def render_figures_grid(figs):
+    """
+    Render a list of matplotlib figures in responsive 2-column rows.
+    On narrow viewports Streamlit stacks columns automatically.
+    """
+    if not figs:
+        return
+    for i in range(0, len(figs), 2):
+        pair = [f for f in figs[i : i + 2] if f is not None]
+        if not pair:
+            continue
+        cols = st.columns(len(pair))
+        for col, fig in zip(cols, pair):
+            col.pyplot(fig, clear_figure=True)
+            plt.close(fig)
+
+
 def show_and_close(fig):
     """Render a matplotlib figure in Streamlit and close it to avoid figure leaks."""
     try:
@@ -278,6 +295,7 @@ __all__ = [
     "resolve_common_underlying",
     "load_shared_close_series",
     "render_static_line_chart",
+    "render_figures_grid",
     "show_and_close",
     "floor_n",
     "math",
