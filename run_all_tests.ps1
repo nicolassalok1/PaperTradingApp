@@ -15,11 +15,12 @@ if (-not (Get-Variable -Name "__test_transcript_active" -Scope Global -ErrorActi
         $global:__test_transcript_active = $true
         $startedTranscript = $true
     } catch {
-        Write-Warning "Transcript start failed for $scriptName: $_"
+        Write-Warning "Transcript start failed for $($scriptName): $_"
     }
 }
 
 $scriptsDir = Join-Path $repoRoot "scripts"
+$env:PYTHONPATH = "$repoRoot;$env:PYTHONPATH"
 
 $pyTests = @()
 if (Test-Path $scriptsDir) {
@@ -44,7 +45,7 @@ try {
         $exitCode = 0
         $output = ""
 
-        Push-Location (Split-Path -Parent $Path)
+        Push-Location $repoRoot
         try {
             $output = & python $Path 2>&1
             $exitCode = $LASTEXITCODE

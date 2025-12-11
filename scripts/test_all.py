@@ -38,7 +38,7 @@ def run_cmd(cmd: List[str], cwd: Path | None = None):
 
 def syntax_check():
     step("Syntax check (py_compile)")
-    py_files = [Path(p) for p in run_cmd(["git", "ls-files", "*.py"]).splitlines() if p.strip()]
+    py_files = [REPO_ROOT / p for p in run_cmd(["git", "ls-files", "*.py"]).splitlines() if p.strip()]
     for f in py_files:
         try:
             run_cmd([sys.executable, "-m", "py_compile", str(f)])
