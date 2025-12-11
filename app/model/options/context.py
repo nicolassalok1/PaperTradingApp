@@ -1,40 +1,83 @@
 from __future__ import annotations
 
-from typing import Mapping, MutableMapping
+import pandas as pd
+
+from app.model.market_data.market_data import fetch_closing_prices, fetch_spot_price
 
 
-def get_option_context_from_state(state_dict: Mapping | MutableMapping | None = None):
+def _session_spot_value() -> float | None:
+    """Grab common_spot_value from Streamlit session if available (no direct import)."""
+    try:
+        st = __import__("streamlit")
+        val = st.session_state.get("common_spot_value")
+        return float(val) if val is not None else None
+    except Exception:
+        return None
+
+
+def _extract_close_series(df: pd.DataFrame) -> pd.Series:
+    if df is None or df.empty:
+        return pd.Series(dtype=float)
+    date_col = next((c for c in df.columns if str(c).lower() == "date"), df.columns[0])
+    close_col = next((c for c in df.columns if str(c).lower() == "close"), None)
+    if close_col is None and len(df.columns) > 1:
+        close_col = df.columns[1]
+    series = pd.Series(df[close_col].values, index=pd.to_datetime(df[date_col], errors="coerce"))
+    return series.dropna()
+
+
+def build_option_context(ticker: str) -> dict:
     """
-    Build a lightweight options context from an explicit state mapping.
-    No UI dependency: the caller must pass the state values.
+    Build an option context with close series and inferred spot.
     """
-    state = state_dict or {}
-    S0 = float(state.get("common_spot_value", 100.0))
-    ticker = (
-        state.get("common_underlying")
-        or state.get("tkr_common")
-        or state.get("heston_cboe_ticker")
-        or ""
-    )
+    tk = (ticker or "").strip().upper()
+    closes_df = fetch_closing_prices(tk, period="2y", interval="1d")
+    close_series = _extract_close_series(closes_df)
+
+    s0 = _session_spot_value()
+    if s0 is None and not close_series.empty:
+        try:
+            s0 = float(close_series.iloc[-1])
+        except Exception:
+            s0 = None
+    if s0 is None:
+        s0 = fetch_spot_price(tk)
 
     ctx = {
-        "S0": S0,
-        "ticker": str(ticker).upper(),
-        "close_series": S0,
+        "S0": float(s0) if s0 is not None else None,
+        "ticker": tk,
+        "close_series": close_series,
+        "_k": lambda name: f"{tk}_{name}",
     }
-
-    key_builder = state.get("_k")
-    if key_builder is not None:
-        ctx["_k"] = key_builder
-
     return ctx
 
 
-def get_option_context(state_dict: Mapping | MutableMapping | None = None):
+def get_option_context_from_state(state_dict=None):
     """
-    Backward-compatible wrapper to keep the old name while expecting an explicit state.
+    Compatibility wrapper that accepts a state mapping from the UI.
     """
+    state = state_dict or {}
+    tk = (
+        state.get("common_underlying")
+        or state.get("tkr_common")
+        or state.get("heston_cboe_ticker")
+        or state.get("ticker")
+        or ""
+    )
+    ctx = build_option_context(tk)
+    if "common_spot_value" in state and state.get("common_spot_value") is not None:
+        try:
+            ctx["S0"] = float(state.get("common_spot_value"))
+        except Exception:
+            pass
+    if "_k" in state:
+        ctx["_k"] = state["_k"]
+    return ctx
+
+
+def get_option_context(state_dict=None):
+    """Backward-compatible alias."""
     return get_option_context_from_state(state_dict)
 
 
-__all__ = ["get_option_context_from_state", "get_option_context"]
+__all__ = ["build_option_context", "get_option_context_from_state", "get_option_context"]

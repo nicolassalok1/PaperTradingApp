@@ -7,6 +7,12 @@ from app.vue.components.options.controller_bridge import *
 
 def render_panel_exotics():
     st.subheader("Options Exotiques (Advanced)")
+    ctx = get_option_context()
+    if ctx.get("S0") is not None:
+        st.session_state["common_spot_value"] = ctx["S0"]
+    close_series = ctx.get("close_series")
+    if close_series is not None and hasattr(close_series, "empty") and not close_series.empty:
+        st.line_chart(close_series)
 
     exotic_labels = [
         "Quanto",

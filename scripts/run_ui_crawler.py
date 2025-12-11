@@ -14,7 +14,7 @@ except ModuleNotFoundError:
     raise
 
 ERROR_JSON = Path("logs/ui_error.json")
-STREAMLIT_URL = "http://localhost:8506"
+STREAMLIT_URL = "http://localhost:8501"
 STREAMLIT_APP = Path("app/vue/main_app.py")
 
 STARTUP_WAIT = 6

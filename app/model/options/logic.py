@@ -16,6 +16,8 @@ import requests
 from scipy.stats import norm
 import yfinance as yf
 
+from app.model.market_data.market_data import fetch_spot_price
+
 try:
     from alpaca_trade_api import REST as AlpacaREST
     from alpaca_trade_api.rest import TimeFrame
@@ -1480,3 +1482,111 @@ def download_options_cboe(symbol: str, option_type: str):
     div = _extract_meta(html, "Dividend Yield")
     save_csv(df, f"CBOE_{sym}_{opt_type}.csv")
     return df, spot, rf, div
+
+
+def download_options_alpaca(symbol: str) -> pd.DataFrame:
+    """
+    Download option snapshots from Alpaca Market Data API v1beta1.
+    Returns a normalized DataFrame with columns: symbol, K, T, S0, iv, type.
+    """
+    sym = _normalize_symbol(symbol)
+    if not sym:
+        return pd.DataFrame()
+
+    key, secret, _ = _load_alpaca_credentials()
+    headers = {
+        "APCA-API-KEY-ID": key or "",
+        "APCA-API-SECRET-KEY": secret or "",
+    }
+    url = f"https://data.alpaca.markets/v1beta1/options/snapshots/{quote_plus(sym)}"
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        payload = resp.json() or {}
+    except Exception as exc:
+        logging.warning(f"[alpaca-options] download failed for {sym}: {exc}")
+        return pd.DataFrame()
+
+    snapshots = payload.get("snapshots") or payload.get("data") or {}
+    if not isinstance(snapshots, dict) or not snapshots:
+        return pd.DataFrame()
+
+    today = datetime.date.today()
+    s0_val = fetch_spot_price(sym)
+    s0_val = float(s0_val) if s0_val is not None else float("nan")
+
+    def _decode_from_opra(opra: str) -> tuple[float | None, datetime.date | None, str | None]:
+        if not opra or len(opra) < 15:
+            return None, None, None
+        try:
+            opra_str = str(opra)
+            expiry = datetime.datetime.strptime(opra_str[-15:-9], "%y%m%d").date()
+            strike = int(opra_str[-8:]) / 1000.0
+            opt_type = "call" if opra_str[-9].upper() == "C" else "put"
+            return strike, expiry, opt_type
+        except Exception:
+            return None, None, None
+
+    records: list[dict] = []
+    for opra, snap in snapshots.items():
+        if not isinstance(snap, dict):
+            continue
+        strike, expiry, opt_type = _decode_from_opra(opra if opra is not None else "")
+        if strike is None:
+            strike = snap.get("strike") or snap.get("strike_price") or snap.get("details", {}).get(
+                "strike_price"
+            )
+        if expiry is None:
+            exp_val = snap.get("expiration_date") or snap.get("details", {}).get("expiration_date")
+            if exp_val:
+                try:
+                    expiry = datetime.datetime.fromisoformat(str(exp_val)).date()
+                except Exception:
+                    try:
+                        expiry = datetime.datetime.strptime(str(exp_val), "%Y-%m-%d").date()
+                    except Exception:
+                        expiry = None
+        if opt_type is None:
+            right = snap.get("type") or snap.get("right")
+            if right:
+                opt_type = "call" if str(right).upper().startswith("C") else "put"
+
+        greeks = snap.get("greeks") or snap.get("latestGreeks") or {}
+        iv_val = greeks.get("iv") or greeks.get("impliedVolatility") or snap.get("iv")
+
+        quote = snap.get("latestQuote") or snap.get("quote") or {}
+        bid = quote.get("bidPrice") or quote.get("bid_price") or quote.get("bid")
+        ask = quote.get("askPrice") or quote.get("ask_price") or quote.get("ask")
+        mid = None
+        try:
+            if bid is not None and ask is not None:
+                mid = (float(bid) + float(ask)) / 2.0
+        except Exception:
+            mid = None
+        if iv_val is None and mid is not None:
+            iv_val = snap.get("impliedVolatility")
+
+        if strike is None or expiry is None or iv_val is None or opt_type is None:
+            continue
+
+        T = (expiry - today).days / 365.0
+        records.append(
+            {
+                "symbol": sym,
+                "K": float(strike),
+                "T": float(T),
+                "S0": s0_val,
+                "iv": float(iv_val),
+                "type": opt_type,
+            }
+        )
+
+    df = pd.DataFrame(records, columns=["symbol", "K", "T", "S0", "iv", "type"])
+    try:
+        CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
+        out_path = CACHE_CSV_DIR / f"options_alpaca_{sym}.csv"
+        df.to_csv(out_path, index=False)
+    except Exception:
+        pass
+    return df

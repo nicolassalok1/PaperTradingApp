@@ -21,7 +21,6 @@ import requests
 
 REPO_ROOT = Path(__file__).resolve().parent
 
-
 def step(msg: str):
     print(f"[STEP] {msg}", flush=True)
 
