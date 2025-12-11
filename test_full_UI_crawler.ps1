@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 Write-Host "=== FULL UI CRAWLER STARTED ===" -ForegroundColor Cyan
 
 # CONFIG
-$port = 8503
+$port = 8501
 $url = "http://localhost:$port"
 $errorJson = "ui_error.json"
 
