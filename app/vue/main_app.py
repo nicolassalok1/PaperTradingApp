@@ -66,6 +66,8 @@ EXCLUDED_LABELS = {
     "🛡️ Hedger",
     "🛒 Buy/Sell",
     "🧪 Trading Systems / Backtest",
+    "📊 Dashboard",
+    "💼 Portfolio",
 }
 
 
