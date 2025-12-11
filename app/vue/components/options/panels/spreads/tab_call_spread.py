@@ -26,7 +26,7 @@ def render_tab_call_spread():
         "Strike call long",
         min_value=0.5 * float(common_spot_value),
         max_value=1.5 * float(common_spot_value),
-        value=0.95 * float(common_spot_value),
+        value=float(common_spot_value),
         step=0.5,
         key=_k("call_spread_k_long"),
     )
@@ -34,7 +34,7 @@ def render_tab_call_spread():
         "Strike call short",
         min_value=0.5 * float(common_spot_value),
         max_value=1.5 * float(common_spot_value),
-        value=1.05 * float(common_spot_value),
+        value=float(common_spot_value),
         step=0.5,
         key=_k("call_spread_k_short"),
     )

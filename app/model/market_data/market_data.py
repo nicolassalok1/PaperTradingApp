@@ -37,6 +37,9 @@ _UA = (
     "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 )
 
+_YF_SESSION = requests.Session()
+_YF_CRUMB: str | None = None
+
 
 def _http_get_json(
     url: str, *, params: dict | None = None, timeout: int = 12, retries: int = 3
@@ -55,6 +58,63 @@ def _http_get_json(
             return r.json()
         except Exception as exc:
             last_exc = exc
+            time.sleep(0.4 * (k + 1))
+    raise last_exc  # type: ignore[misc]
+
+
+def _refresh_yahoo_crumb(timeout: int = 12) -> str | None:
+    """Fetch Yahoo crumb (needed for some endpoints like options)."""
+    global _YF_CRUMB
+    try:
+        # This endpoint seeds cookies (even if it returns 404).
+        _YF_SESSION.get("https://fc.yahoo.com", timeout=timeout, headers={"User-Agent": _UA, "Accept": "*/*"})
+    except Exception:
+        pass
+    try:
+        r = _YF_SESSION.get(
+            "https://query1.finance.yahoo.com/v1/test/getcrumb",
+            timeout=timeout,
+            headers={"User-Agent": _UA, "Accept": "*/*"},
+        )
+        r.raise_for_status()
+        crumb = (r.text or "").strip()
+        _YF_CRUMB = crumb or None
+        return _YF_CRUMB
+    except Exception:
+        _YF_CRUMB = None
+        return None
+
+
+def _yahoo_get_json(
+    url: str, *, params: dict | None = None, timeout: int = 12, retries: int = 3
+) -> dict:
+    """
+    Yahoo-specific GET that injects crumb + session cookies to avoid 401s.
+    """
+    global _YF_CRUMB
+    params = params.copy() if params else {}
+    last_exc = None
+    for k in range(retries):
+        if not _YF_CRUMB:
+            _refresh_yahoo_crumb(timeout=timeout)
+        if _YF_CRUMB:
+            params.setdefault("crumb", _YF_CRUMB)
+        try:
+            r = _YF_SESSION.get(
+                url,
+                params=params,
+                timeout=timeout,
+                headers={"User-Agent": _UA, "Accept": "application/json,text/plain,*/*"},
+            )
+            if r.status_code == 401:
+                # Crumb or cookie expired; refresh and retry.
+                _YF_CRUMB = None
+                raise requests.HTTPError(f"401 Unauthorized for {url}")
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            last_exc = exc
+            _YF_CRUMB = None
             time.sleep(0.4 * (k + 1))
     raise last_exc  # type: ignore[misc]
 
@@ -352,7 +412,7 @@ def fetch_options_chain_yahoo(symbol: str) -> tuple[pd.DataFrame, pd.DataFrame, 
 
     base = f"https://query2.finance.yahoo.com/v7/finance/options/{sym}"
 
-    root = _http_get_json(base)
+    root = _yahoo_get_json(base)
     chain = ((root.get("optionChain") or {}).get("result") or [])
     if not chain:
         return pd.DataFrame(), pd.DataFrame(), float("nan")
@@ -368,7 +428,7 @@ def fetch_options_chain_yahoo(symbol: str) -> tuple[pd.DataFrame, pd.DataFrame, 
 
     for exp in expirations:
         try:
-            data = _http_get_json(base, params={"date": int(exp)})
+            data = _yahoo_get_json(base, params={"date": int(exp)})
             r = ((data.get("optionChain") or {}).get("result") or [])
             if not r:
                 continue

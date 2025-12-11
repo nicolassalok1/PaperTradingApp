@@ -32,6 +32,14 @@ def render_options_router():
         placeholder="ex: AAPL",
     )
     tkr_common_norm = (tkr_common or "").strip().upper()
+    prev_tkr = st.session_state.get("_prev_tkr_common")
+    if tkr_common_norm and tkr_common_norm != prev_tkr:
+        try:
+            clear_closing_history_cache(tkr_common_norm, period="2y", interval="1d")
+            clear_closing_history_cache(tkr_common_norm, period="1y", interval="1d")
+        except Exception:
+            pass
+    st.session_state["_prev_tkr_common"] = tkr_common_norm
     st.session_state["tkr_common"] = tkr_common_norm
     st.session_state["common_underlying"] = tkr_common_norm
 

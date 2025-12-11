@@ -1166,7 +1166,7 @@ def load_close_series_for_ticker(ticker: str, fallback_value: float | None = Non
     except Exception:
         pass
     try:
-        df_dl = fetch_closing_prices([ticker_norm], period="1y", interval="1d")
+        df_dl = fetch_closing_prices(ticker_norm, period="1y", interval="1d")
         if df_dl is not None and not df_dl.empty and ticker_norm in df_dl.columns:
             CLOSING_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
             df_dl.to_csv(CLOSING_CACHE_FILE, index=False)
@@ -1250,7 +1250,7 @@ def load_or_fetch_closing_history(
     if df_hist is None or df_hist.empty:
         _log(f"[closing] cache miss -> download {ticker_norm} ({period}/{interval})")
         try:
-            df_hist = fetch_closing_prices([ticker_norm], period=period, interval=interval)
+            df_hist = fetch_closing_prices(ticker_norm, period=period, interval=interval)
             if (df_hist is None or df_hist.empty) and yf is not None:
                 try:
                     _log(f"[closing] try direct yf.Ticker.history for {ticker_norm}")

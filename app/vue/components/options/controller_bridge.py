@@ -199,10 +199,11 @@ def render_static_line_chart(series, title: str | None = None, y_label: str | No
             y=alt.Y(f"{y_col}:Q", title=y_title),
             tooltip=[alt.Tooltip(f"{x_col}:T", title="Date"), alt.Tooltip(f"{y_col}:Q", title=y_title)],
         )
-        .properties(title=title or "")
+        .properties(title=title or "", height=260)
         .interactive(False)
+        .configure_view(continuousHeight=260, strokeWidth=0)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, use_container_width=True, theme=None)
     return True
 
 
