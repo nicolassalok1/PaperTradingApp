@@ -12,6 +12,7 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from types import SimpleNamespace
 
 from app.controller import options_controller as oc
 from app.vue.components.options import ui_helpers as opt_ui
@@ -75,6 +76,49 @@ clear_closing_history_cache = oc.clear_closing_history_cache
 # Pricing extras
 price_iron_butterfly_bs = oc.price_iron_butterfly_bs
 compute_price_mc = oc.compute_price_mc
+
+
+def _bootstrap_fake_streamlit():
+    """
+    When running modules in bare Python (tests, scripts) Streamlit emits warnings because
+    there is no ScriptRunContext. In that situation we stub the minimal API surface we use
+    so imports and helpers work without noisy warnings.
+    """
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+    except Exception:
+        return
+
+    if get_script_run_ctx() is not None or getattr(st, "_codex_fake_streamlit", False):
+        return
+
+    class FakeState(dict):
+        def __getattr__(self, x):
+            return self.get(x, None)
+
+    st.session_state = FakeState()
+
+    # UI primitives used across option panels
+    st.write = lambda *args, **kwargs: None
+    st.markdown = lambda *args, **kwargs: None
+    st.caption = lambda *args, **kwargs: None
+    st.text = lambda *args, **kwargs: None
+    st.metric = lambda *args, **kwargs: None
+    st.line_chart = lambda *args, **kwargs: None
+    st.bar_chart = lambda *args, **kwargs: None
+    st.dataframe = lambda *args, **kwargs: None
+    st.pyplot = lambda *args, **kwargs: None
+
+    st.slider = lambda *args, **kwargs: kwargs.get("value", 0)
+    st.selectbox = lambda *args, **kwargs: kwargs.get("options", [None])[kwargs.get("index", 0)] if kwargs.get("options") else None
+    st.number_input = lambda *args, **kwargs: kwargs.get("value", 0)
+    st.button = lambda *args, **kwargs: False
+    st.columns = lambda n: [SimpleNamespace() for _ in range(n)]
+
+    st._codex_fake_streamlit = True
+
+
+_bootstrap_fake_streamlit()
 
 
 def resolve_common_underlying() -> str:
