@@ -1,20 +1,22 @@
 """
 Minimal market data API.
-- Spots: Alpaca -> fallback yfinance
-- OHLC: Alpaca -> fallback yfinance -> cached under cache/ohlc_*.csv
+- Spots: Alpaca -> fallback Yahoo chart JSON (no yfinance)
+- OHLC: Alpaca -> fallback Yahoo chart JSON -> cached under cache/ohlc_*.csv
 - Options: CBOE calls + puts merged metadata
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Tuple
 
 import pandas as pd
-import yfinance as yf
+import requests
 
 from app.utils.paths import CACHE_CSV_DIR
 
@@ -29,6 +31,51 @@ except Exception:  # pragma: no cover - optional dependency
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
+
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+)
+
+
+def _http_get_json(
+    url: str, *, params: dict | None = None, timeout: int = 12, retries: int = 3
+) -> dict:
+    """GET JSON with headers, timeout, and simple retries."""
+    last_exc = None
+    for k in range(retries):
+        try:
+            r = requests.get(
+                url,
+                params=params,
+                timeout=timeout,
+                headers={"User-Agent": _UA, "Accept": "application/json,text/plain,*/*"},
+            )
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:
+            last_exc = exc
+            time.sleep(0.4 * (k + 1))
+    raise last_exc  # type: ignore[misc]
+
+
+def _yahoo_chart(sym: str, *, range_: str = "2y", interval: str = "1d") -> pd.DataFrame:
+    """Direct Yahoo Finance chart endpoint (no yfinance dependency)."""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+    data = _http_get_json(url, params={"range": range_, "interval": interval})
+    res = (data or {}).get("chart", {}).get("result") or []
+    if not res:
+        return pd.DataFrame()
+    r0 = res[0]
+    ts = r0.get("timestamp") or []
+    q = ((r0.get("indicators") or {}).get("quote") or [{}])[0]
+    closes = q.get("close") or []
+    if not ts or not closes:
+        return pd.DataFrame()
+    idx = pd.to_datetime(pd.Series(ts, dtype="int64"), unit="s", utc=True).dt.tz_convert(None)
+    df = pd.DataFrame({"Close": pd.Series(closes, dtype="float64").values}, index=idx)
+    df = df.dropna()
+    return df
 
 
 def _load_env_fallback() -> None:
@@ -128,19 +175,6 @@ def _fetch_ohlc_alpaca(sym: str, period: str, interval: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def _fetch_ohlc_yf(sym: str, period: str, interval: str) -> pd.DataFrame:
-    """Fallback OHLC via yfinance."""
-    try:
-        df = yf.download(sym, period=period, interval=interval, progress=False, threads=False)
-        if df is None or df.empty:
-            return pd.DataFrame()
-        df = df.reset_index()
-        return _normalize_ohlc(df)
-    except Exception as exc:
-        logging.warning(f"[OHLC] yfinance failed for {sym}: {exc}")
-        return pd.DataFrame()
-
-
 def _save_cache(df: pd.DataFrame, path: Path) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -169,7 +203,7 @@ def make_alpaca_client():
 
 
 def fetch_spot_price(symbol: str):
-    """Spot price: Alpaca latest trade -> yfinance fast_info/history."""
+    """Spot price: Alpaca latest trade -> Yahoo chart fallback (no yfinance)."""
     sym = _normalize_symbol(symbol)
     if not sym:
         return None
@@ -191,25 +225,19 @@ def fetch_spot_price(symbol: str):
             logging.warning(f"[spot] Alpaca failed for {sym}: {exc}")
 
     try:
-        yt = yf.Ticker(sym)
-        fast = getattr(yt, "fast_info", {}) or {}
-        for key in ("lastPrice", "last_price", "last_close", "previousClose"):
-            val = fast.get(key)
-            if val not in (None, ""):
-                return float(val)
-        hist = yt.history(period="5d", interval="1d")
-        if hist is not None and not hist.empty and "Close" in hist.columns:
-            return float(hist["Close"].iloc[-1])
+        df = _yahoo_chart(sym, range_="5d", interval="1d")
+        if df is not None and not df.empty:
+            return float(df["Close"].iloc[-1])
     except Exception as exc:
-        logging.warning(f"[spot] yfinance failed for {sym}: {exc}")
+        logging.warning(f"[spot] yahoo chart failed for {sym}: {exc}")
 
-    return None
+    return float("nan")
 
 
 def fetch_closing_prices(symbol: str, period: str = "2y", interval: str = "1d") -> pd.DataFrame:
     """
     Closing prices (single symbol).
-    Tries Alpaca then yfinance, caches to cache/ohlc_<symbol>_<period>_<interval>.csv.
+    Tries Alpaca then Yahoo chart API (no yfinance), caches to cache/ohlc_<symbol>_<period>_<interval>.csv.
     """
     sym = _normalize_symbol(symbol)
     if not sym:
@@ -226,7 +254,17 @@ def fetch_closing_prices(symbol: str, period: str = "2y", interval: str = "1d") 
 
     df = _fetch_ohlc_alpaca(sym, period, interval)
     if df is None or df.empty:
-        df = _fetch_ohlc_yf(sym, period, interval)
+        try:
+            df_chart = _yahoo_chart(sym, range_=period, interval=interval)
+            if df_chart is not None and not df_chart.empty:
+                df_chart = df_chart.reset_index().rename(columns={"index": "Date"})
+                df_chart["Date"] = pd.to_datetime(df_chart["Date"])
+                df = _normalize_ohlc(df_chart)
+                if "Close" in df.columns and "close" not in df.columns:
+                    df["close"] = df["Close"]
+        except Exception as exc:
+            logging.warning(f"[OHLC] yahoo chart failed for {sym}: {exc}")
+            df = pd.DataFrame()
     if df is None or df.empty:
         return pd.DataFrame()
 
@@ -302,11 +340,88 @@ def fetch_options_details(symbol: str) -> Tuple[pd.DataFrame, pd.DataFrame, floa
     )
 
 
+def fetch_options_chain_yahoo(symbol: str) -> tuple[pd.DataFrame, pd.DataFrame, float]:
+    """
+    Download Yahoo options chain for all available expirations and return:
+    (calls_df, puts_df, spot)
+    Columns expected downstream: strike, iv, expiry (date), type ('call'/'put')
+    """
+    sym = _normalize_symbol(symbol)
+    if not sym:
+        return pd.DataFrame(), pd.DataFrame(), float("nan")
+
+    base = f"https://query2.finance.yahoo.com/v7/finance/options/{sym}"
+
+    root = _http_get_json(base)
+    chain = ((root.get("optionChain") or {}).get("result") or [])
+    if not chain:
+        return pd.DataFrame(), pd.DataFrame(), float("nan")
+    c0 = chain[0]
+    quote = c0.get("quote") or {}
+    spot = quote.get("regularMarketPrice")
+    expirations = c0.get("expirationDates") or []
+    if not expirations:
+        return pd.DataFrame(), pd.DataFrame(), float(spot) if spot is not None else float("nan")
+
+    all_calls: list[pd.DataFrame] = []
+    all_puts: list[pd.DataFrame] = []
+
+    for exp in expirations:
+        try:
+            data = _http_get_json(base, params={"date": int(exp)})
+            r = ((data.get("optionChain") or {}).get("result") or [])
+            if not r:
+                continue
+            opt = (((r[0].get("options") or [])[:1]) or [{}])[0]
+            calls = opt.get("calls") or []
+            puts = opt.get("puts") or []
+
+            if calls:
+                dfc = pd.DataFrame(calls)
+                all_calls.append(dfc)
+            if puts:
+                dfp = pd.DataFrame(puts)
+                all_puts.append(dfp)
+        except Exception:
+            continue
+
+    calls_df = pd.concat(all_calls, ignore_index=True) if all_calls else pd.DataFrame()
+    puts_df = pd.concat(all_puts, ignore_index=True) if all_puts else pd.DataFrame()
+
+    def _normalize(df: pd.DataFrame, typ: str) -> pd.DataFrame:
+        if df is None or df.empty:
+            return pd.DataFrame()
+        out = df.copy()
+        if "impliedVolatility" in out.columns and "iv" not in out.columns:
+            out["iv"] = out["impliedVolatility"].astype(float)
+        if "strike" in out.columns:
+            out["strike"] = out["strike"].astype(float)
+        if "expiration" in out.columns:
+            out["expiry"] = (
+                pd.to_datetime(out["expiration"], unit="s", utc=True).dt.tz_convert(None).dt.date
+            )
+        elif "expiry" in out.columns:
+            out["expiry"] = pd.to_datetime(out["expiry"]).dt.date
+        out["type"] = typ
+        keep = ["contractSymbol", "strike", "iv", "expiry", "type", "bid", "ask", "lastPrice"]
+        cols = [c for c in keep if c in out.columns]
+        return out[cols].dropna(subset=["strike", "iv", "expiry"])
+
+    calls_df = _normalize(calls_df, "call")
+    puts_df = _normalize(puts_df, "put")
+
+    if spot is None or (isinstance(spot, float) and pd.isna(spot)):
+        spot = fetch_spot_price(sym)
+
+    return calls_df, puts_df, float(spot) if spot is not None else float("nan")
+
+
 __all__ = [
     "make_alpaca_client",
     "fetch_spot_price",
     "fetch_closing_prices",
     "fetch_options_details",
+    "fetch_options_chain_yahoo",
     "load_or_fetch_closing_history",
     "clear_closing_history_cache",
 ]

@@ -8,8 +8,66 @@ import numpy as np
 
 import pandas as pd
 
-from app.model.market_data.market_data import fetch_options_details, fetch_spot_price
+from app.model.market_data.market_data import (
+    fetch_options_chain_yahoo,
+    fetch_options_details,
+    fetch_spot_price,
+)
 from app.utils.paths import CACHE_CSV_DIR
+
+
+def _build_iv_surface_from_yahoo(ticker: str, max_maturity_years: float = 2.0) -> pd.DataFrame:
+    """
+    Build IV surface using Yahoo Finance options chain JSON endpoints.
+    """
+    calls_df, puts_df, spot = fetch_options_chain_yahoo(ticker)
+    s0 = spot if pd.notna(spot) else fetch_spot_price(ticker)
+    today = dt.date.today()
+
+    records: List[dict] = []
+
+    def _append(df: pd.DataFrame, opt_type: str) -> None:
+        if df is None or df.empty:
+            return
+        for _, row in df.iterrows():
+            try:
+                expiry = row.get("expiry")
+                if not expiry:
+                    continue
+                if isinstance(expiry, dt.datetime):
+                    expiry = expiry.date()
+                days = (expiry - today).days
+                if days <= 0:
+                    continue
+                T = days / 365.0
+                if T > max_maturity_years:
+                    continue
+                K = float(row.get("strike"))
+                iv = float(row.get("iv"))
+                if pd.isna(K) or pd.isna(iv) or iv <= 0:
+                    continue
+                records.append(
+                    {
+                        "K": K,
+                        "T": T,
+                        "S0": float(s0)
+                        if s0 is not None and not pd.isna(s0)
+                        else float("nan"),
+                        "iv": iv,
+                        "type": opt_type,
+                    }
+                )
+            except Exception:
+                continue
+
+    _append(calls_df, "call")
+    _append(puts_df, "put")
+
+    out = pd.DataFrame(records)
+    if out.empty:
+        return out
+    out = out.sort_values(["type", "T", "K"]).reset_index(drop=True)
+    return out
 
 
 def _decode_opra_expiry(opra: str) -> dt.date | None:
@@ -121,11 +179,54 @@ def _build_iv_surface_from_cboe(ticker: str, max_maturity_years: float = 2.0) ->
     return surface
 
 
-def fetch_iv_surface(ticker: str, max_maturity_years: float = 2.0) -> pd.DataFrame:
+def fetch_iv_surface(
+    ticker: str,
+    max_maturity_years: float = 2.0,
+    cache: bool = True,
+    max_cache_age_hours: float = 12.0,
+) -> pd.DataFrame:
     """
-    Public entrypoint. Rebuilds IV surface from CBOE and writes CSV cache.
+    Public entrypoint. Builds IV surface via Yahoo options chain (default) with CSV cache.
+    Falls back to existing CBOE/Alpaca paths if Yahoo is empty.
     """
-    return _build_iv_surface_from_cboe(ticker, max_maturity_years=max_maturity_years)
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return pd.DataFrame()
+
+    cache_path = CACHE_CSV_DIR / f"iv_surface_yahoo_{sym}.csv"
+    if cache and cache_path.exists():
+        try:
+            age_hours = None
+            if max_cache_age_hours is not None:
+                age_seconds = dt.datetime.now().timestamp() - cache_path.stat().st_mtime
+                age_hours = age_seconds / 3600.0
+            if age_hours is None or age_hours <= max_cache_age_hours:
+                cached = pd.read_csv(cache_path)
+                if cached is not None and not cached.empty:
+                    return cached
+        except Exception:
+            pass
+
+    surface = _build_iv_surface_from_yahoo(sym, max_maturity_years=max_maturity_years)
+
+    if (surface is None or surface.empty) and cache_path.exists():
+        try:
+            cached = pd.read_csv(cache_path)
+            if cached is not None and not cached.empty:
+                surface = cached
+        except Exception:
+            pass
+
+    if surface is None or surface.empty:
+        surface = _build_iv_surface_from_cboe(sym, max_maturity_years=max_maturity_years)
+
+    if cache and surface is not None and not surface.empty:
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            surface.to_csv(cache_path, index=False)
+        except Exception:
+            pass
+    return surface if surface is not None else pd.DataFrame()
 
 
 def interpolate_surface(df: pd.DataFrame):
@@ -165,4 +266,10 @@ def load_iv_from_csv(file_obj) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-__all__ = ["fetch_iv_surface", "_build_iv_surface_from_cboe", "interpolate_surface", "load_iv_from_csv"]
+__all__ = [
+    "fetch_iv_surface",
+    "_build_iv_surface_from_yahoo",
+    "_build_iv_surface_from_cboe",
+    "interpolate_surface",
+    "load_iv_from_csv",
+]

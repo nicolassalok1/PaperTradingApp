@@ -8,11 +8,11 @@ from app.vue.components.options.controller_bridge import *
 def render_panel_vanilla():
     st.subheader("Options Vanilla / Early Exercise")
     ctx = get_option_context()
+    available = ensure_close_history(ctx)
     if ctx.get("S0") is not None:
         st.session_state["common_spot_value"] = ctx["S0"]
-    if not ensure_close_history(ctx):
+    if not available:
         return
-
     models = [
         "EuropＦnne",
         "AmＳicaine",
