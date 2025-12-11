@@ -164,9 +164,27 @@ def _inject_global_styles() -> None:
             st.markdown(css, unsafe_allow_html=True)
 
 
+def _patch_streamlit_charts() -> None:
+    """Ensure charts are non-scrollable by default (Plotly)."""
+    if getattr(st, "_charts_patched", False):
+        return
+
+    _orig_plotly_chart = st.plotly_chart
+
+    def _plotly_chart(fig, use_container_width: bool = True, **kwargs):
+        cfg = kwargs.pop("config", {}) or {}
+        base_cfg = {"scrollZoom": False, "displayModeBar": False}
+        merged_cfg = {**base_cfg, **cfg}
+        return _orig_plotly_chart(fig, use_container_width=use_container_width, config=merged_cfg, **kwargs)
+
+    st.plotly_chart = _plotly_chart  # type: ignore[assignment]
+    st._charts_patched = True  # type: ignore[attr-defined]
+
+
 def main() -> None:
     _configure_page()
     _inject_global_styles()
+    _patch_streamlit_charts()
 
     tab_labels = ordered_tab_labels(ALL_TABS)
     if not tab_labels:

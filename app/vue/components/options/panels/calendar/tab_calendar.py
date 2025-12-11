@@ -183,7 +183,8 @@ def render_tab_calendar():
         log_action("add_option", {"id": oid, "payload": payload})
         st.success(f"Option ajoutée au dashboard (id={oid})")
     # --- Bouton Add-to-Dashboard Clean ---
-    if "price" in locals() and st.button("Ajouter au dashboard", key=_k("calendar_add_clean")):
+    # removed duplicate add_clean block for cleaned UI
+    # if "price" in locals() and st.button("Ajouter au dashboard", key=_k("calendar_add_clean")):
         payload = {
             "underlying": ticker,
             "S0": S0,
