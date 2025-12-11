@@ -26,6 +26,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 TAB_GROUPS = {
+    "📊 Analyse": [
+        "📊 Dashboard v2",
+        "🧮 Yield Curve",
+        "🧱 Risk Management",
+        "🧪 Trading Systems / Backtest",
+    ],
     "📈 Trading": [
         "🛒 Buy/Sell",
         "💹 Advanced Orders",
@@ -33,12 +39,6 @@ TAB_GROUPS = {
         "🛡️ Hedger v2",
         "🤖 Hedger RL Live v2",
         "🛡️ Hedger",
-    ],
-    "📊 Analyse": [
-        "🧱 Risk Management",
-        "🧮 Yield Curve",
-        "🧪 Trading Systems / Backtest",
-        "📊 Dashboard v2",
     ],
     "🧰 Maintenance": [
         "📊 Dashboard",

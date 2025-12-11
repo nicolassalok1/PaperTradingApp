@@ -36,6 +36,15 @@ def build_option_context(ticker: str) -> dict:
     Build an option context with close series and inferred spot.
     """
     tk = (ticker or "").strip().upper()
+    if not tk:
+        s0_session = _session_spot_value()
+        s0_default = float(s0_session) if s0_session is not None else None
+        return {
+            "S0": s0_default,
+            "ticker": "",
+            "close_series": pd.Series(dtype=float),
+            "_k": lambda name: f"__EMPTY__{name}",
+        }
     try:
         close_series = load_close_series_for_ticker(tk)
     except Exception:
