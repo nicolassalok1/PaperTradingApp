@@ -1,6 +1,6 @@
 """
 Automatic debug loop for PaperTradingApp.
-Runs test_all.py, parses failures, applies targeted fixes, and repeats.
+Runs scripts/test_all.py, parses failures, applies targeted fixes, and repeats.
 """
 
 from __future__ import annotations
@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import List
 
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 PYTHON = sys.executable
-TARGET_TEST = REPO_ROOT / "test_all.py"
+TARGET_TEST = REPO_ROOT / "scripts" / "test_all.py"
 MAX_ITERATIONS = 100
 
 

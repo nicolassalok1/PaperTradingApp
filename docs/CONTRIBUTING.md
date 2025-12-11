@@ -27,7 +27,7 @@
 4. Optional diagnostics: CRR surface in an expander
 
 ## Tests
-- Run: `pytest tests/test_options_*.py`
+- Run: `pytest scripts/test_options_*.py`
 - CI runs full test suite.
 
 ## CI

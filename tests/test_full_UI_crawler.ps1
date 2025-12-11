@@ -3,20 +3,24 @@
 # ======================================================
 
 $ErrorActionPreference = "Stop"
+$repoRoot = Split-Path -Parent $PSScriptRoot
 
 Write-Host "=== FULL UI CRAWLER STARTED ===" -ForegroundColor Cyan
 
 # CONFIG
 $port = 8501
 $url = "http://localhost:$port"
-$errorJson = "ui_error.json"
+$errorJson = Join-Path $repoRoot "ui_error.json"
+$errorJsonForPy = $errorJson -replace "\\", "/"
+$appPath = Join-Path $repoRoot "app/vue/main_app.py"
+$tempFile = Join-Path $PSScriptRoot "ui_crawler_temp.py"
 
 # Clean old error file
 if (Test-Path $errorJson) { Remove-Item $errorJson }
 
 # Launch Streamlit app
 Write-Host "[*] Launching Streamlit..."
-$process = Start-Process "streamlit" -ArgumentList "run", "app/vue/main_app.py", "--server.port=$port" -PassThru
+$process = Start-Process "streamlit" -ArgumentList "run", $appPath, "--server.port=$port" -WorkingDirectory $repoRoot -PassThru
 
 Start-Sleep -Seconds 6  # wait app boot
 
@@ -26,7 +30,7 @@ import json, re, time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-ERROR_FILE = Path("$errorJson")
+ERROR_FILE = Path("$errorJsonForPy")
 STREAMLIT_URL = "$url"
 
 def extract_error(html: str):
@@ -74,12 +78,16 @@ with sync_playwright() as p:
     browser.close()
 "@
 
-$tempFile = "ui_crawler_temp.py"
 Set-Content $tempFile $py
 
 
 Write-Host "[*] Running crawler..." -ForegroundColor Cyan
-$output = python $tempFile 2>&1
+Push-Location $repoRoot
+try {
+    $output = python $tempFile 2>&1
+} finally {
+    Pop-Location
+}
 
 # Kill Streamlit process
 if ($process) {

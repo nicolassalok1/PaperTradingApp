@@ -4,6 +4,8 @@
 
 $ErrorActionPreference = "Stop"
 
+$repoRoot = Split-Path -Parent $PSScriptRoot
+
 # Colors
 function Write-OK($msg) { Write-Host "[OK] $msg" -ForegroundColor Green }
 function Write-FAIL($msg) { Write-Host "[FAIL] $msg" -ForegroundColor Red }
@@ -122,15 +124,24 @@ for k, v in results.items():
     status, msg = v
     print(f"<<RESULT>> {k} | {status} | {msg}")
 "@
-$tempFile = "test_api_temp.py"
+$tempFile = Join-Path $repoRoot "scripts/test_api_temp.py"
 Set-Content -Path $tempFile -Value $py -Encoding UTF8
 
 
 # Execute Python script
+$execFailed = $false
+Push-Location $repoRoot
 try {
     $output = python $tempFile 2>&1
 } catch {
-    Write-FAIL "Python execution failed: $_"
+    $execFailed = $true
+    $errorMsg = $_
+} finally {
+    Pop-Location
+}
+
+if ($execFailed) {
+    Write-FAIL "Python execution failed: $errorMsg"
     exit 1
 }
 

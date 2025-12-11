@@ -2,7 +2,9 @@
 # fix_env.ps1 — Full Environment Repair Script for Windows
 ###############################################################
 
-Write-Host "`n=== FIX_ENV — FULL ENVIRONMENT REPAIR ===`n" -ForegroundColor Cyan
+Write-Host "`n=== FIX_ENV - FULL ENVIRONMENT REPAIR ===`n" -ForegroundColor Cyan
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
 
 ###############################################################
 # 1. Kill ALL processes that lock Python / Matplotlib / Streamlit
@@ -38,6 +40,10 @@ if ($LASTEXITCODE -ne 0) {
     & "$env:USERPROFILE\Miniconda3\shell\condabin\conda-hook.ps1"
     conda activate $EnvName
 }
+
+$installFailed = $false
+Push-Location $repoRoot
+try {
 
 ###############################################################
 # 3. Remove Matplotlib font locks (root cause of WinError 32)
@@ -76,11 +82,13 @@ pip install --no-cache-dir -r requirements.txt
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "`nERROR during requirements install!" -ForegroundColor Red
-    exit 1
+    $installFailed = $true
 }
 
+if (-not $installFailed) {
+
 ###############################################################
-# 7. Final environment validation — import check
+# 7. Final environment validation - import check
 ###############################################################
 
 Write-Host "`nRunning global import check..." -ForegroundColor Cyan
@@ -94,6 +102,14 @@ EOF
 # 8. Launch the application
 ###############################################################
 
-Write-Host "`n=== ENV FIX COMPLETE — Launching app ===`n" -ForegroundColor Green
+Write-Host "`n=== ENV FIX COMPLETE - Launching app ===`n" -ForegroundColor Green
 
-.\run_me.ps1
+& (Join-Path $repoRoot "run_me.ps1")
+}
+} finally {
+    Pop-Location
+}
+
+if ($installFailed) {
+    exit 1
+}

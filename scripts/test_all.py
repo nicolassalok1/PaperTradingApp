@@ -6,9 +6,6 @@ RL inference sanity, and UI crawler verification.
 
 from __future__ import annotations
 
-from dotenv import load_dotenv
-load_dotenv()
-
 import json
 import os
 import subprocess
@@ -17,9 +14,11 @@ from pathlib import Path
 from typing import List
 
 import requests
+from dotenv import load_dotenv
 
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(REPO_ROOT / ".env")
 
 def step(msg: str):
     print(f"[STEP] {msg}", flush=True)

@@ -5,6 +5,8 @@
 
 $ErrorActionPreference = "Stop"
 
+$repoRoot = Split-Path -Parent $PSScriptRoot
+
 function OK($m) { Write-Host "[OK] $m" -ForegroundColor Green }
 function FAIL($m) { Write-Host "[FAIL] $m" -ForegroundColor Red }
 
@@ -99,14 +101,22 @@ for k, v in results.items():
     print(f"<<RESULT>> {k} | {status} | {msg}")
 "@
 
-$tempFile = "test_options_panels_temp.py"
+$tempFile = Join-Path $PSScriptRoot "test_options_panels_temp.py"
 Set-Content $tempFile $py
 
 
+$execFailed = $false
+Push-Location $repoRoot
 try {
     $output = python $tempFile 2>&1
 } catch {
     FAIL "Python execution failed: $_"
+    $execFailed = $true
+} finally {
+    Pop-Location
+}
+
+if ($execFailed) {
     exit 1
 }
 

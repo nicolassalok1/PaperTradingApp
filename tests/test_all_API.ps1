@@ -18,7 +18,7 @@ $tests = @(
     "test_full_UI_crawler.ps1",
     "test_options_context.ps1",
     "test_options_panels.ps1"
-)
+) | ForEach-Object { Join-Path $PSScriptRoot $_ }
 
 Write-Host "=== RUNNING FULL TEST SUITE ===" -ForegroundColor Cyan
 Write-Host ""
@@ -27,33 +27,34 @@ $globalSuccess = $true
 $results = @{}
 
 foreach ($test in $tests) {
+    $name = Split-Path $test -Leaf
     Write-Host "----------------------------------------" -ForegroundColor DarkCyan
-    Write-Host "Running $test ..." -ForegroundColor Cyan
+    Write-Host "Running $name ..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor DarkCyan
 
     if (!(Test-Path $test)) {
-        FAIL "$test NOT FOUND"
-        $results[$test] = "MISSING"
+        FAIL "$name NOT FOUND"
+        $results[$name] = "MISSING"
         $globalSuccess = $false
         continue
     }
 
     try {
-        $output = & ".\$test" 2>&1
+        $output = & $test 2>&1
 
         if ($LASTEXITCODE -ne 0) {
-            FAIL "$test FAILED (exit code $LASTEXITCODE)"
-            $results[$test] = "FAIL"
+            FAIL "$name FAILED (exit code $LASTEXITCODE)"
+            $results[$name] = "FAIL"
             $globalSuccess = $false
         }
         else {
-            OK "$test completed successfully"
-            $results[$test] = "OK"
+            OK "$name completed successfully"
+            $results[$name] = "OK"
         }
     }
     catch {
-        FAIL "$test crashed: $_"
-        $results[$test] = "FAIL"
+        FAIL "$name crashed: $_"
+        $results[$name] = "FAIL"
         $globalSuccess = $false
     }
 
@@ -82,5 +83,5 @@ Write-Host ""
 if ($globalSuccess) {
     Write-Host "=== ALL TESTS PASSED SUCCESSFULLY ===" -ForegroundColor Green
 } else {
-    Write-Host "=== SOME TESTS FAILED — CHECK REPORT ABOVE ===" -ForegroundColor Red
+    Write-Host "=== SOME TESTS FAILED - CHECK REPORT ABOVE ===" -ForegroundColor Red
 }
