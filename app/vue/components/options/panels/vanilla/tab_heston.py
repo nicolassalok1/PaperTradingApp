@@ -53,6 +53,21 @@ def render_tab_heston():
     st.markdown("---")
 
     common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
+    mc_label_to_model = {
+        "Black–Scholes (MC)": "bs",
+        "rHeston (MC)": "rheston",
+        "rBergomi (MC)": "rbergomi",
+        "SABR (MC)": "sabr",
+        "Volterra (MC)": "volterra",
+    }
+    mc_choice = st.selectbox(
+        "Modèle de pricing Monte Carlo",
+        options=list(mc_label_to_model.keys()),
+        index=0,
+        key=f"mc_model_{_k('heston')}",
+        help="Black–Scholes (MC) implémenté, les autres seront ajoutés progressivement.",
+    )
+    mc_model = mc_label_to_model[mc_choice]
 
     tab_calib, tab_pricing, tab_surface = st.tabs(["Calibration NN", "Pricing", "IV Surface"])
 
@@ -114,6 +129,7 @@ def render_tab_heston():
         T = st.number_input("Maturite (annees)", min_value=0.01, value=0.25)
         r = st.number_input("Taux sans risque r", value=0.01)
         q = st.number_input("Dividende q", value=0.00)
+        sigma_mc = float(st.session_state.get("common_sigma_value", 0.2))
 
         params = st.session_state.get(
             "heston_params",
@@ -134,6 +150,22 @@ def render_tab_heston():
             st.success(f"Prix Heston = {price:.4f}")
             st.metric("Delta", f"{delta:.4f}")
             st.metric("Vega", f"{vega:.4f}")
+            ticker_mc = (
+                (ticker or st.session_state.get("heston_cboe_ticker") or st.session_state.get("tkr_common") or "")
+                .strip()
+                .upper()
+            )
+            if ticker_mc:
+                try:
+                    price_mc_val = compute_price_mc(
+                        {"ticker": ticker_mc, "K": K, "T": T, "sigma": sigma_mc},
+                        mc_model=mc_model,
+                    )
+                    st.metric("Prix (Monte Carlo)", f"{price_mc_val:.4f}")
+                except Exception as exc:
+                    st.warning(f"Pricing Monte Carlo indisponible: {exc}")
+            else:
+                st.info("Renseigne un ticker pour activer le pricing Monte Carlo.")
 
         if st.button("Pricer via FFT (approx)"):
             st.info("Version FFT skeleton - retourne un stub.")

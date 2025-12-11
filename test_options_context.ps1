@@ -1,0 +1,197 @@
+# ================================================
+# test_options_context.ps1
+# Test complet du build context Options
+# ================================================
+
+$ErrorActionPreference = "Stop"
+
+# Colors
+function OK($m) { Write-Host "[OK] $m" -ForegroundColor Green }
+function FAIL($m) { Write-Host "[FAIL] $m" -ForegroundColor Red }
+
+Write-Host "=== Testing Options Context Builder ===" -ForegroundColor Cyan
+
+# -----------------------------------------
+# 1) Génération du script Python temporaire
+# -----------------------------------------
+
+$py = @"
+import traceback
+import json
+from types import SimpleNamespace
+
+results = {}
+
+def safe(name, fn):
+    try:
+        out = fn()
+        results[name] = ("OK", out)
+    except Exception as e:
+        results[name] = ("FAIL", f"{type(e).__name__}: {e}")
+        traceback.print_exc()
+
+# -----------------------------------------
+# Simuler un environnement Streamlit minimal
+# -----------------------------------------
+class FakeState(dict):
+    def __getattr__(self, x):
+        return self.get(x, None)
+
+import streamlit as st
+st.session_state = FakeState()
+
+# -----------------------------------------
+# Importer les modules nécessaires
+# -----------------------------------------
+def test_imports():
+    import app.model.options.context as ctx
+    import app.model.market_data.market_data as md
+    import pandas as pd
+    return "imports ok"
+
+safe("imports", test_imports)
+
+
+# -----------------------------------------
+# TEST 1 : Construction basique du contexte
+# -----------------------------------------
+def test_basic_context():
+    from app.model.options.context import build_option_context
+    ctx = build_option_context("AAPL")
+    assert "S0" in ctx, "missing S0"
+    assert "ticker" in ctx, "missing ticker"
+    assert "close_series" in ctx, "missing close_series"
+    assert "_k" in ctx, "missing key builder"
+    return {
+        "S0": ctx["S0"],
+        "ticker": ctx["ticker"],
+        "close_size": len(ctx["close_series"])
+    }
+
+safe("basic_context", test_basic_context)
+
+
+# -----------------------------------------
+# TEST 2 : Test _k (key builder)
+# -----------------------------------------
+def test_key_builder():
+    from app.model.options.context import build_option_context
+    ctx = build_option_context("AAPL")
+    k1 = ctx["_k"]("spread_panel")
+    k2 = ctx["_k"]("spread_panel")
+    assert k1 == k2, "_k must produce stable keys"
+    return k1
+
+safe("key_builder", test_key_builder)
+
+
+# -----------------------------------------
+# TEST 3 : Test override S0 (session override)
+# -----------------------------------------
+def test_s0_override():
+    import streamlit as st
+    st.session_state["common_spot_value"] = 123.45
+
+    from app.model.options.context import build_option_context
+    ctx = build_option_context("AAPL")
+    assert abs(ctx["S0"] - 123.45) < 0.0001, "Override S0 not applied"
+    return ctx["S0"]
+
+safe("s0_override", test_s0_override)
+
+
+# -----------------------------------------
+# TEST 4 : Test fallback last close
+# -----------------------------------------
+def test_s0_from_last_close():
+    import streamlit as st
+    st.session_state.pop("common_spot_value", None)
+
+    from app.model.options.context import build_option_context
+    ctx = build_option_context("AAPL")
+    series = ctx["close_series"]
+    last = float(series.iloc[-1])
+    assert abs(ctx["S0"] - last) < 1e-8, "S0 should equal last close when no override"
+    return {"S0": ctx["S0"], "last_close": last}
+
+safe("s0_last_close", test_s0_from_last_close)
+
+
+# -----------------------------------------
+# TEST 5 : Test fallback spot when no close_series
+# -----------------------------------------
+def test_s0_from_spot_fallback():
+    import streamlit as st
+    st.session_state.pop("common_spot_value", None)
+
+    # Monkeypatch : on simule un close_series vide
+    from app.model.options.context import build_option_context
+    from app.model.options.context import load_close_series_for_ticker
+
+    def fake_load(ticker):
+        import pandas as pd
+        return pd.Series([], dtype=float)
+
+    import app.model.options.context as ctx_mod
+    ctx_mod.load_close_series_for_ticker = fake_load
+
+    ctx = build_option_context("AAPL")
+    assert ctx["S0"] is not None, "Spot fallback failed"
+    return ctx["S0"]
+
+safe("s0_spot_fallback", test_s0_from_spot_fallback)
+
+
+# -----------------------------------------
+# FIN — EXPORT DES RÉSULTATS
+# -----------------------------------------
+for name, (status, msg) in results.items():
+    print(f"<<RESULT>> {name} | {status} | {msg}")
+"@
+
+$tempFile = "test_options_context_temp.py"
+Set-Content -Path $tempFile -Value $py -Encoding UTF8
+
+
+# -----------------------------------------
+# 2) Exécution du script python
+# -----------------------------------------
+try {
+    $output = python $tempFile 2>&1
+} catch {
+    FAIL "Python execution failed: $_"
+    exit 1
+}
+
+Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+
+Write-Host "`n=== OPTIONS CONTEXT TEST REPORT ===" -ForegroundColor Cyan
+
+# -----------------------------------------
+# 3) Analyse des résultats
+# -----------------------------------------
+$success = $true
+
+foreach ($line in $output) {
+    if ($line -like "<<RESULT>>*") {
+        $parts = $line.Replace("<<RESULT>>","").Trim() -split "\|"
+        $name = $parts[0].Trim()
+        $status = $parts[1].Trim()
+        $msg = $parts[2].Trim()
+
+        if ($status -eq "OK") {
+            OK "$name : $msg"
+        } else {
+            FAIL "$name : $msg"
+            $success = $false
+        }
+    }
+}
+
+Write-Host ""
+if ($success) {
+    Write-Host "=== ALL OPTIONS CONTEXT TESTS PASSED ===" -ForegroundColor Green
+} else {
+    Write-Host "=== SOME OPTIONS CONTEXT TESTS FAILED — SEE ABOVE ===" -ForegroundColor Red
+}
+# ================================================

@@ -97,6 +97,7 @@ from app.model.options.service import (
     compute_price,
     load_iv_surface,
     price_and_greeks,
+    price_option_mc,
 )
 from app.model.heston.pricing import compute_heston_price
 from app.model.heston.calibration import calibrate_heston_to_market
@@ -157,6 +158,26 @@ def get_shared():
     return _shared
 
 
+def compute_price_mc(option_dict, mc_model: str = "bs", n_paths: int = 10000, n_steps: int = 252):
+    """
+    Compute a Monte Carlo price for a European option using the MC engine.
+    Expects option_dict to contain at least: ticker, K, T, sigma.
+    """
+    ticker = option_dict["ticker"]
+    K = float(option_dict["K"])
+    T = float(option_dict["T"])
+    sigma = float(option_dict["sigma"])
+    return price_option_mc(
+        ticker=ticker,
+        K=K,
+        T=T,
+        sigma=sigma,
+        model=mc_model,
+        n_paths=n_paths,
+        n_steps=n_steps,
+    )
+
+
 __all__ = [
     # Core service wrappers
     "compute_price",
@@ -166,6 +187,7 @@ __all__ = [
     "compute_heston_price",
     "calibrate_heston_to_market",
     "price_and_greeks",
+    "compute_price_mc",
     # Black-Scholes / spreads
     "black_scholes_price",
     "price_asset_or_nothing",

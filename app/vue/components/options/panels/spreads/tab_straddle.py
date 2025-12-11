@@ -20,6 +20,21 @@ def render_tab_straddle():
     hist_tkr = resolve_common_underlying()
     S0 = float(common_spot_value)
     # --- Fin bootstrap ---
+    mc_label_to_model = {
+        "Black–Scholes (MC)": "bs",
+        "rHeston (MC)": "rheston",
+        "rBergomi (MC)": "rbergomi",
+        "SABR (MC)": "sabr",
+        "Volterra (MC)": "volterra",
+    }
+    mc_choice = st.selectbox(
+        "Modèle de pricing Monte Carlo",
+        options=list(mc_label_to_model.keys()),
+        index=0,
+        key=f"mc_model_{_k('straddle')}",
+        help="Black–Scholes (MC) implémenté, les autres seront ajoutés progressivement.",
+    )
+    mc_model = mc_label_to_model[mc_choice]
     strike_slider = st.slider(
         "Strike",
         min_value=0.5 * float(common_spot_value),
@@ -105,7 +120,7 @@ def render_tab_straddle():
 
     st.markdown("### Ajouter au dashboard")
     st.metric("Prix calculé", f"${price:.6f}")
-
+    price_mc_val = None
     underlying = (
         (
             st.session_state.get("heston_cboe_ticker")
@@ -117,6 +132,18 @@ def render_tab_straddle():
         .strip()
         .upper()
     )
+    if underlying:
+        try:
+            price_mc_val = compute_price_mc(
+                {"ticker": underlying, "K": strike_slider, "T": T_straddle, "sigma": float(common_sigma_value)},
+                mc_model=mc_model,
+            )
+            st.metric("Prix (Monte Carlo)", f"${price_mc_val:.6f}")
+        except Exception as exc:
+            st.warning(f"Pricing Monte Carlo indisponible: {exc}")
+    else:
+        st.info("Définis un ticker commun pour calculer le prix Monte Carlo.")
+
     st.caption(f"Sous-jacent: {underlying or 'N/A'} (reprise de l'entête)")
     today = datetime.date.today()
     expiration_dt = today + datetime.timedelta(days=int((T_straddle or 0.0) * 365))

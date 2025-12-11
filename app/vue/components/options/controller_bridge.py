@@ -74,6 +74,7 @@ clear_closing_history_cache = oc.clear_closing_history_cache
 
 # Pricing extras
 price_iron_butterfly_bs = oc.price_iron_butterfly_bs
+compute_price_mc = oc.compute_price_mc
 
 
 def resolve_common_underlying() -> str:
@@ -145,6 +146,7 @@ __all__ = [
     "compute_option_pnl",
     "load_expired",
     "save_expired",
+    "compute_price_mc",
     "get_data",
     "load_or_fetch_closing_history",
     "load_close_series_for_ticker",
