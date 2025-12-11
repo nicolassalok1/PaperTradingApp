@@ -153,13 +153,3 @@ def render_tab_forward_start():
         log_action("add_option", {"id": oid, "payload": payload})
         st.success(f"Option ajoutée au dashboard (id={oid})")
     # --- Bouton Add-to-Dashboard Clean ---
-    if "price" in locals() and st.button("Ajouter au dashboard", key=_k("forward_start_add_clean")):
-        payload = {
-            "underlying": ticker,
-            "S0": S0,
-            "price": float(price),
-        }
-        oid = add_option_to_dashboard_clean(payload)
-        log_action("add_option", {"id": oid, "payload": payload})
-        st.success(f"Option ajoutée au dashboard (id={oid})")
-    # -------------------------------------

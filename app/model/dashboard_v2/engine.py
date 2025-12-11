@@ -259,10 +259,16 @@ class DashboardV2Client:
             submitted_at = odict.get("submitted_at") or odict.get("created_at")
             try:
                 submitted_dt = pd.to_datetime(submitted_at)
+                if submitted_dt.tzinfo is not None:
+                    submitted_dt = submitted_dt.tz_convert(None)
             except Exception:
                 submitted_dt = None
-            if submitted_dt and submitted_dt.to_pydatetime() < cutoff:
-                continue
+            if submitted_dt is not None:
+                try:
+                    if submitted_dt.to_pydatetime() < cutoff:
+                        continue
+                except Exception:
+                    pass
             results.append(
                 {
                     "symbol": odict.get("symbol"),

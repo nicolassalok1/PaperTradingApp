@@ -108,6 +108,9 @@ def render_tab_heston():
     ax_pay.set_title(f"Payoff {option_type} (CBOE + BS)")
     ax_pay.legend(loc="best")
     render_figures_grid([fig_ts, fig_pay])
+
+    if st.button("Ajouter au dashboard", key=_k("heston_add"), type="primary"):
+        payload = {
             "underlying": ticker,
             "S0": float(S_used),
             "K": float(K_used),
