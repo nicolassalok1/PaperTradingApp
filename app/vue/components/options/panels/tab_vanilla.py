@@ -15,19 +15,19 @@ def render_panel_vanilla():
         st.line_chart(close_series)
 
     models = [
-        "Européenne (Heston)",
-        "Américaine (CRR)",
-        "Bermudan (Longstaff-Schwartz)",
+        "Européenne",
+        "Américaine",
+        "Bermudan",
     ]
     model_tabs = st.tabs(models)
 
     for label, tab in zip(models, model_tabs):
         with tab:
-            if label == "Européenne (Heston)":
+            if label == "Européenne":
                 render_tab_heston()
-            elif label == "Américaine (CRR)":
+            elif label == "Américaine":
                 render_tab_american()
-            elif label == "Bermudan (Longstaff-Schwartz)":
+            elif label == "Bermudan":
                 render_tab_bermudan()
             else:
                 st.error("Option inconnue.")

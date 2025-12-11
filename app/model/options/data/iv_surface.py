@@ -80,6 +80,39 @@ def _build_iv_surface_from_cboe(ticker: str, max_maturity_years: float = 2.0) ->
 
     surface = pd.DataFrame(records, columns=["K", "T", "S0", "iv", "type"])
     path = CACHE_CSV_DIR / f"iv_surface_cboe_{sym}.csv"
+
+    # Fallback 1: if CBOE is empty, try cached CSV
+    if surface.empty and path.exists():
+        try:
+            cached = pd.read_csv(path)
+            if cached is not None and not cached.empty:
+                return cached
+        except Exception:
+            pass
+
+    # Fallback 2: try Alpaca options snapshot if available
+    if surface.empty:
+        try:
+            from app.model.options.logic import download_options_alpaca
+
+            df_alt = download_options_alpaca(sym)
+            if df_alt is not None and not df_alt.empty:
+                cols = {c.lower(): c for c in df_alt.columns}
+                k_col = cols.get("k") or cols.get("strike")
+                t_col = cols.get("t") or cols.get("maturity")
+                iv_col = cols.get("iv") or cols.get("sigma") or cols.get("vol")
+                type_col = cols.get("type")
+                s_col = cols.get("s0") or cols.get("spot") or cols.get("underlying")
+                if k_col and t_col and iv_col:
+                    df_alt = df_alt.dropna(subset=[k_col, t_col, iv_col]).copy()
+                    df_alt["type"] = df_alt[type_col] if type_col else "call"
+                    df_alt["S0"] = df_alt[s_col] if s_col else s0
+                    df_alt = df_alt.rename(columns={k_col: "K", t_col: "T", iv_col: "iv"})
+                    df_alt = df_alt[df_alt["T"] <= max_maturity_years]
+                    surface = df_alt[["K", "T", "S0", "iv", "type"]]
+        except Exception:
+            pass
+
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         surface.to_csv(path, index=False)
