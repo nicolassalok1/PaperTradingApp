@@ -18,11 +18,6 @@ def render_panel_spreads():
         st.session_state["common_spot_value"] = ctx["S0"]
     if not available:
         return
-    close_series = ctx.get("close_series")
-    if close_series is not None and hasattr(close_series, "empty") and not close_series.empty:
-        st.line_chart(close_series)
-    else:
-        st.info("Clôtures indisponibles pour ce ticker.")
 
     spread_labels = [
         "Straddle",

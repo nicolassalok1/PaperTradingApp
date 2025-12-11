@@ -1155,11 +1155,7 @@ def load_close_series_for_ticker(ticker: str, fallback_value: float | None = Non
             price_cols = [
                 c for c in df_cache.columns if str(c).lower() not in {"date", "datetime", "index"}
             ]
-            price_col = (
-                ticker_norm
-                if ticker_norm in df_cache.columns
-                else (price_cols[0] if len(price_cols) == 1 else None)
-            )
+            price_col = ticker_norm if ticker_norm in df_cache.columns else None
             if price_col:
                 dates = (
                     pd.to_datetime(df_cache[date_col]) if date_col else pd.RangeIndex(len(df_cache))
