@@ -1147,6 +1147,10 @@ def load_close_series_for_ticker(ticker: str, fallback_value: float | None = Non
     - Sinon retourne une série fallback si fournie.
     """
     ticker_norm = (ticker or "").strip().upper()
+    try:
+        from app.model.market_data.market_data import fetch_closing_prices as _fetch_md_prices
+    except Exception:
+        _fetch_md_prices = None
 
     def _to_series(df: pd.DataFrame) -> pd.Series:
         if df is None or df.empty:
@@ -1206,11 +1210,18 @@ def load_close_series_for_ticker(ticker: str, fallback_value: float | None = Non
 
     # 2) Download (already cached to cache/ohlc_*)
     try:
-        df_dl = fetch_closing_prices(ticker_norm, period="1y", interval="1d")
-        series = _to_series(df_dl)
-        if series is not None and not series.empty:
-            _write_cache(series)
-            return series
+        if _fetch_md_prices is not None:
+            df_dl = _fetch_md_prices(ticker_norm, period="2y", interval="1d")
+            series = _to_series(df_dl)
+            if series is not None and not series.empty:
+                cutoff = pd.Timestamp.today() - pd.Timedelta(days=365)
+                series_1y = series[series.index >= cutoff]
+                if series_1y.empty:
+                    series_1y = series.tail(252)
+                if series_1y is None or series_1y.empty:
+                    series_1y = series
+                _write_cache(series_1y)
+                return series_1y
     except Exception:
         pass
 
