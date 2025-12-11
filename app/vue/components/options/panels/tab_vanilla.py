@@ -10,22 +10,21 @@ def render_panel_vanilla():
     ctx = get_option_context()
     if ctx.get("S0") is not None:
         st.session_state["common_spot_value"] = ctx["S0"]
-    close_series = ctx.get("close_series")
-    if close_series is not None and hasattr(close_series, "empty") and not close_series.empty:
-        st.line_chart(close_series)
+    if not ensure_close_history(ctx):
+        return
 
     models = [
-        "Européenne",
-        "Américaine",
+        "EuropＦnne",
+        "AmＳicaine",
         "Bermudan",
     ]
     model_tabs = st.tabs(models)
 
     for label, tab in zip(models, model_tabs):
         with tab:
-            if label == "Européenne":
+            if label == "EuropＦnne":
                 render_tab_heston()
-            elif label == "Américaine":
+            elif label == "AmＳicaine":
                 render_tab_american()
             elif label == "Bermudan":
                 render_tab_bermudan()

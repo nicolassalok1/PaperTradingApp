@@ -1,4 +1,5 @@
 import streamlit as st
+
 from app.vue.components.options.panels.tab_vanilla import render_panel_vanilla
 from app.vue.components.options.panels.tab_path import render_panel_path
 from app.vue.components.options.panels.tab_barrier import render_panel_barrier
@@ -9,7 +10,7 @@ from app.vue.components.options.controller_bridge import *
 
 
 def render_options_router():
-    st.header("📘 Options — Interface Professionnelle")
+    st.header("?? Options - Interface Professionnelle")
 
     # Compact tab styling
     st.markdown(
@@ -26,7 +27,7 @@ def render_options_router():
     )
 
     tkr_common = st.text_input(
-        "Ticker commun pour les historiques IV/clôtures (optionnel)",
+        "Ticker commun pour les historiques IV/cl“tures (optionnel)",
         value=st.session_state.get("tkr_common", ""),
         placeholder="ex: AAPL",
     )
@@ -34,13 +35,26 @@ def render_options_router():
     st.session_state["tkr_common"] = tkr_common_norm
     st.session_state["common_underlying"] = tkr_common_norm
 
+    # Close prices chart displayed directly under the ticker input
+    ctx = get_option_context()
+    if ctx.get("S0") is not None:
+        st.session_state["common_spot_value"] = ctx["S0"]
+    close_series = ctx.get("close_series")
+    if close_series is not None and hasattr(close_series, "empty") and not close_series.empty:
+        tkr_label = ctx.get("ticker") or tkr_common_norm or "Ticker"
+        render_static_line_chart(
+            close_series,
+            title=f"{tkr_label} - Clotures (cache)",
+            y_label="Prix de cloture",
+        )
+
     families = [
         "Vanilla / Early Exercise",
         "Path-dependent",
-        "Barrières",
+        "BarriŠres",
         "Spreads & Wings",
         "Calendriers",
-        "Exotiques avancées",
+        "Exotiques avanc‚es",
     ]
 
     family_tabs = st.tabs(families)
@@ -50,13 +64,13 @@ def render_options_router():
                 render_panel_vanilla()
             elif fam_label == "Path-dependent":
                 render_panel_path()
-            elif fam_label == "Barrières":
+            elif fam_label == "BarriŠres":
                 render_panel_barrier()
             elif fam_label == "Spreads & Wings":
                 render_panel_spreads()
             elif fam_label == "Calendriers":
                 render_panel_calendar()
-            elif fam_label == "Exotiques avancées":
+            elif fam_label == "Exotiques avanc‚es":
                 render_panel_exotics()
             else:
                 st.error("Famille inconnue.")

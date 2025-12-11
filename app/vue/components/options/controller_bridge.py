@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime
 import math
 import streamlit as st
+import altair as alt
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,6 +34,23 @@ common_sigma_value = opt_ui.common_sigma_value
 d_common = opt_ui.d_common
 option_char = opt_ui.option_char
 _k = opt_ui._k
+
+# Close series guard
+def ensure_close_history(ctx: dict) -> bool:
+    """
+    Ensure closing prices are available for the current global ticker.
+    When unavailable, show a notice and skip rendering.
+    """
+    available = bool(ctx.get("close_available"))
+    if available:
+        return True
+    ticker = ctx.get("ticker") or resolve_common_underlying()
+    tkr_display = (ticker or "").strip().upper() or "N/A"
+    st.info(
+        f"Clotures introuvables pour le ticker global ({tkr_display}). "
+        "Renseigne un ticker valide puis recharge les clÙtures pour afficher ce panneau."
+    )
+    return False
 
 # View/payoff builders
 view_asset_or_nothing = oc.view_asset_or_nothing
@@ -148,6 +166,46 @@ def load_shared_close_series(fallback_value: float):
         return ticker, None
 
 
+def render_static_line_chart(series, title: str | None = None, y_label: str | None = None) -> bool:
+    """
+    Render a non-interactive Altair line chart for a pandas Series.
+    Returns True if rendered, False otherwise.
+    """
+    if series is None or getattr(series, "empty", True):
+        return False
+    try:
+        df = series.reset_index()
+    except Exception:
+        return False
+
+    if df.shape[1] < 2:
+        return False
+
+    x_col, y_col = df.columns[:2]
+    y_title = y_label or str(y_col)
+
+    x_enc = alt.X(f"{x_col}:T", title="Date")
+    try:
+        # If conversion to temporal fails, fall back to nominal axis
+        _ = pd.to_datetime(df[x_col])
+    except Exception:
+        x_enc = alt.X(f"{x_col}:O", title=str(x_col))
+
+    chart = (
+        alt.Chart(df)
+        .mark_line()
+        .encode(
+            x=x_enc,
+            y=alt.Y(f"{y_col}:Q", title=y_title),
+            tooltip=[alt.Tooltip(f"{x_col}:T", title="Date"), alt.Tooltip(f"{y_col}:Q", title=y_title)],
+        )
+        .properties(title=title or "")
+        .interactive(False)
+    )
+    st.altair_chart(chart, use_container_width=True)
+    return True
+
+
 def show_and_close(fig):
     """Render a matplotlib figure in Streamlit and close it to avoid figure leaks."""
     try:
@@ -178,6 +236,7 @@ __all__ = [
     "d_common",
     "option_char",
     "_k",
+    "ensure_close_history",
     "view_asset_or_nothing",
     "view_barrier",
     "view_butterfly",
@@ -217,6 +276,7 @@ __all__ = [
     "price_iron_butterfly_bs",
     "resolve_common_underlying",
     "load_shared_close_series",
+    "render_static_line_chart",
     "show_and_close",
     "floor_n",
     "math",

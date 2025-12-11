@@ -12,6 +12,8 @@ def render_tab_straddle():
     close_series = ctx["close_series"]
     _k = ctx["_k"]
     # --------------------------------
+    if not ensure_close_history(ctx):
+        return
     hist_tkr = ticker
 
     # --- Bootstrap du contexte Spreads/Wings ---

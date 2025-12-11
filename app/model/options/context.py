@@ -43,15 +43,18 @@ def build_option_context(ticker: str) -> dict:
             "S0": s0_default,
             "ticker": "",
             "close_series": pd.Series(dtype=float),
+            "close_available": False,
             "_k": lambda name: f"__EMPTY__{name}",
         }
     try:
         close_series = load_close_series_for_ticker(tk)
     except Exception:
         close_series = pd.Series(dtype=float)
+    close_available = close_series is not None and not close_series.empty
     if close_series is None or len(close_series) == 0:
         closes_df = fetch_closing_prices(tk, period="2y", interval="1d")
         close_series = _extract_close_series(closes_df)
+        close_available = close_series is not None and not close_series.empty
 
     s0 = _session_spot_value()
     if s0 is None and not close_series.empty:
@@ -64,12 +67,14 @@ def build_option_context(ticker: str) -> dict:
     if s0 is None and (close_series is None or close_series.empty):
         s0 = 0.0
     if (close_series is None or close_series.empty) and s0 is not None:
+        # Keep a fallback series for downstream UI sliders but mark availability flag False.
         close_series = pd.Series([float(s0)], index=pd.Index([pd.Timestamp.today()]))
 
     ctx = {
         "S0": float(s0) if s0 is not None else None,
         "ticker": tk,
         "close_series": close_series,
+        "close_available": bool(close_available),
         "_k": lambda name: f"{tk}_{name}",
     }
     return ctx

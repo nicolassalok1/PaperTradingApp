@@ -11,6 +11,8 @@ def render_tab_grp_barrier():
     ticker = ctx["ticker"]
     close_series = ctx["close_series"]
     _k = ctx["_k"]
+    if not ensure_close_history(ctx):
+        return
     # --------------------------------
     # Fallback defaults for anciennes globals (avoids NameError)
     option_char = st.session_state.get("option_char", "c")

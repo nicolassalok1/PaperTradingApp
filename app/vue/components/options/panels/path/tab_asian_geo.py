@@ -11,6 +11,8 @@ def render_tab_asian_geo():
     ticker = ctx["ticker"]
     close_series = ctx["close_series"]
     _k = ctx["_k"]
+    if not ensure_close_history(ctx):
+        return
     if not isinstance(close_series, pd.Series):
         close_series = pd.Series([S0], index=pd.Index([pd.Timestamp.today()]))
     # --------------------------------

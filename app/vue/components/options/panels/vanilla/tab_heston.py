@@ -15,6 +15,8 @@ def render_tab_heston():
     close_series = ctx["close_series"]
     _k = ctx["_k"]
     # --------------------------------
+    if not ensure_close_history(ctx):
+        return
 
     spot_ref = float(S0) if S0 is not None else None
     if spot_ref is None or not np.isfinite(spot_ref) or spot_ref <= 0:
