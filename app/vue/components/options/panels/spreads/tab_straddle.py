@@ -34,7 +34,7 @@ def render_tab_straddle():
         key=f"mc_model_{_k('straddle')}",
         help="Black–Scholes (MC) implémenté, les autres seront ajoutés progressivement.",
     )
-    mc_model = mc_label_to_model[mc_choice]
+    mc_model = mc_label_to_model.get(mc_choice, list(mc_label_to_model.values())[0])
     strike_slider = st.slider(
         "Strike",
         min_value=0.5 * float(common_spot_value),

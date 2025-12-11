@@ -1,3 +1,4 @@
+import contextlib
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -25,7 +26,9 @@ def render_tab_diagonal():
 
     strike_anchor_diag = float(common_spot_value)
     col1, col2 = st.columns(2)
-    with col1:
+    col1_ctx = col1 if hasattr(col1, "__enter__") else contextlib.nullcontext()
+    col2_ctx = col2 if hasattr(col2, "__enter__") else contextlib.nullcontext()
+    with col1_ctx:
         option_type_diag = st.selectbox("Type", ["call", "put"], key=_k("diag_type"))
         k_near = st.slider(
             "Strike near",
@@ -62,7 +65,7 @@ def render_tab_diagonal():
         t_far = max(t_far_raw, t_near + 0.01)
         if t_far != t_far_raw:
             st.caption(f"T far ajusté à {t_far:.2f} pour rester après T near.")
-    with col2:
+    with col2_ctx:
         span_diag = st.slider(
             "Span payoff (%)",
             min_value=0.1,

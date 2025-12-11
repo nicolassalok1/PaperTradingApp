@@ -16,7 +16,7 @@ if (Test-Path $errorJson) { Remove-Item $errorJson }
 
 # Launch Streamlit app
 Write-Host "[*] Launching Streamlit..."
-$process = Start-Process "streamlit" -ArgumentList "run", "main_app.py", "--server.port=$port" -PassThru
+$process = Start-Process "streamlit" -ArgumentList "run", "app/vue/main_app.py", "--server.port=$port" -PassThru
 
 Start-Sleep -Seconds 6  # wait app boot
 
@@ -82,7 +82,9 @@ Write-Host "[*] Running crawler..." -ForegroundColor Cyan
 $output = python $tempFile 2>&1
 
 # Kill Streamlit process
-if ($process) { Stop-Process -Id $process.Id -Force }
+if ($process) {
+    try { Stop-Process -Id $process.Id -Force } catch { }
+}
 
 Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
 

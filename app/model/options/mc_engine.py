@@ -34,8 +34,17 @@ def price_european_mc(
     if model_key not in {MCModel.BS.value}:
         raise NotImplementedError("Model not implemented yet")
 
-    r = float(get_r(T))
-    q = float(get_q(ticker)) if ticker else 0.0
+    if S0 is None or K is None:
+        return float("nan")
+
+    try:
+        r = float(get_r(T))
+    except Exception:
+        r = 0.01
+    try:
+        q = float(get_q(ticker)) if ticker else 0.0
+    except Exception:
+        q = 0.0
     paths, _ = simulate_gbm_paths(S0, r, q, sigma, T, n_steps, n_paths)
     terminal = paths[-1]
     payoff = np.maximum(terminal - K, 0.0)

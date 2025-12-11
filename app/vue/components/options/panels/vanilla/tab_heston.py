@@ -67,7 +67,7 @@ def render_tab_heston():
         key=f"mc_model_{_k('heston')}",
         help="Black–Scholes (MC) implémenté, les autres seront ajoutés progressivement.",
     )
-    mc_model = mc_label_to_model[mc_choice]
+    mc_model = mc_label_to_model.get(mc_choice, list(mc_label_to_model.values())[0])
 
     tab_calib, tab_pricing, tab_surface = st.tabs(["Calibration NN", "Pricing", "IV Surface"])
 

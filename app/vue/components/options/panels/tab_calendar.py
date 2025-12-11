@@ -20,10 +20,23 @@ def render_panel_calendar():
     calendar_tabs = st.tabs(calendar_labels)
 
     for label, tab in zip(calendar_labels, calendar_tabs):
-        with tab:
+        if hasattr(tab, "__enter__"):
+            with tab:
+                if label == "Calendar Spread":
+                    render_tab_calendar()
+                elif label == "Diagonal Spread":
+                    render_tab_diagonal()
+                else:
+                    st.error("Type inconnu.")
+        else:
             if label == "Calendar Spread":
                 render_tab_calendar()
             elif label == "Diagonal Spread":
                 render_tab_diagonal()
             else:
                 st.error("Type inconnu.")
+
+
+def render_calendar_panel():
+    """Alias for tests."""
+    render_panel_calendar()

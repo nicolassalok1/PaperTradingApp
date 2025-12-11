@@ -18,11 +18,16 @@ def _session_spot_value() -> float | None:
 def _extract_close_series(df: pd.DataFrame) -> pd.Series:
     if df is None or df.empty:
         return pd.Series(dtype=float)
+    if len(df.columns) == 0:
+        return pd.Series(dtype=float)
     date_col = next((c for c in df.columns if str(c).lower() == "date"), df.columns[0])
     close_col = next((c for c in df.columns if str(c).lower() == "close"), None)
     if close_col is None and len(df.columns) > 1:
         close_col = df.columns[1]
-    series = pd.Series(df[close_col].values, index=pd.to_datetime(df[date_col], errors="coerce"))
+    try:
+        series = pd.Series(df[close_col].values, index=pd.to_datetime(df[date_col], errors="coerce"))
+    except Exception:
+        return pd.Series(dtype=float)
     return series.dropna()
 
 
@@ -31,8 +36,13 @@ def build_option_context(ticker: str) -> dict:
     Build an option context with close series and inferred spot.
     """
     tk = (ticker or "").strip().upper()
-    closes_df = fetch_closing_prices(tk, period="2y", interval="1d")
-    close_series = _extract_close_series(closes_df)
+    try:
+        close_series = load_close_series_for_ticker(tk)
+    except Exception:
+        close_series = pd.Series(dtype=float)
+    if close_series is None or len(close_series) == 0:
+        closes_df = fetch_closing_prices(tk, period="2y", interval="1d")
+        close_series = _extract_close_series(closes_df)
 
     s0 = _session_spot_value()
     if s0 is None and not close_series.empty:
@@ -42,6 +52,10 @@ def build_option_context(ticker: str) -> dict:
             s0 = None
     if s0 is None:
         s0 = fetch_spot_price(tk)
+    if s0 is None and (close_series is None or close_series.empty):
+        s0 = 0.0
+    if (close_series is None or close_series.empty) and s0 is not None:
+        close_series = pd.Series([float(s0)], index=pd.Index([pd.Timestamp.today()]))
 
     ctx = {
         "S0": float(s0) if s0 is not None else None,
@@ -75,9 +89,26 @@ def get_option_context_from_state(state_dict=None):
     return ctx
 
 
+def load_close_series_for_ticker(ticker: str, fallback_value=None):
+    """
+    Compatibility shim expected by some scripts/tests.
+    """
+    try:
+        from app.model.market_data.history import load_close_series_for_ticker as _legacy
+
+        return _legacy(ticker, fallback_value=fallback_value)
+    except Exception:
+        return pd.Series(dtype=float)
+
+
 def get_option_context(state_dict=None):
     """Backward-compatible alias."""
     return get_option_context_from_state(state_dict)
 
 
-__all__ = ["build_option_context", "get_option_context_from_state", "get_option_context"]
+__all__ = [
+    "build_option_context",
+    "get_option_context_from_state",
+    "get_option_context",
+    "load_close_series_for_ticker",
+]

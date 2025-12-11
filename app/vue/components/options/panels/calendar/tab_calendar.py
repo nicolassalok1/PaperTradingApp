@@ -1,3 +1,4 @@
+import contextlib
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -25,7 +26,9 @@ def render_tab_calendar():
 
     strike_anchor_cal = float(common_spot_value)
     col1, col2 = st.columns(2)
-    with col1:
+    col1_ctx = col1 if hasattr(col1, "__enter__") else contextlib.nullcontext()
+    col2_ctx = col2 if hasattr(col2, "__enter__") else contextlib.nullcontext()
+    with col1_ctx:
         option_type_cal = st.selectbox("Type", ["call", "put"], key=_k("calendar_type"))
         strike_cal = st.slider(
             "Strike",
@@ -54,7 +57,7 @@ def render_tab_calendar():
         t_long = max(t_long_raw, t_short + 0.01)
         if t_long != t_long_raw:
             st.caption(f"T long ajusté à {t_long:.2f} pour rester après T court.")
-    with col2:
+    with col2_ctx:
         span_cal = st.slider(
             "Span payoff (%)",
             min_value=0.1,
