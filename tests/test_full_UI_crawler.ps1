@@ -4,13 +4,29 @@
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$logsDir = Join-Path $repoRoot "logs"
+New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+$scriptName = [IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
+$logFile = Join-Path $logsDir "$scriptName.log"
 
+$startedTranscript = $false
+if (-not (Get-Variable -Name "__test_transcript_active" -Scope Global -ErrorAction SilentlyContinue)) {
+    try {
+        Start-Transcript -Path $logFile -Append -Force | Out-Null
+        $global:__test_transcript_active = $true
+        $startedTranscript = $true
+    } catch {
+        Write-Warning "Transcript start failed for $scriptName: $_"
+    }
+}
+
+try {
 Write-Host "=== FULL UI CRAWLER STARTED ===" -ForegroundColor Cyan
 
 # CONFIG
 $port = 8501
 $url = "http://localhost:$port"
-$errorJson = Join-Path $repoRoot "ui_error.json"
+$errorJson = Join-Path $logsDir "ui_error.json"
 $errorJsonForPy = $errorJson -replace "\\", "/"
 $appPath = Join-Path $repoRoot "app/vue/main_app.py"
 $tempFile = Join-Path $PSScriptRoot "ui_crawler_temp.py"
@@ -99,10 +115,16 @@ Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
 Write-Host "`n=== UI CRAWLER RESULT ===" -ForegroundColor Cyan
 
 if ($output -match "<<FOUND_ERROR") {
-    Write-Host "UI ERROR DETECTED — See ui_error.json" -ForegroundColor Red
+    Write-Host "UI ERROR DETECTED - See logs/ui_error.json" -ForegroundColor Red
 } elseif ($output -match "<<NO_ERROR>>") {
     Write-Host "NO ERRORS FOUND" -ForegroundColor Green
 } else {
-    Write-Host "UNKNOWN STATE — check output:" -ForegroundColor Yellow
+    Write-Host "UNKNOWN STATE - check output:" -ForegroundColor Yellow
     Write-Host $output
+}
+} finally {
+    if ($startedTranscript) {
+        try { Stop-Transcript | Out-Null } catch { }
+        Remove-Variable -Name "__test_transcript_active" -Scope Global -ErrorAction SilentlyContinue
+    }
 }

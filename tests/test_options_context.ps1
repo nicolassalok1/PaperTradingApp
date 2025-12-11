@@ -6,6 +6,21 @@
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$logsDir = Join-Path $repoRoot "logs"
+New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+$scriptName = [IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
+$logFile = Join-Path $logsDir "$scriptName.log"
+
+$startedTranscript = $false
+if (-not (Get-Variable -Name "__test_transcript_active" -Scope Global -ErrorAction SilentlyContinue)) {
+    try {
+        Start-Transcript -Path $logFile -Append -Force | Out-Null
+        $global:__test_transcript_active = $true
+        $startedTranscript = $true
+    } catch {
+        Write-Warning "Transcript start failed for $scriptName: $_"
+    }
+}
 
 # Colors
 function OK($m) { Write-Host "[OK] $m" -ForegroundColor Green }
@@ -14,7 +29,7 @@ function FAIL($m) { Write-Host "[FAIL] $m" -ForegroundColor Red }
 Write-Host "=== Testing Options Context Builder ===" -ForegroundColor Cyan
 
 # -----------------------------------------
-# 1) Génération du script Python temporaire
+# 1) Generation du script Python temporaire
 # -----------------------------------------
 
 $py = @"
@@ -43,7 +58,7 @@ import streamlit as st
 st.session_state = FakeState()
 
 # -----------------------------------------
-# Importer les modules nécessaires
+# Importer les modules necessaires
 # -----------------------------------------
 def test_imports():
     import app.model.options.context as ctx
@@ -145,7 +160,7 @@ safe("s0_spot_fallback", test_s0_from_spot_fallback)
 
 
 # -----------------------------------------
-# FIN — EXPORT DES RÉSULTATS
+# FIN - EXPORT DES RESULTATS
 # -----------------------------------------
 for name, (status, msg) in results.items():
     print(f"<<RESULT>> {name} | {status} | {msg}")
@@ -154,9 +169,10 @@ for name, (status, msg) in results.items():
 $tempFile = Join-Path $PSScriptRoot "test_options_context_temp.py"
 Set-Content -Path $tempFile -Value $py -Encoding UTF8
 
+try {
 
 # -----------------------------------------
-# 2) Exécution du script python
+# 2) Execution du script python
 # -----------------------------------------
 $execFailed = $false
 Push-Location $repoRoot
@@ -169,16 +185,16 @@ try {
     Pop-Location
 }
 
+Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+
 if ($execFailed) {
     exit 1
 }
 
-Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
-
 Write-Host "`n=== OPTIONS CONTEXT TEST REPORT ===" -ForegroundColor Cyan
 
 # -----------------------------------------
-# 3) Analyse des résultats
+# 3) Analyse des resultats
 # -----------------------------------------
 $success = $true
 
@@ -202,6 +218,13 @@ Write-Host ""
 if ($success) {
     Write-Host "=== ALL OPTIONS CONTEXT TESTS PASSED ===" -ForegroundColor Green
 } else {
-    Write-Host "=== SOME OPTIONS CONTEXT TESTS FAILED — SEE ABOVE ===" -ForegroundColor Red
+    Write-Host "=== SOME OPTIONS CONTEXT TESTS FAILED - SEE ABOVE ===" -ForegroundColor Red
 }
 # ================================================
+
+} finally {
+    if ($startedTranscript) {
+        try { Stop-Transcript | Out-Null } catch { }
+        Remove-Variable -Name "__test_transcript_active" -Scope Global -ErrorAction SilentlyContinue
+    }
+}

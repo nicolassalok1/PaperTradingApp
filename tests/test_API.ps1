@@ -5,6 +5,21 @@
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$logsDir = Join-Path $repoRoot "logs"
+New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+$scriptName = [IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
+$logFile = Join-Path $logsDir "$scriptName.log"
+
+$startedTranscript = $false
+if (-not (Get-Variable -Name "__test_transcript_active" -Scope Global -ErrorAction SilentlyContinue)) {
+    try {
+        Start-Transcript -Path $logFile -Append -Force | Out-Null
+        $global:__test_transcript_active = $true
+        $startedTranscript = $true
+    } catch {
+        Write-Warning "Transcript start failed for $scriptName: $_"
+    }
+}
 
 # Colors
 function Write-OK($msg) { Write-Host "[OK] $msg" -ForegroundColor Green }
@@ -129,51 +144,58 @@ Set-Content -Path $tempFile -Value $py -Encoding UTF8
 
 
 # Execute Python script
-$execFailed = $false
-Push-Location $repoRoot
 try {
-    $output = python $tempFile 2>&1
-} catch {
-    $execFailed = $true
-    $errorMsg = $_
-} finally {
-    Pop-Location
-}
-
-if ($execFailed) {
-    Write-FAIL "Python execution failed: $errorMsg"
-    exit 1
-}
+    $execFailed = $false
+    Push-Location $repoRoot
+    try {
+        $output = python $tempFile 2>&1
+    } catch {
+        $execFailed = $true
+        $errorMsg = $_
+    } finally {
+        Pop-Location
+    }
 
 # Remove temporary file
-Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
-# Recreate placeholder to satisfy repository checks
-"pass" | Set-Content $tempFile -Encoding UTF8
+    Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+    # Recreate placeholder to satisfy repository checks
+    "pass" | Set-Content $tempFile -Encoding UTF8
+
+    if ($execFailed) {
+        Write-FAIL "Python execution failed: $errorMsg"
+        exit 1
+    }
 
 
-Write-Host "`n=== API TEST REPORT ===" -ForegroundColor Cyan
+    Write-Host "`n=== API TEST REPORT ===" -ForegroundColor Cyan
 
 $success = $true
 
-foreach ($line in $output) {
-    if ($line -like "<<RESULT>>*") {
-        $parts = $line.Replace("<<RESULT>>","").Trim() -split "\|"
-        $name = $parts[0].Trim()
-        $status = $parts[1].Trim()
-        $msg = $parts[2].Trim()
+    foreach ($line in $output) {
+        if ($line -like "<<RESULT>>*") {
+            $parts = $line.Replace("<<RESULT>>","").Trim() -split "\|"
+            $name = $parts[0].Trim()
+            $status = $parts[1].Trim()
+            $msg = $parts[2].Trim()
 
-        if ($status -eq "OK") {
-            Write-OK "$name : $msg"
-        } else {
-            Write-FAIL "$name : $msg"
-            $success = $false
+            if ($status -eq "OK") {
+                Write-OK "$name : $msg"
+            } else {
+                Write-FAIL "$name : $msg"
+                $success = $false
+            }
         }
     }
-}
 
 Write-Host ""
-if ($success) {
-    Write-Host "=== ALL TESTS PASSED SUCCESSFULLY ===" -ForegroundColor Green
-} else {
-    Write-Host "=== SOME TESTS FAILED (SEE ABOVE) ===" -ForegroundColor Red
+    if ($success) {
+        Write-Host "=== ALL TESTS PASSED SUCCESSFULLY ===" -ForegroundColor Green
+    } else {
+        Write-Host "=== SOME TESTS FAILED (SEE ABOVE) ===" -ForegroundColor Red
+    }
+} finally {
+    if ($startedTranscript) {
+        try { Stop-Transcript | Out-Null } catch { }
+        Remove-Variable -Name "__test_transcript_active" -Scope Global -ErrorAction SilentlyContinue
+    }
 }
