@@ -102,6 +102,23 @@ def load_shared_close_series(fallback_value: float):
     except Exception:
         return ticker, None
 
+
+def show_and_close(fig):
+    """Render a matplotlib figure in Streamlit and close it to avoid figure leaks."""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+
+        # When running outside `streamlit run` (e.g., tests), skip rendering to avoid warnings.
+        if get_script_run_ctx() is None:
+            plt.close(fig)
+            return
+    except Exception:
+        plt.close(fig)
+        return
+
+    st.pyplot(fig, clear_figure=True)
+    plt.close(fig)
+
 __all__ = [
     "_choose_option_select",
     "_render_option_text",
@@ -154,6 +171,7 @@ __all__ = [
     "price_iron_butterfly_bs",
     "resolve_common_underlying",
     "load_shared_close_series",
+    "show_and_close",
     "floor_n",
     "math",
     "datetime",

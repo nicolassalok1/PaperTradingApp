@@ -77,7 +77,7 @@ def render_tab_asset_on():
     ax.set_ylabel("Payoff / P&L")
     ax.set_title("Asset-or-nothing (payoff & P&L avec prime BS)")
     ax.legend(loc="lower right")
-    st.pyplot(fig, clear_figure=True)
+    show_and_close(fig)
 
     st.session_state[_k("asset_on_pre_price")] = premium
     price = float(premium)

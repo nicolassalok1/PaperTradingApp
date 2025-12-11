@@ -112,7 +112,7 @@ def render_tab_straddle():
     ax.set_ylabel("Payoff / P&L")
     ax.set_title("Straddle (payoff & P&L avec prime BS)")
     ax.legend(loc="lower right")
-    st.pyplot(fig, clear_figure=True)
+    show_and_close(fig)
 
     # Stocke la prime et affiche directement le formulaire d'ajout (équivalent dropdown)
     st.session_state[_k("straddle_pre_price")] = premium

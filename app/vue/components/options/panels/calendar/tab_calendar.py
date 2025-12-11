@@ -112,7 +112,7 @@ def render_tab_calendar():
         ax_ts.set_title(f"Clôtures {hist_tkr} (strike / forward start)")
         ax_ts.legend(loc="best")
         fig_ts.autofmt_xdate()
-        st.pyplot(fig_ts, clear_figure=True)
+        show_and_close(fig_ts)
     else:
         st.info(
             "Ajoute un ticker commun en haut de l'onglet Options pour tracer l'historique 1 an."
@@ -128,7 +128,7 @@ def render_tab_calendar():
     ax_pay.set_xlabel("Spot")
     ax_pay.set_ylabel("Payoff / P&L")
     ax_pay.set_title(f"Calendar spread ({option_type_cal})")
-    st.pyplot(fig_pay, clear_figure=True)
+    show_and_close(fig_pay)
 
     price = float(premium)
     st.markdown("### Ajouter au dashboard")

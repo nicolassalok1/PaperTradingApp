@@ -86,7 +86,7 @@ def render_tab_lookback_fixed():
     ax_ts.set_title(f"Clôtures {hist_tkr} (Lookback fixed)")
     ax_ts.legend(loc="best")
     fig_ts.autofmt_xdate()
-    st.pyplot(fig_ts, clear_figure=True)
+    show_and_close(fig_ts)
 
     fig_pay, ax_pay = plt.subplots(figsize=(7, 4))
     ax_pay.plot(s_grid, payoff_grid, label="Payoff")
@@ -97,7 +97,7 @@ def render_tab_lookback_fixed():
     ax_pay.set_xlabel("Spot")
     ax_pay.set_ylabel("Payoff / P&L")
     ax_pay.set_title(f"Lookback fixed ({option_type_lbf})")
-    st.pyplot(fig_pay, clear_figure=True)
+    show_and_close(fig_pay)
 
     price = float(premium)
     st.markdown("### Ajouter au dashboard")

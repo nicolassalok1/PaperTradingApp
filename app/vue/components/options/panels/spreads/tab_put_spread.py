@@ -105,7 +105,7 @@ def render_tab_put_spread():
     ax.set_ylabel("Payoff / P&L")
     ax.set_title("Put spread (payoff & P&L avec prime BS)")
     ax.legend(loc="lower right")
-    st.pyplot(fig, clear_figure=True)
+    show_and_close(fig)
 
     st.session_state[_k("put_spread_pre_price")] = premium
     price = float(premium)

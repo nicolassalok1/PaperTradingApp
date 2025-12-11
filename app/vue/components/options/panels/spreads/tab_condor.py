@@ -139,8 +139,7 @@ def render_tab_condor():
     ax.set_ylabel("Payoff / P&L")
     ax.set_title("Condor (payoff & P&L avec prime BS)")
     ax.legend(loc="lower right")
-    st.pyplot(fig, clear_figure=True)
-    plt.close(fig)
+    show_and_close(fig)
 
     st.session_state[_k("condor_pre_price")] = premium
     price = float(premium)

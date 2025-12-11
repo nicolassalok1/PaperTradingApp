@@ -83,7 +83,7 @@ def render_tab_asian():
     ax_ts.set_title(f"Clôtures {hist_tkr} (Asian arith)")
     ax_ts.legend(loc="best")
     fig_ts.autofmt_xdate()
-    st.pyplot(fig_ts, clear_figure=True)
+    show_and_close(fig_ts)
 
     fig_pay, ax_pay = plt.subplots(figsize=(7, 4))
     ax_pay.plot(s_grid, payoff_grid, label="Payoff")
@@ -95,7 +95,7 @@ def render_tab_asian():
     ax_pay.set_xlabel("Spot")
     ax_pay.set_ylabel("Payoff / P&L")
     ax_pay.set_title(f"Asian arithmétique ({option_type_as})")
-    st.pyplot(fig_pay, clear_figure=True)
+    show_and_close(fig_pay)
 
     st.markdown("### Ajouter au dashboard")
     st.metric("Prix calculé", f"${premium:.6f}")

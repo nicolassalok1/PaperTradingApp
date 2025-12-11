@@ -59,7 +59,7 @@ def render_tab_forward_start():
     ax_ts.set_title(f"Clôtures {hist_tkr} (Forward-start)")
     ax_ts.legend(loc="best")
     fig_ts.autofmt_xdate()
-    st.pyplot(fig_ts, clear_figure=True)
+    show_and_close(fig_ts)
     view_dyn = view_forward_start(
         S0,
         spot_start,
@@ -84,7 +84,7 @@ def render_tab_forward_start():
     ax.set_ylabel("Payoff / P&L")
     ax.set_title("Forward-start (payoff & P&L avec prime BS)")
     ax.legend(loc="lower right")
-    st.pyplot(fig, clear_figure=True)
+    show_and_close(fig)
 
     st.session_state[_k("forward_start_pre_price")] = premium
     price = float(premium)
