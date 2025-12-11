@@ -98,6 +98,7 @@ from app.model.options.service import (
     load_iv_surface,
     price_and_greeks,
     price_option_mc,
+    price_european_from_cboe,
 )
 from app.model.heston.pricing import compute_heston_price
 from app.model.heston.calibration import calibrate_heston_to_market
@@ -188,6 +189,7 @@ __all__ = [
     "calibrate_heston_to_market",
     "price_and_greeks",
     "compute_price_mc",
+    "price_european_from_cboe",
     # Black-Scholes / spreads
     "black_scholes_price",
     "price_asset_or_nothing",

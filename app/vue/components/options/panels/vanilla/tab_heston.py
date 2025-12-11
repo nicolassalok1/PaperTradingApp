@@ -1,41 +1,10 @@
+from __future__ import annotations
+
 import numpy as np
+import pandas as pd
 import streamlit as st
-from app.controller import options_controller as oc
+
 from app.vue.components.options.controller_bridge import *
-
-# Bridge controller functions used locally
-fetch_iv_surface = oc.fetch_iv_surface
-interpolate_surface = oc.interpolate_surface
-load_iv_from_csv = oc.load_iv_from_csv
-calibrate_heston_stub = oc.calibrate_heston_stub
-price_heston_fft = oc.price_heston_fft
-price_heston_call = oc.price_heston_call
-heston_delta = oc.heston_delta
-heston_vega = oc.heston_vega
-plot_surface_3d = oc.plot_surface_3d
-plot_heatmap = oc.heston_plot_heatmap
-
-def _safe_calibrate_heston(strikes, maturities, iv_matrix):
-    """
-    TensorFlow-free fallback calibration using simple IV statistics.
-    """
-    try:
-        iv_flat = iv_matrix[np.isfinite(iv_matrix)]
-        iv_med = float(np.nanmedian(iv_flat)) if iv_flat.size else 0.5
-        if not np.isfinite(iv_med) or iv_med <= 0:
-            iv_med = 0.5
-    except Exception:
-        iv_med = 0.5
-
-    sigma = max(0.01, iv_med)
-    v0 = sigma**2
-    return {
-        "kappa": 1.5,
-        "theta": v0,
-        "sigma": sigma,
-        "rho": -0.4,
-        "v0": v0,
-    }
 
 
 def render_tab_heston():
@@ -46,184 +15,109 @@ def render_tab_heston():
     close_series = ctx["close_series"]
     _k = ctx["_k"]
     # --------------------------------
-    hist_tkr = ticker
 
-    st.markdown("## 🧮 Modèle de Heston — Interface Professionnelle")
-    st.caption("Calibration NN | Pricing CF | FFT (stub) | IV Surface 3D")
-    st.markdown("---")
+    spot_ref = float(S0) if S0 is not None else None
+    if spot_ref is None or not np.isfinite(spot_ref) or spot_ref <= 0:
+        try:
+            fallback = float(st.session_state.get("common_spot_value", 100.0))
+        except Exception:
+            fallback = 100.0
+        spot_ref = fallback if np.isfinite(fallback) and fallback > 0 else 100.0
 
-    common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
-    mc_label_to_model = {
-        "Black–Scholes (MC)": "bs",
-        "rHeston (MC)": "rheston",
-        "rBergomi (MC)": "rbergomi",
-        "SABR (MC)": "sabr",
-        "Volterra (MC)": "volterra",
-    }
-    mc_choice = st.selectbox(
-        "Modèle de pricing Monte Carlo",
-        options=list(mc_label_to_model.keys()),
-        index=0,
-        key=f"mc_model_{_k('heston')}",
-        help="Black–Scholes (MC) implémenté, les autres seront ajoutés progressivement.",
-    )
-    mc_model = mc_label_to_model.get(mc_choice, list(mc_label_to_model.values())[0])
+    if not isinstance(close_series, pd.Series) or close_series.empty:
+        close_series = pd.Series([spot_ref], index=pd.Index([pd.Timestamp.today()]))
 
-    tab_calib, tab_pricing, tab_surface = st.tabs(["Calibration NN", "Pricing", "IV Surface"])
+    if not ticker:
+        st.info("Choisis un ticker global dans l'entete Options pour activer ce panneau.")
+        return
 
-    with tab_calib:
-        st.subheader("Calibration NN du modele de Heston")
+    st.subheader("Option europeenne (CBOE IV + Black-Scholes)")
 
-        ticker = st.text_input(
-            "Ticker (IV via yfinance)",
-            st.session_state.get("heston_cboe_ticker", ""),
-            placeholder="ex: SPY",
+    col1, col2 = st.columns(2)
+    with col1:
+        option_type = st.selectbox("Type d'option", ["call", "put"], key=_k("heston_type"))
+        strike_val = st.slider(
+            "Strike",
+            min_value=0.6 * spot_ref,
+            max_value=1.4 * spot_ref,
+            value=spot_ref,
+            step=max(spot_ref * 0.01, 0.25),
+            key=_k("heston_k"),
         )
-        use_csv = st.checkbox("Charger depuis un CSV ?", value=False)
-        fetch_iv = st.button("Charger la surface IV", key="btn_fetch_iv_surface")
-
-        df_iv = None
-        ticker_norm = (ticker or "").strip().upper()
-        if use_csv:
-            iv_file = st.file_uploader("Televerser un CSV d'IV", type="csv")
-            if iv_file:
-                df_iv = load_iv_from_csv(iv_file)
-        else:
-            cached_tkr = st.session_state.get("_iv_surface_ticker")
-            if fetch_iv and ticker_norm:
-                df_iv = fetch_iv_surface(ticker_norm)
-                st.session_state["heston_cboe_ticker"] = ticker_norm
-                if df_iv is not None:
-                    st.session_state["_iv_surface_cache"] = df_iv
-                    st.session_state["_iv_surface_ticker"] = ticker_norm
-            elif cached_tkr and cached_tkr == ticker_norm:
-                df_iv = st.session_state.get("_iv_surface_cache")
-
-        has_iv_data = df_iv is not None and len(df_iv) > 0
-        if has_iv_data:
-            maturities, strikes, iv_matrix = interpolate_surface(df_iv)
-            if iv_matrix is None:
-                st.warning("Interpolation echouee.")
-            else:
-                st.info("Surface IV chargee et interpolee (maturites x strikes).")
-                if st.button("Calibrer via NN"):
-                    try:
-                        # TensorFlow-free calibration stub.
-                        params = calibrate_heston_stub(strikes, maturities, iv_matrix)
-                        st.success("Calibration terminée (approx heuristique, sans TF).")
-                        st.json(params)
-                        st.session_state["heston_params"] = params
-                    except Exception as exc:
-                        st.error(f"Calibration NN indisponible: {exc}")
-        elif use_csv or fetch_iv:
-            st.warning("Aucune surface IV recuperee.")
-        elif ticker_norm:
-            st.info('Clique sur "Charger la surface IV" pour récupérer la surface.')
-        else:
-            st.info("Renseigne un ticker puis clique sur le bouton pour charger la surface IV.")
-
-    with tab_pricing:
-        st.subheader("Pricing europeen Heston")
-
-        K = st.number_input("Strike", min_value=1.0, value=100.0)
-        T = st.number_input("Maturite (annees)", min_value=0.01, value=0.25)
-        r = st.number_input("Taux sans risque r", value=0.01)
-        q = st.number_input("Dividende q", value=0.00)
-        sigma_mc = float(st.session_state.get("common_sigma_value", 0.2))
-
-        params = st.session_state.get(
-            "heston_params",
-            {
-                "kappa": 1.5,
-                "theta": 0.04,
-                "sigma": 0.6,
-                "rho": -0.5,
-                "v0": 0.04,
-            },
+    with col2:
+        maturity_val = st.slider(
+            "T (annees)",
+            min_value=0.05,
+            max_value=2.0,
+            value=0.5,
+            step=0.05,
+            key=_k("heston_T"),
         )
+        qty = st.number_input("Quantite", min_value=1, value=1, step=1, key=_k("heston_qty"))
 
-        if st.button("Pricer Heston (CF)"):
-            price = price_heston_call(common_spot_value, K, T, r, q, **params)
-            delta = heston_delta(common_spot_value, K, T, r, q, params)
-            vega = heston_vega(common_spot_value, K, T, r, q, params)
+    try:
+        price_data = price_european_from_cboe(ticker, float(strike_val), float(maturity_val), option_type)
+    except Exception as exc:
+        st.error(f"Pricing indisponible : {exc}")
+        return
 
-            st.success(f"Prix Heston = {price:.4f}")
-            st.metric("Delta", f"{delta:.4f}")
-            st.metric("Vega", f"{vega:.4f}")
-            ticker_mc = (
-                (ticker or st.session_state.get("heston_cboe_ticker") or st.session_state.get("tkr_common") or "")
-                .strip()
-                .upper()
-            )
-            if ticker_mc:
-                try:
-                    price_mc_val = compute_price_mc(
-                        {"ticker": ticker_mc, "K": K, "T": T, "sigma": sigma_mc},
-                        mc_model=mc_model,
-                    )
-                    st.metric("Prix (Monte Carlo)", f"{price_mc_val:.4f}")
-                except Exception as exc:
-                    st.warning(f"Pricing Monte Carlo indisponible: {exc}")
-            else:
-                st.info("Renseigne un ticker pour activer le pricing Monte Carlo.")
+    unit_price = float(price_data.get("price", 0.0))
+    K_used = float(price_data.get("K", strike_val))
+    T_used = float(price_data.get("T", maturity_val))
+    iv_used = price_data.get("iv", float("nan"))
+    try:
+        S_used = float(price_data.get("S0", spot_ref))
+    except Exception:
+        S_used = spot_ref
+    if not np.isfinite(S_used) or S_used <= 0:
+        S_used = spot_ref
 
-        if st.button("Pricer via FFT (approx)"):
-            st.info("Version FFT skeleton - retourne un stub.")
-            fft_price = price_heston_fft(common_spot_value, K, T, r, q, params)
-            st.write(f"FFT approx: {fft_price}")
+    price_cols = st.columns(3)
+    price_cols[0].metric("Prix unitaire", f"${unit_price:.4f}")
+    price_cols[1].metric("Prix total", f"${unit_price * qty:.4f}")
+    iv_label = f"{iv_used:.4f}" if np.isfinite(iv_used) else "N/A"
+    price_cols[2].metric("IV utilisee", iv_label)
+    st.caption(f"K utilise: {K_used:.4f} | T utilise: {T_used:.4f} an(s)")
 
-    with tab_surface:
-        st.subheader("Surface IV (3D / Heatmap)")
+    fig_ts, ax_ts = plt.subplots(figsize=(8, 3))
+    ax_ts.plot(close_series.index, close_series.values, label=f"{ticker} close")
+    ax_ts.axhline(S_used, color="crimson", linestyle="-.", label=f"S0 = {S_used:.2f}")
+    ax_ts.axhline(K_used, color="gray", linestyle="--", label=f"K = {K_used:.2f}")
+    ax_ts.set_ylabel("Prix")
+    ax_ts.set_title(f"Clotures {ticker}")
+    ax_ts.legend(loc="best")
+    fig_ts.autofmt_xdate()
+    show_and_close(fig_ts)
 
-        ticker_surf = st.text_input(
-            "Ticker surface (yfinance)",
-            st.session_state.get("heston_cboe_ticker", ""),
-            placeholder="ex: SPY",
-            key="ticker_surf_input",
-        )
-        fetch_surf = st.button("Charger la surface IV pour affichage", key="btn_fetch_iv_surface_plot")
-        df_surf = None
-        ticker_surf_norm = (ticker_surf or "").strip().upper()
-        cached_tkr = st.session_state.get("_iv_surface_ticker")
-        if fetch_surf and ticker_surf_norm:
-            df_surf = fetch_iv_surface(ticker_surf_norm)
-            st.session_state["heston_cboe_ticker"] = ticker_surf_norm
-            if df_surf is not None:
-                st.session_state["_iv_surface_cache"] = df_surf
-                st.session_state["_iv_surface_ticker"] = ticker_surf_norm
-        elif cached_tkr and cached_tkr == ticker_surf_norm:
-            df_surf = st.session_state.get("_iv_surface_cache")
+    s_grid = np.linspace(0.4 * spot_ref, 1.6 * spot_ref, 200)
+    if option_type == "call":
+        payoff = np.maximum(s_grid - K_used, 0.0)
+    else:
+        payoff = np.maximum(K_used - s_grid, 0.0)
+    pnl = payoff - unit_price
 
-        has_surface = df_surf is not None and len(df_surf) > 0
-        if has_surface:
-            maturities, strikes, iv_matrix = interpolate_surface(df_surf)
+    fig_pay, ax_pay = plt.subplots(figsize=(7, 4))
+    ax_pay.plot(s_grid, payoff, label="Payoff")
+    ax_pay.plot(s_grid, pnl, label="P&L net", color="darkorange")
+    ax_pay.axvline(K_used, color="gray", linestyle="--", label=f"K = {K_used:.2f}")
+    ax_pay.axvline(S_used, color="crimson", linestyle="-.", label=f"S0 = {S_used:.2f}")
+    ax_pay.axhline(0, color="black", linewidth=0.8)
+    ax_pay.set_xlabel("Spot")
+    ax_pay.set_ylabel("Payoff / P&L")
+    ax_pay.set_title(f"Payoff {option_type} (CBOE + BS)")
+    ax_pay.legend(loc="best")
+    show_and_close(fig_pay)
 
-            if iv_matrix is None:
-                st.warning("Interpolation impossible.")
-            else:
-                st.plotly_chart(
-                    plot_surface_3d(maturities, strikes, iv_matrix),
-                    config={"staticPlot": True, "scrollZoom": False},
-                )
-                st.plotly_chart(
-                    plot_heatmap(maturities, strikes, iv_matrix),
-                    config={"staticPlot": True, "scrollZoom": False},
-                )
-        elif fetch_surf:
-            st.warning("Aucune IV recuperee pour ce ticker.")
-        elif ticker_surf_norm:
-            st.info('Clique sur "Charger la surface IV pour affichage" pour lancer le fetch.')
-        else:
-            st.info("Renseigne un ticker puis déclenche le chargement de la surface IV.")
-
-    # --- Bouton Add-to-Dashboard Clean ---
-    if "price" in locals() and st.button("Ajouter au dashboard", key="heston_add_dashboard_btn"):
+    if st.button("Ajouter au dashboard", key=_k("heston_add_clean"), type="primary"):
         payload = {
             "underlying": ticker,
-            "S0": S0,
-            "price": float(price),
+            "S0": float(S_used),
+            "K": float(K_used),
+            "T": float(T_used),
+            "price": float(unit_price),
+            "qty": int(qty),
+            "option_type": option_type,
         }
         oid = add_option_to_dashboard_clean(payload)
         log_action("add_option", {"id": oid, "payload": payload})
-        st.success(f"Option ajoutée au dashboard (id={oid})")
-    # -------------------------------------
+        st.success(f"Option ajoutee au dashboard (id={oid})")

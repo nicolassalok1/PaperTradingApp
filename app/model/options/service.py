@@ -11,7 +11,7 @@ import numpy as np
 
 from app.model.options.core.greeks import compute_option_greeks
 from app.model.options.heatmaps import compute_crr_heatmaps, heatmap_axis
-from app.model.options.engines.pricing import CrankNicolsonBS
+from app.model.options.engines.pricing import CrankNicolsonBS, bs_option_price
 from app.model.options.data.iv_surface import fetch_iv_surface, interpolate_surface
 from app.model.options.mc_engine import MCModel, price_european_mc
 
@@ -141,6 +141,86 @@ def price_option_mc(
     )
 
 
+def price_european_from_cboe(
+    ticker: str,
+    K: float,
+    T: float,
+    option_type: str = "call",
+    max_maturity_years: float = 2.0,
+) -> dict:
+    """
+    Pricing européen basé sur la surface IV CBOE :
+    - récupère la surface IV (K, T, iv) via fetch_iv_surface
+    - choisit le point le plus proche de (K, T)
+    - price via Black-Scholes (bs_option_price)
+    Retourne un dict : {price, S0, K, T, iv, r, cp}.
+    """
+    from app.model.market_data.market_data import fetch_spot_price
+    from app.model.yieldcurve.rates_utils import get_r
+
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        raise ValueError("Ticker manquant pour price_european_from_cboe().")
+
+    df = fetch_iv_surface(sym, max_maturity_years=max_maturity_years)
+    if df is None or df.empty:
+        raise ValueError(f"Aucune surface IV CBOE pour {sym}.")
+
+    cols = {c.lower(): c for c in df.columns}
+    k_col = cols.get("k") or cols.get("strike")
+    t_col = cols.get("t") or cols.get("maturity") or cols.get("tau")
+    iv_col = cols.get("iv") or cols.get("sigma") or cols.get("vol")
+    if not (k_col and t_col and iv_col):
+        raise ValueError("Surface IV: colonnes K/T/iv manquantes.")
+
+    df_clean = df.dropna(subset=[k_col, t_col, iv_col]).copy()
+    cp = "c" if option_type.lower().startswith("c") else "p"
+    if "type" in df_clean.columns:
+        df_clean = df_clean[df_clean["type"].astype(str).str.lower().str.startswith(cp)]
+        if df_clean.empty:
+            df_clean = df.dropna(subset=[k_col, t_col, iv_col]).copy()
+
+    if df_clean.empty:
+        raise ValueError(f"Surface IV vide pour {sym} (type {option_type}).")
+
+    df_clean["dK"] = (df_clean[k_col] - K).abs()
+    df_clean["dT"] = (df_clean[t_col] - T).abs()
+    K_scale = max(abs(K), 1.0)
+    T_scale = max(abs(T), 1e-4)
+    df_clean["score"] = df_clean["dK"] / K_scale + df_clean["dT"] / T_scale
+
+    row = df_clean.sort_values("score").iloc[0]
+    K_used = float(row[k_col])
+    T_used = float(row[t_col])
+    iv = float(row[iv_col])
+
+    S0 = fetch_spot_price(sym)
+    if S0 is None:
+        S0 = float(row.get("S0", float("nan")))
+
+    r = float(get_r(T_used))
+
+    price = bs_option_price(
+        0.0,
+        float(S0),
+        K_used,
+        T_used,
+        r,
+        iv,
+        "call" if cp == "c" else "put",
+    )
+
+    return {
+        "price": float(price),
+        "S0": float(S0),
+        "K": K_used,
+        "T": T_used,
+        "iv": iv,
+        "r": r,
+        "cp": cp,
+    }
+
+
 __all__ = [
     "compute_price",
     "compute_greeks",
@@ -148,4 +228,5 @@ __all__ = [
     "load_iv_surface",
     "price_and_greeks",
     "price_option_mc",
+    "price_european_from_cboe",
 ]

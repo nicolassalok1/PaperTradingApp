@@ -76,6 +76,7 @@ clear_closing_history_cache = oc.clear_closing_history_cache
 # Pricing extras
 price_iron_butterfly_bs = oc.price_iron_butterfly_bs
 compute_price_mc = oc.compute_price_mc
+price_european_from_cboe = oc.price_european_from_cboe
 
 
 def _bootstrap_fake_streamlit():
@@ -208,6 +209,7 @@ __all__ = [
     "load_expired",
     "save_expired",
     "compute_price_mc",
+    "price_european_from_cboe",
     "get_data",
     "load_or_fetch_closing_history",
     "load_close_series_for_ticker",
