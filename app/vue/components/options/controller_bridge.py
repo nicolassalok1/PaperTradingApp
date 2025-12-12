@@ -95,6 +95,11 @@ clear_closing_history_cache = oc.clear_closing_history_cache
 price_iron_butterfly_bs = oc.price_iron_butterfly_bs
 compute_price_mc = oc.compute_price_mc
 price_european_from_cboe = oc.price_european_from_cboe
+try:
+    price_option_mc_unified = oc.price_option_mc_unified
+except Exception:  # pragma: no cover - safety fallback
+    def price_option_mc_unified(*args, **kwargs):
+        raise ImportError("price_option_mc_unified indisponible")
 
 
 def _bootstrap_fake_streamlit():

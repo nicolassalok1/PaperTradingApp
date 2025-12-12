@@ -1,11 +1,7 @@
 import streamlit as st
 import numpy as np
 
-from app.vue.components.options.controller_bridge import (
-    ensure_close_history,
-    get_option_context,
-    price_option_mc_unified,
-)
+from app.vue.components.options import controller_bridge as cb
 
 
 def _style_label(style: str) -> str:
@@ -17,8 +13,8 @@ def _style_label(style: str) -> str:
 
 
 def render_mc_panel(default_style: str = "european"):
-    ctx = get_option_context()
-    if not ensure_close_history(ctx):
+    ctx = cb.get_option_context()
+    if not cb.ensure_close_history(ctx):
         return
     S0 = float(ctx.get("S0") or 100.0)
     ticker = ctx.get("ticker") or ""
@@ -60,7 +56,7 @@ def render_mc_panel(default_style: str = "european"):
 
     if st.button("Lancer le pricing MC", key=_k("mc_price_btn"), type="primary"):
         try:
-            res = price_option_mc_unified(
+            res = cb.price_option_mc_unified(
                 ticker=ticker,
                 S0=S0,
                 K=float(strike),

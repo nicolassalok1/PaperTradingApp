@@ -92,6 +92,7 @@ from app.model.options.service import (
     load_iv_surface,
     price_and_greeks,
     price_option_mc,
+    price_option_mc_unified,
     price_european_from_cboe,
 )
 from app.model.options.engines.tree import build_crr_tree, plot_crr_tree
@@ -180,6 +181,7 @@ __all__ = [
     "price_and_greeks",
     "compute_price_mc",
     "price_european_from_cboe",
+    "price_option_mc_unified",
     # Black-Scholes / spreads
     "black_scholes_price",
     "price_asset_or_nothing",

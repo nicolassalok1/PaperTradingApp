@@ -135,4 +135,33 @@ __all__ = [
     "simulate_paths",
     "price_mc_european",
     "price_mc_lsmc",
+    "price_european_mc",
 ]
+
+
+def price_european_mc(
+    S0,
+    K,
+    T,
+    sigma,
+    model="bs",
+    n_paths=10000,
+    n_steps=252,
+    ticker=None,
+):
+    """
+    Backward-compatible alias for price_mc_european.
+    Only Black-Scholes MC is implemented; other models not yet supported.
+    """
+    if str(model).lower() != "bs":
+        raise NotImplementedError("Model not implemented yet")
+    return price_mc_european(
+        S0=S0,
+        K=K,
+        T=T,
+        sigma=sigma,
+        option_type="call",
+        n_paths=n_paths,
+        n_steps=n_steps,
+        ticker=ticker,
+    )["price"]
