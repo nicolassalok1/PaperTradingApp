@@ -17,6 +17,7 @@ from app.model.market_data.market_data import (
     load_or_fetch_closing_history,
     fetch_spot_price,
 )
+from app.model.market_data.service import fetch_historical_prices
 from app.model.trading.systems import (
     load_equities,
     load_ts_exec_log,
@@ -40,6 +41,7 @@ __all__ = [
     "remove_trading_system",
     "set_trading_system_status",
     "get_data",
+    "fetch_historical_prices",
     "clear_closing_history_cache",
     "load_or_fetch_closing_history",
     "buy_asset_with_balance",

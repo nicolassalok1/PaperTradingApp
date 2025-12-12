@@ -15,7 +15,7 @@ from typing import Dict, Iterable, Sequence
 import numpy as np
 import pandas as pd
 
-from app.services.market_data_service import fetch_historical_prices
+from app.model.market_data.service import fetch_historical_prices
 from app.utils.paths import CACHE_CSV_DIR
 
 BASE_DIR = Path(__file__).resolve().parent

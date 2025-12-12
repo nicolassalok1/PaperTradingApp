@@ -31,6 +31,7 @@ TAB_GROUPS = {
         "🧮 Yield Curve",
         "🧱 Risk Management",
         "🧪 Trading Systems / Backtest",
+        "🧮 Calibration",
     ],
     "📈 Trading": [
         "🛒 Buy/Sell",
@@ -54,6 +55,7 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     "tab_hedger": "🛡️ Hedger",
     "tab_yieldcurve": "🧮 Yield Curve",
     "tab_backtest": "🧪 Trading Systems / Backtest",
+    "tab_calibration": "🧮 Calibration",
     "tab_alpaca_orders": "💹 Advanced Orders",
     "tab_risk_management": "🧱 Risk Management",
     "tab_portfolio_allocation": "📐 Portfolio Allocation",

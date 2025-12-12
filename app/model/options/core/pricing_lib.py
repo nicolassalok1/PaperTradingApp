@@ -4,7 +4,7 @@ from typing import Iterable, Tuple
 
 import numpy as np
 import pandas as pd
-from app.services.market_data_service import fetch_historical_prices
+from app.model.market_data.service import fetch_historical_prices
 from app.utils.math_utils import floor_n
 from app.utils.paths import CACHE_CSV_DIR
 

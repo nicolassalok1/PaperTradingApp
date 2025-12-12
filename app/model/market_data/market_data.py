@@ -12,8 +12,8 @@ from typing import Tuple
 
 import pandas as pd
 
-from app.services.market_data_service import fetch_historical_prices as _fetch_stooq_history
-from app.services.market_data_service import fetch_spot_price as _fetch_stooq_spot
+from app.model.market_data.service import fetch_historical_prices as _fetch_stooq_history
+from app.model.market_data.service import fetch_spot_price as _fetch_stooq_spot
 from app.utils.paths import CACHE_CSV_DIR
 from app.utils.symbol_mapper import map_to_stooq
 

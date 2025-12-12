@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime as dt
 import io
 from typing import Optional
 
@@ -59,7 +58,11 @@ def fetch_historical_prices(
     if not mapped:
         return pd.DataFrame()
 
-    cache_key = f"{mapped}_{start or 'start'}_{end or 'end'}_{freq}".replace(" ", "_").replace("/", "-")
+    cache_key = (
+        f"{mapped}_{start or 'start'}_{end or 'end'}_{freq}"
+        .replace(" ", "_")
+        .replace("/", "-")
+    )
     cache_path = CACHE_CSV_DIR / f"stooq_{cache_key}.csv"
     if cache and cache_path.exists():
         try:

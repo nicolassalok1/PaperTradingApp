@@ -7,7 +7,7 @@ Usage:
 import argparse
 import sys
 
-from app.services.market_data_service import fetch_historical_prices
+from app.model.market_data.service import fetch_historical_prices
 
 
 def main() -> int:

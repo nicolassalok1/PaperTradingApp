@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-from app.services.market_data_service import fetch_historical_prices
 
 from app.controller import backtest_controller as ctrl
 from app.vue.components.page_utils import render_closing_history_chart, render_page_header
@@ -403,7 +402,7 @@ def render():
 
                 hist = pd.DataFrame()
                 try:
-                    hist_src = fetch_historical_prices(symbol, freq="D")
+                    hist_src = ctrl.fetch_historical_prices(symbol, freq="D")
                     if hist_src is not None and not hist_src.empty:
                         hist = hist_src.copy()
                         if "date" in hist.columns:

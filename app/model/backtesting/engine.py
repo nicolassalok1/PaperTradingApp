@@ -3,7 +3,7 @@ from typing import Any, Callable, Dict, Tuple
 
 import pandas as pd
 
-from app.services.market_data_service import fetch_historical_prices
+from app.model.market_data.service import fetch_historical_prices
 
 from app.model.backtesting.signals import compute_level_prices
 
