@@ -5,6 +5,7 @@ Yield curve controller: thin wrappers to model.yieldcurve services.
 from __future__ import annotations
 
 from app.model.yieldcurve.service import (
+    available_currencies,
     build_curve,
     compute_forward_price,
     compute_forward_rate,
@@ -35,6 +36,7 @@ __all__ = [
     "compute_instantaneous_rate",
     "compute_instantaneous_rates",
     "get_rate",
+    "available_currencies",
     "get_active_curve",
     "get_curve_snapshot",
     "get_risk_free_rate",

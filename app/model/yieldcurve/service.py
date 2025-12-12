@@ -14,17 +14,23 @@ from typing import Any, Dict, Iterable, List, Tuple
 import pandas as pd
 
 from app.model.market_data.realtime import get_data
+from app.model.yieldcurve.base import YieldCurve
+from app.model.yieldcurve.curves import FlatYieldCurve, NodeYieldCurve
 from app.model.yieldcurve.loader import (
     YIELD_CURVE_CACHE_FILE,
     download_yield_curve_to_cache,
     load_yield_curve_csv,
 )
+from app.model.yieldcurve.parsing import load_nodes_from_file
 from app.utils.io import load_json_file, save_json_file
 from app.utils.math_utils import floor_4
 from app.utils.paths import JSON_DIR
 
 FORWARDS_FILE = JSON_DIR / "forwards_portfolio.json"
+YIELD_CURVE_DATA_DIR = JSON_DIR / "yield_curves"
+YIELD_CURVE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_RF = float(os.getenv("DEFAULT_RF_RATE", "0.02"))
+DEFAULT_CURVE_CCY = os.getenv("DEFAULT_CURVE_CCY", "USD").upper()
 
 
 def load_curve(ensure_cache: bool = False) -> Tuple[pd.DataFrame | None, Path | None]:
@@ -50,8 +56,8 @@ def get_spot(sym: str):
     return get_data(sym)
 
 
-def get_rate():
-    return get_risk_free_rate
+def get_rate(currency: str | None = None):
+    return lambda T: get_risk_free_rate(T, currency=currency)
 
 
 def load_forwards() -> dict:
@@ -105,95 +111,135 @@ def _interpolate_from_points(
         return None
 
 
-class YieldCurve:
-    """
-    Lightweight curve abstraction providing zero rates and discount factors.
-    """
-
-    def __init__(
-        self,
-        tenors_years: List[float],
-        zero_rates: List[float],
-        source: Path | None = None,
-        default_rate: float = DEFAULT_RF,
-    ):
-        pairs = [
-            (float(t), float(r))
-            for t, r in zip(tenors_years, zero_rates)
-            if t is not None and r is not None and math.isfinite(t) and math.isfinite(r)
-        ]
-        pairs.sort(key=lambda x: x[0])
-        self._tenors, self._rates = zip(*pairs) if pairs else ((), ())
-        self._default_rate = float(default_rate)
-        self.source = source
-
-    @property
-    def maturities(self) -> List[float]:
-        return list(self._tenors)
-
-    def zero_rate(self, T_years: float) -> float:
-        T = float(T_years)
-        if not self._tenors:
-            return self._default_rate
-        val = _interpolate_from_points(list(self._tenors), list(self._rates), T)
-        if val is None or not math.isfinite(val):
-            return self._default_rate
-        return float(val)
-
-    def discount_factor(self, T_years: float) -> float:
-        try:
-            r = self.zero_rate(T_years)
-            return math.exp(-float(r) * float(T_years))
-        except Exception:
-            return math.exp(-self._default_rate * float(T_years))
-
-    def forward_rate(self, start_years: float, end_years: float) -> float | None:
-        if end_years <= start_years or end_years <= 0:
-            return None
-        try:
-            df1 = self.discount_factor(max(start_years, 0.0))
-            df2 = self.discount_factor(end_years)
-            return -(math.log(df2) - math.log(df1)) / (float(end_years) - float(start_years))
-        except Exception:
-            return None
-
-    def risk_free_rate(self, T_ref: float = 1.0) -> float:
-        return self.zero_rate(T_ref)
+def _find_nodes_file(currency: str) -> Path | None:
+    if not currency:
+        return None
+    code = currency.upper()
+    for ext in ("csv", "json"):
+        candidate = YIELD_CURVE_DATA_DIR / f"{code}_nodes.{ext}"
+        if candidate.exists():
+            return candidate
+    for path in YIELD_CURVE_DATA_DIR.glob("*_nodes.*"):
+        stem = path.stem.split("_")[0].upper()
+        if stem == code:
+            return path
+    return None
 
 
-def _build_curve_model(df_curve: pd.DataFrame | None, source: Path | None) -> YieldCurve:
-    tenors, rates = _latest_curve_points(df_curve) if df_curve is not None else ([], [])
-    if not tenors or not rates:
-        tenors = [0.25, 1.0, 2.0]
-        rates = [DEFAULT_RF] * len(tenors)
-    return YieldCurve(tenors, rates, source=source, default_rate=DEFAULT_RF)
+def available_currencies() -> List[str]:
+    codes = {path.stem.split("_")[0].upper() for path in YIELD_CURVE_DATA_DIR.glob("*_nodes.*")}
+    return sorted(codes) if codes else [DEFAULT_CURVE_CCY]
 
 
-def get_active_curve(ensure_cache: bool = True) -> tuple[YieldCurve, Path | None]:
+def _nodes_from_cache_csv(ensure_cache: bool) -> tuple[list[dict], Path | None]:
     df_curve, source_path = load_yield_curve_csv(ensure_cache=ensure_cache)
-    curve = _build_curve_model(df_curve, source_path)
-    return curve, source_path
+    if df_curve is None or df_curve.empty:
+        return [], source_path
+    tenors, rates = _latest_curve_points(df_curve)
+    nodes: list[dict] = []
+    for t, r in zip(tenors, rates):
+        if not math.isfinite(t) or not math.isfinite(r):
+            continue
+        tenor_label = f"{int(round(t * 12))}M" if t < 1 else f"{int(round(t))}Y"
+        nodes.append(
+            {
+                "tenor": tenor_label,
+                "t_years": float(t),
+                "zero_rate": float(r),
+                "discount_factor": math.exp(-float(r) * float(t)),
+            }
+        )
+    return nodes, source_path
 
 
-def get_curve_snapshot(risk_free_maturity: float = 1.0, ensure_cache: bool = True) -> dict[str, Any]:
-    curve, source_path = get_active_curve(ensure_cache=ensure_cache)
-    maturities = curve.maturities
-    zero_rates = [curve.zero_rate(t) for t in maturities]
-    discount_factors = [curve.discount_factor(t) for t in maturities]
-    risk_free_rate = curve.risk_free_rate(risk_free_maturity)
+def _load_nodes_for_currency(currency: str, ensure_cache: bool = True) -> tuple[list[dict], Path | None]:
+    path = _find_nodes_file(currency)
+    if path:
+        nodes = load_nodes_from_file(path)
+        return nodes, path
+    nodes, source = _nodes_from_cache_csv(ensure_cache)
+    return nodes, source
+
+
+def _build_curve_from_nodes(nodes: list[dict], fallback_rate: float = DEFAULT_RF) -> NodeYieldCurve | FlatYieldCurve:
+    if nodes:
+        return NodeYieldCurve(nodes, default_rate=fallback_rate)
+    return FlatYieldCurve(rate=fallback_rate)
+
+
+def _pick_currency(currency: str | None = None) -> str:
+    if currency:
+        return currency.upper()
+    currencies = available_currencies()
+    if DEFAULT_CURVE_CCY in currencies:
+        return DEFAULT_CURVE_CCY
+    if currencies:
+        return currencies[0]
+    return DEFAULT_CURVE_CCY
+
+
+_CURVE_CACHE: Dict[str, tuple[YieldCurve, Path | None, list[dict]]] = {}
+
+
+def get_active_curve(
+    currency: str | None = None, ensure_cache: bool = True
+) -> tuple[YieldCurve, Path | None, list[dict]]:
+    ccy = _pick_currency(currency)
+    if ccy in _CURVE_CACHE:
+        return _CURVE_CACHE[ccy]
+    nodes, source_path = _load_nodes_for_currency(ccy, ensure_cache=ensure_cache)
+    curve = _build_curve_from_nodes(nodes, fallback_rate=DEFAULT_RF)
+    _CURVE_CACHE[ccy] = (curve, source_path, nodes)
+    return curve, source_path, nodes
+
+
+def get_curve_snapshot(
+    currency: str | None = None,
+    risk_free_maturity: float = 1.0,
+    ensure_cache: bool = True,
+    grid_size: int = 16,
+) -> dict[str, Any]:
+    curve, source_path, nodes = get_active_curve(currency=currency, ensure_cache=ensure_cache)
+    maturities_nodes = [n.get("t_years") for n in nodes if n.get("t_years") is not None]
+    maturities_nodes = [float(t) for t in maturities_nodes if math.isfinite(float(t))]
+    base_grid = sorted(set(maturities_nodes))
+    max_mat = max(base_grid) if base_grid else max(float(risk_free_maturity), 5.0)
+    dense_grid = [round(max_mat * i / max(grid_size, 2), 6) for i in range(1, grid_size + 1)]
+    maturities_grid = sorted({t for t in base_grid + dense_grid if t > 0})
+    grid = [
+        {
+            "t_years": t,
+            "zero_rate": curve.zero_rate(t),
+            "discount_factor": curve.discount_factor(t),
+        }
+        for t in maturities_grid
+    ]
+    risk_free_rate = curve.zero_rate(risk_free_maturity)
+    nodes_table = []
+    for n in getattr(curve, "nodes", []):
+        nodes_table.append(
+            {
+                "tenor": getattr(n, "tenor", None) or f"{getattr(n, 't_years', 0.0)}y",
+                "t_years": float(getattr(n, "t_years", 0.0)),
+                "zero_rate": float(getattr(n, "zero_rate", 0.0)),
+                "discount_factor": float(getattr(n, "discount_factor", 0.0)),
+            }
+        )
     return {
-        "maturities": maturities,
-        "zero_rates": zero_rates,
-        "discount_factors": discount_factors,
+        "currency": ccy,
+        "nodes": nodes_table,
+        "grid": grid,
         "risk_free_rate": risk_free_rate,
         "risk_free_maturity": float(risk_free_maturity),
         "source_path": source_path,
     }
 
 
-def get_risk_free_rate(T_ref: float = 1.0, ensure_cache: bool = True) -> float:
-    curve, _ = get_active_curve(ensure_cache=ensure_cache)
-    return float(curve.risk_free_rate(T_ref))
+def get_risk_free_rate(
+    T_ref: float = 1.0, currency: str | None = None, ensure_cache: bool = True
+) -> float:
+    curve, _, _ = get_active_curve(currency=currency, ensure_cache=ensure_cache)
+    return float(curve.zero_rate(T_ref))
 
 
 def interpolate_curve_rate(df_curve: pd.DataFrame, T_years: float) -> float | None:
@@ -327,6 +373,7 @@ __all__ = [
     "load_curve",
     "build_curve",
     "refresh_curve",
+    "available_currencies",
     "yield_curve_cache_file",
     "get_spot",
     "get_rate",

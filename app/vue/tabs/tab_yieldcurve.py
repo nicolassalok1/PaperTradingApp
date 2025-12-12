@@ -6,14 +6,32 @@ from app.vue.components.page_utils import render_page_header
 
 
 def render():
-    snapshot = yc.get_curve_snapshot(risk_free_maturity=1.0, ensure_cache=True)
+    currencies = yc.available_currencies()
+    default_currency = "USD" if "USD" in currencies else (currencies[0] if currencies else "USD")
+    currency_options = currencies or [default_currency]
+    default_index = currency_options.index(default_currency) if default_currency in currency_options else 0
 
-    maturities = snapshot.get("maturities") or []
-    zero_rates = snapshot.get("zero_rates") or []
-    discount_factors = snapshot.get("discount_factors") or []
+    col_sel_ccy, col_sel_ref = st.columns([1, 1])
+    with col_sel_ccy:
+        currency = st.selectbox("Currency", currency_options, index=default_index)
+    t_ref_options = [0.25, 0.5, 1.0, 2.0, 5.0, 10.0]
+    with col_sel_ref:
+        risk_free_maturity = st.selectbox(
+            "Référence r(T)",
+            t_ref_options,
+            index=t_ref_options.index(1.0),
+            format_func=lambda x: f"{x:.2f}y",
+        )
+
+    snapshot = yc.get_curve_snapshot(
+        currency=currency, risk_free_maturity=risk_free_maturity, ensure_cache=True
+    )
+
+    nodes = snapshot.get("nodes") or []
+    grid = snapshot.get("grid") or []
     risk_free_rate = snapshot.get("risk_free_rate")
-    risk_free_maturity = snapshot.get("risk_free_maturity")
     source_path = snapshot.get("source_path")
+    currency = snapshot.get("currency") or currency
 
     render_page_header(
         "Yield Curve",
@@ -22,18 +40,17 @@ def render():
         badge="Rates",
     )
 
-    if source_path:
-        st.caption(f"Source: {source_path}")
-    else:
-        st.caption("Source attendue: cache/yield_curve.csv")
+    st.caption(
+        f"Devise: {currency} • Source: {source_path if source_path else 'data/yield_curves/*_nodes.(csv|json)'}"
+    )
 
     col_rf, col_ref = st.columns([2, 1])
     with col_rf:
         if risk_free_rate is not None:
             st.metric(
-                "Risk-free rate (pricing)",
+                f"Risk-free rate r(T) ({currency})",
                 f"{float(risk_free_rate) * 100:.2f} %",
-                f"réf: {float(risk_free_maturity):.2f}y",
+                f"T = {float(risk_free_maturity):.2f}y",
             )
         else:
             st.warning("Risk-free rate indisponible.")
@@ -41,28 +58,32 @@ def render():
         st.write("")
         st.write("Taux utilisé par les pricers (zc).")
 
-    def _df_from_series(values: list[float], label: str) -> pd.DataFrame | None:
-        if not maturities or not values:
-            return None
-        try:
-            df = pd.DataFrame({"Maturity (years)": maturities, label: values}).set_index(
-                "Maturity (years)"
-            )
-            return df
-        except Exception:
-            return None
+    st.markdown("#### Nœuds de courbe (zc/df)")
+    df_nodes = pd.DataFrame(nodes)
+    if not df_nodes.empty:
+        st.dataframe(
+            df_nodes[["tenor", "t_years", "zero_rate", "discount_factor"]],
+            hide_index=True,
+            use_container_width=True,
+        )
+    else:
+        st.info("Aucun nœud trouvé, courbe plate par défaut (DEFAULT_RF_RATE).")
 
     st.markdown("#### Zero rates (term structure)")
-    df_zero = _df_from_series(zero_rates, "Zero rate")
-    if df_zero is not None and not df_zero.empty:
-        st.line_chart(df_zero, height=260)
-        st.dataframe(df_zero.reset_index().rename(columns={"Zero rate": "Zero rate (dec)"}), hide_index=True)
+    df_grid = pd.DataFrame(grid)
+    if not df_grid.empty:
+        df_grid = df_grid.sort_values("t_years").set_index("t_years")
+        st.line_chart(df_grid[["zero_rate"]], height=260)
+        st.dataframe(
+            df_grid.reset_index().rename(columns={"t_years": "T (years)", "zero_rate": "Zero rate"}),
+            hide_index=True,
+            use_container_width=True,
+        )
     else:
-        st.info("Aucune courbe à afficher. Dépose `cache/yield_curve.csv` pour alimenter la vue.")
+        st.info("Aucune courbe à afficher. Ajoute des fichiers *_nodes.csv sous data/yield_curves/.")
 
     st.markdown("#### Discount factors")
-    df_df = _df_from_series(discount_factors, "Discount factor")
-    if df_df is not None and not df_df.empty:
-        st.area_chart(df_df, height=220)
+    if not df_grid.empty:
+        st.area_chart(df_grid[["discount_factor"]], height=220)
     else:
         st.info("Pas de discount factors calculables sans courbe.")

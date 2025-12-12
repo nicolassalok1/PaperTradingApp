@@ -13,7 +13,7 @@ import os
 DEFAULT_RF = float(os.getenv("DEFAULT_RF_RATE", "0.02"))
 
 
-def get_r(maturity_years: float) -> float:
+def get_r(maturity_years: float, currency: str | None = None) -> float:
     """
     Risk-free rate r(T) in decimal using the shared yield curve model (cache-only).
     Falls back to DEFAULT_RF if unavailable.
@@ -21,7 +21,7 @@ def get_r(maturity_years: float) -> float:
     try:
         from app.model.yieldcurve.service import get_active_curve
 
-        curve, _ = get_active_curve(ensure_cache=True)
+        curve, _, _ = get_active_curve(currency=currency, ensure_cache=True)
         rate = curve.zero_rate(float(maturity_years))
         if math.isfinite(rate):
             return float(rate)
