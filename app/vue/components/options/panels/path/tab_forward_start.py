@@ -19,8 +19,7 @@ def render_tab_forward_start():
     hist_tkr = current_ticker(ctx) or ticker
     S0 = float(current_spot(ctx))
     opt_char_base = option_char if option_char else "c"
-    _, fs_char = _choose_option_select("opt_choice_forward_start", opt_char_base)
-    option_char = fs_char
+    _, opt_char = _choose_option_select("opt_choice_forward_start", opt_char_base)
     st.caption(f"Spot actuel ({hist_tkr}) : {S0:.2f}")
     spot_start = st.slider(
         "Spot de départ (S_start)",
@@ -47,7 +46,7 @@ def render_tab_forward_start():
         step=0.05,
         key=_k("forward_start_T"),
     )
-    opt_type = "call" if option_char.lower() == "c" else "put"
+    opt_type = "call" if opt_char.lower() == "c" else "put"
     strike_forward = m_factor * spot_start
     figs = []
     fig_ts, ax_ts = plt.subplots(figsize=(8, 3))

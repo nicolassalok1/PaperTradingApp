@@ -14,13 +14,11 @@ def render_tab_strangle():
     # --------------------------------
     if not ensure_close_history(ctx):
         return
-    hist_tkr = ticker
+    hist_tkr = current_ticker(ctx) or ticker
 
     # --- Bootstrap du contexte Spreads/Wings ---
-    common_spot_value = float(st.session_state.get("common_spot_value", S0 if S0 is not None else 100.0))
-
-    hist_tkr = resolve_common_underlying()
-    S0 = float(S0 if S0 is not None else common_spot_value)
+    spot_base = float(current_spot(ctx))
+    S0 = spot_base
     # --- Fin bootstrap ---
     k_put_raw = st.slider(
         "Strike put",
@@ -75,7 +73,7 @@ def render_tab_strangle():
         st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
     view_dyn = view_strangle(
-        float(common_spot_value),
+        float(spot_base),
         k_put,
         k_call,
         r=float(common_rate_value),
@@ -94,12 +92,7 @@ def render_tab_strangle():
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(s_grid, payoff_grid, label="Payoff brut")
     ax.plot(s_grid, pnl_grid, label="P&L net", color="darkorange")
-    ax.axvline(
-        float(common_spot_value),
-        color="crimson",
-        linestyle="-.",
-        label=f"S_0 = {float(common_spot_value):.2f}",
-    )
+    ax.axvline(float(spot_base), color="crimson", linestyle="-.", label=f"S_0 = {float(spot_base):.2f}")
     ax.axhline(0, color="black", linewidth=0.8)
     ax.set_xlabel("Spot")
     ax.set_ylabel("Payoff / P&L")

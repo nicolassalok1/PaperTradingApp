@@ -14,14 +14,12 @@ def render_tab_straddle():
     # --------------------------------
     if not ensure_close_history(ctx):
         return
-    hist_tkr = ticker
+    hist_tkr = current_ticker(ctx) or ticker
 
     # --- Bootstrap du contexte Spreads/Wings ---
-    common_spot_value = float(st.session_state.get("common_spot_value", S0 if S0 is not None else 100.0))
-    spot_anchor = float(S0 if S0 is not None else common_spot_value)
-
-    hist_tkr = resolve_common_underlying()
-    S0 = float(common_spot_value)
+    spot_base = float(current_spot(ctx))
+    spot_anchor = float(spot_base)
+    S0 = float(spot_base)
     # --- Fin bootstrap ---
     mc_label_to_model = {
         "Black–Scholes (MC)": "bs",
@@ -83,7 +81,7 @@ def render_tab_straddle():
         st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
     view_dyn = view_straddle(
-        float(common_spot_value),
+        float(spot_base),
         strike_slider,
         r=float(common_rate_value),
         q=float(d_common),
@@ -97,19 +95,12 @@ def render_tab_straddle():
     s_grid = view_dyn["s_grid"]
     payoff_grid = view_dyn["payoff"]
     pnl_grid = view_dyn["pnl"]
-    pnl_at_s0 = float(
-        payoff_grid[np.searchsorted(s_grid, float(common_spot_value), side="left") - 1] - premium
-    )
+    pnl_at_s0 = float(payoff_grid[np.searchsorted(s_grid, float(spot_base), side="left") - 1] - premium)
 
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(s_grid, payoff_grid, label="Payoff brut")
     ax.plot(s_grid, pnl_grid, label="P&L net", color="darkorange")
-    ax.axvline(
-        float(common_spot_value),
-        color="crimson",
-        linestyle="-.",
-        label=f"S_0 = {float(common_spot_value):.2f}",
-    )
+    ax.axvline(float(spot_base), color="crimson", linestyle="-.", label=f"S_0 = {float(spot_base):.2f}")
     ax.axhline(0, color="black", linewidth=0.8)
     ax.set_xlabel("Spot")
     ax.set_ylabel("Payoff / P&L")
