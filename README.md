@@ -97,6 +97,9 @@ It detects and fixes:
 To run it manually:
 python scripts/run_mvc_autofix.py
 
+To refresh the Alpaca optionable tickers CSV used by the Options UI:
+python scripts/build_optionable_universe.py
+
 
 ---
 

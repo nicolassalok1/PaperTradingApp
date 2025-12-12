@@ -7,9 +7,22 @@ from typing import List
 import pandas as pd
 
 from app.model.options.logic import fetch_alpaca_option_tickers, download_options_alpaca
+from app.utils.paths import CACHE_CSV_DIR
 
 
 DEFAULT_OUTPUT = Path("data/alpaca_optionable_tickers.csv")
+
+
+def _delete_downloaded_options(sym: str) -> None:
+    """Best-effort removal of the per-symbol options cache file."""
+    sym_norm = (sym or "").strip().upper()
+    if not sym_norm:
+        return
+    cache_file = CACHE_CSV_DIR / f"options_alpaca_{sym_norm}.csv"
+    try:
+        cache_file.unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 def build_optionable_universe(limit_assets: int, min_contracts: int, output: Path) -> int:
@@ -20,12 +33,14 @@ def build_optionable_universe(limit_assets: int, min_contracts: int, output: Pat
     2) For each symbol, call download_options_alpaca().
     3) Keep only symbols with a non-empty options DataFrame (and at least min_contracts rows).
     4) Save the result to a CSV file for use in the UI.
+    5) Remove downloaded options cache files so only the summary CSV remains.
     """
     symbols = fetch_alpaca_option_tickers(limit=limit_assets)
     optionable: List[dict] = []
 
     for sym in symbols:
         df = download_options_alpaca(sym)
+        _delete_downloaded_options(sym)
         if df is None or df.empty:
             continue
         if len(df) < min_contracts:
@@ -79,4 +94,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

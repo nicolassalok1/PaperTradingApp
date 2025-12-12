@@ -82,4 +82,11 @@ foreach ($file in $pyFiles) {
     python -m py_compile $file.FullName
 }
 
+Write-Host "Construction de l'univers optionable Alpaca..."
+try {
+    python scripts/build_optionable_universe.py --limit-assets 500 --min-contracts 10
+} catch {
+    Write-Warning "Generation de l'univers optionable echouee: $($_.Exception.Message)"
+}
+
 Write-Host "=== Setup Conda terminé ==="
