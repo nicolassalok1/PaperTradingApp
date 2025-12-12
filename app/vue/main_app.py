@@ -31,31 +31,23 @@ TAB_GROUPS = {
         "📊 Dashboard v2",
         "🧮 Yield Curve",
         "🧱 Risk Management",
-        "🧪 Trading Systems / Backtest",
         "🧮 Calibration",
     ],
     "📈 Trading": [
-        "🛒 Buy/Sell",
+        "📈 Options",
+        "🧮 Options Hedging",
         "💹 Advanced Orders",
+        "Alpaca Spot",
         "📐 Portfolio Allocation",
         "🛡️ Hedger v2",
         "🤖 Hedger RL Live v2",
-        "🛡️ Hedger",
-    ],
-    "🧰 Maintenance": [
-        "📊 Dashboard",
     ],
 }
 
 DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
-    "tab_dashboard": "📊 Dashboard",
     "tab_dashboard_v2": "📊 Dashboard v2",
-    "tab_buy_sell": "🛒 Buy/Sell",
-    "tab_portfolio": "💼 Portfolio",
     "tab_options": "📈 Options",
-    "tab_hedger": "🛡️ Hedger",
     "tab_yieldcurve": "🧮 Yield Curve",
-    "tab_backtest": "🧪 Trading Systems / Backtest",
     "tab_calibration": "🧮 Calibration",
     "tab_alpaca_orders": "💹 Advanced Orders",
     "tab_risk_management": "🧱 Risk Management",
@@ -64,13 +56,7 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     "tab_hedger_rl_live_v2": "🤖 Hedger RL Live v2",
 }
 
-EXCLUDED_LABELS = {
-    "🛡️ Hedger",
-    "🛒 Buy/Sell",
-    "🧪 Trading Systems / Backtest",
-    "📊 Dashboard",
-    "💼 Portfolio",
-}
+EXCLUDED_LABELS: set[str] = set()
 
 
 def _derive_label(module_name: str) -> str:
