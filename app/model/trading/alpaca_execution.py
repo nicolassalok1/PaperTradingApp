@@ -1,8 +1,8 @@
 """
-Alpaca execution wrapper for hedging flows (service layer).
+Alpaca execution wrapper for hedging flows (model layer).
 
-This module is responsible for translating canonical HedgingOrder objects
-into Alpaca API calls, and for handling paper vs live mode configuration.
+Translates canonical HedgingOrder objects into Alpaca API calls and
+handles paper vs live mode configuration.
 """
 
 from __future__ import annotations
@@ -35,9 +35,7 @@ def _build_keys(mode: str = "paper") -> AlpacaKeys:
             if "paper" in base_env.lower()
             else "https://paper-api.alpaca.markets"
         )
-    # Reuse API keys from env; let AlpacaKeys validate their presence.
     keys = AlpacaKeys.from_env()
-    # Override base_url explicitly to avoid relying on environment only.
     keys.base_url = base_url
     return keys
 
@@ -56,26 +54,12 @@ def execute_hedging_orders(
 ) -> List[Dict[str, Any]]:
     """
     Execute a batch of hedging orders via Alpaca.
-
-    Parameters
-    ----------
-    orders:
-        Iterable of HedgingOrder objects to execute. Only non-zero quantity
-        equity orders are currently supported.
-    mode:
-        "paper" (default) executes against Alpaca paper environment.
-        "live" executes against live API and must only be enabled explicitly.
-
-    Returns
-    -------
-    List of Alpaca order responses as plain dictionaries.
     """
     svc = _build_service(mode)
     executed: List[Dict[str, Any]] = []
 
     for order in orders:
         if not isinstance(order, HedgingOrder):
-            # Defensive: accept dict-like objects with the canonical schema.
             data: Dict[str, Any] = dict(order)  # type: ignore[arg-type]
             order = HedgingOrder(
                 symbol=str(data.get("symbol", "")),
@@ -87,7 +71,6 @@ def execute_hedging_orders(
             )
 
         if order.asset_type != "equity":
-            # For now, only underlying equity hedges are supported.
             continue
         qty = float(order.quantity or 0.0)
         price = float(order.estimated_price or 0.0)
@@ -95,9 +78,6 @@ def execute_hedging_orders(
         if not symbol or qty <= 0 or price <= 0:
             continue
 
-        # Use limit orders at the estimated price; the canonical schema keeps
-        # track of order_type, but AlpacaOrdersService currently exposes only
-        # limit/advanced order helpers.
         resp = svc.submit_limit_order(symbol, qty, price, order.side)
         executed.append(resp)
 

@@ -13,11 +13,6 @@ def render():
     load_portfolio = ctrl.load_portfolio
     save_portfolio = ctrl.save_portfolio
 
-    def update_cache(portfolio: dict, realized_pnl: float, cash_delta: float = 0.0) -> None:
-        cache = ctrl.load_dashboard_cache()
-        cache["last_refresh"] = cache.get("last_refresh")
-        ctrl.save_dashboard_cache(cache)
-
     def _dashboard_price(symbol: str, fallback: float = 0.0) -> float:
         # Unified spot API: use app.model.market_data (same as closes) to avoid deltas vs dashboard prices.
         return ctrl.get_market_price(symbol, fallback)

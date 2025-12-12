@@ -13,12 +13,6 @@ def render():
     load_portfolio = ctrl.load_portfolio
     save_portfolio = ctrl.save_portfolio
 
-    def _update_cache(portfolio: dict, realized_pnl: float, cash_delta: float = 0.0) -> None:
-        # Avoid double balance update; core buy/sell already touches dashboard balance.
-        cache = dash_ctrl.load_dashboard_cache()
-        cache["last_refresh"] = cache.get("last_refresh")
-        dash_ctrl.save_dashboard_cache(cache)
-
     def _buy_asset(symbol: str, qty: float, price: float):
         return trade_ctrl.buy_asset(symbol, qty, price, source="rebalance")
 

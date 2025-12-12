@@ -12,8 +12,11 @@ import numpy as np
 
 from app.model.hedger.delta_hedger import HedgingEnvSim, generate_price_path
 from app.model.hedger.dqn_agent import DQNAgent
-from app.model.hedger.hedger_models import OptionSpec
+from app.model.hedger.hedger_models import OptionSpec, build_state
 from app.model.options.core.iv import OPTIONS_BOOK_FILE
+from app.model.portfolio.positions import load_portfolio_default
+from app.model.trading.hedging import HedgingOrder
+from app.model.trading.service import get_market_price, floor_4
 from app.utils.io import load_json_file
 
 
@@ -83,10 +86,97 @@ def simulate_hedge(
     return logs
 
 
+def _current_underlying_position(symbol: str) -> float:
+    """
+    Return current underlying position (long positive, short negative)
+    for the given symbol based on the default portfolio.
+    """
+    portfolio = load_portfolio_default()
+    if not portfolio:
+        return 0.0
+    data = portfolio.get(symbol) or portfolio.get(symbol.upper()) or portfolio.get(symbol.lower())
+    if not data:
+        return 0.0
+    qty = float(data.get("quantity", 0.0) or 0.0)
+    side = str(data.get("side", "long")).lower()
+    return qty if side == "long" else -qty
+
+
+def _build_live_state(option: OptionSpec, hedge_lot: float) -> Tuple[np.ndarray, Dict[str, float]]:
+    """
+    Build the DQN state vector using live market data and current position.
+    """
+    spot = get_market_price(option.symbol, fallback=option.S0)
+    spot = float(spot or option.S0 or 0.0)
+    position = _current_underlying_position(option.symbol)
+
+    price_path = np.array([spot], dtype=np.float32)
+    state_vec = build_state(option, price_path, t=0, position=position)
+    meta = {
+        "spot": spot,
+        "position": position,
+        "hedge_lot": float(hedge_lot),
+    }
+    return state_vec, meta
+
+
+def _build_agent(agent_state: Dict[str, np.ndarray] | None = None) -> DQNAgent:
+    """
+    Instantiate a DQNAgent and optionally load a trained state dict.
+    """
+    agent = DQNAgent(state_dim=5, action_dim=3)
+    if agent_state:
+        agent.q_net.load_state_dict(agent_state)
+        agent.target_net.load_state_dict(agent_state)
+    return agent
+
+
+def compute_hedging_orders(
+    option: OptionSpec,
+    hedge_lot: float,
+    *,
+    agent_state: Dict[str, np.ndarray] | None = None,
+) -> List[HedgingOrder]:
+    """
+    Use the DQN hedger as a black box to compute one-step hedging orders.
+    """
+    hedge_lot_val = float(hedge_lot or 0.0)
+    if hedge_lot_val <= 0:
+        raise ValueError("hedge_lot must be strictly positive")
+
+    state_vec, meta = _build_live_state(option, hedge_lot_val)
+    agent = _build_agent(agent_state)
+
+    action_idx = int(agent.act(state_vec, eps=0.0))
+
+    if action_idx == 1:
+        return []
+    side = "sell" if action_idx == 0 else "buy"
+
+    spot = float(meta.get("spot", 0.0) or 0.0)
+    price = floor_4(spot) if spot > 0 else 0.0
+    if price <= 0:
+        raise ValueError("Invalid market price for hedging instrument")
+
+    qty = abs(hedge_lot_val)
+    symbol = option.symbol.strip().upper()
+
+    order = HedgingOrder(
+        symbol=symbol,
+        asset_type="equity",
+        side=side,
+        quantity=qty,
+        order_type="limit",
+        estimated_price=price,
+    )
+    return [order]
+
+
 __all__ = [
     "OptionSpec",
     "load_options_portfolio",
     "option_specs_from_portfolio",
     "train_dqn_agent",
     "simulate_hedge",
+    "compute_hedging_orders",
 ]

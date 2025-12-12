@@ -36,9 +36,9 @@ Write-Host "=== Testing Options Context Builder ===" -ForegroundColor Cyan
 $py = @"
 import traceback
 import json
-from types import SimpleNamespace
 
 results = {}
+
 
 def safe(name, fn):
     try:
@@ -48,15 +48,6 @@ def safe(name, fn):
         results[name] = ("FAIL", f"{type(e).__name__}: {e}")
         traceback.print_exc()
 
-# -----------------------------------------
-# Simuler un environnement Streamlit minimal
-# -----------------------------------------
-class FakeState(dict):
-    def __getattr__(self, x):
-        return self.get(x, None)
-
-import streamlit as st
-st.session_state = FakeState()
 
 # -----------------------------------------
 # Importer les modules necessaires
@@ -66,6 +57,7 @@ def test_imports():
     import app.model.market_data.market_data as md
     import pandas as pd
     return "imports ok"
+
 
 safe("imports", test_imports)
 
@@ -83,8 +75,9 @@ def test_basic_context():
     return {
         "S0": ctx["S0"],
         "ticker": ctx["ticker"],
-        "close_size": len(ctx["close_series"])
+        "close_size": len(ctx["close_series"]),
     }
+
 
 safe("basic_context", test_basic_context)
 
@@ -100,37 +93,40 @@ def test_key_builder():
     assert k1 == k2, "_k must produce stable keys"
     return k1
 
+
 safe("key_builder", test_key_builder)
 
 
 # -----------------------------------------
-# TEST 3 : Test override S0 (session override)
+# TEST 3 : Test override S0 via state mapping
 # -----------------------------------------
-def test_s0_override():
-    import streamlit as st
-    st.session_state["common_spot_value"] = 123.45
+def test_s0_override_state():
+    from app.model.options.context import get_option_context_from_state
 
-    from app.model.options.context import build_option_context
-    ctx = build_option_context("AAPL")
-    assert abs(ctx["S0"] - 123.45) < 0.0001, "Override S0 not applied"
+    state = {
+        "ticker": "AAPL",
+        "common_spot_value": 123.45,
+    }
+    ctx = get_option_context_from_state(state)
+    assert abs(float(ctx["S0"]) - 123.45) < 1e-4, "Override S0 not applied"
     return ctx["S0"]
 
-safe("s0_override", test_s0_override)
+
+safe("s0_override_state", test_s0_override_state)
 
 
 # -----------------------------------------
 # TEST 4 : Test fallback last close
 # -----------------------------------------
 def test_s0_from_last_close():
-    import streamlit as st
-    st.session_state.pop("common_spot_value", None)
-
     from app.model.options.context import build_option_context
+
     ctx = build_option_context("AAPL")
     series = ctx["close_series"]
     last = float(series.iloc[-1])
     assert abs(ctx["S0"] - last) < 1e-8, "S0 should equal last close when no override"
     return {"S0": ctx["S0"], "last_close": last}
+
 
 safe("s0_last_close", test_s0_from_last_close)
 
@@ -139,23 +135,23 @@ safe("s0_last_close", test_s0_from_last_close)
 # TEST 5 : Test fallback spot when no close_series
 # -----------------------------------------
 def test_s0_from_spot_fallback():
-    import streamlit as st
-    st.session_state.pop("common_spot_value", None)
-
     # Monkeypatch : on simule un close_series vide
     from app.model.options.context import build_option_context
     from app.model.options.context import load_close_series_for_ticker
 
     def fake_load(ticker):
         import pandas as pd
+
         return pd.Series([], dtype=float)
 
     import app.model.options.context as ctx_mod
+
     ctx_mod.load_close_series_for_ticker = fake_load
 
     ctx = build_option_context("AAPL")
     assert ctx["S0"] is not None, "Spot fallback failed"
     return ctx["S0"]
+
 
 safe("s0_spot_fallback", test_s0_from_spot_fallback)
 

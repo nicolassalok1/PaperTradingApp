@@ -5,16 +5,6 @@ import pandas as pd
 from app.model.market_data.market_data import fetch_closing_prices, fetch_spot_price
 
 
-def _session_spot_value() -> float | None:
-    """Grab common_spot_value from Streamlit session if available (no direct import)."""
-    try:
-        st = __import__("streamlit")
-        val = st.session_state.get("common_spot_value")
-        return float(val) if val is not None else None
-    except Exception:
-        return None
-
-
 def _extract_close_series(df: pd.DataFrame) -> pd.Series:
     if df is None or df.empty:
         return pd.Series(dtype=float)
@@ -33,14 +23,12 @@ def _extract_close_series(df: pd.DataFrame) -> pd.Series:
 
 def build_option_context(ticker: str) -> dict:
     """
-    Build an option context with close series and inferred spot.
+    Build an option context with close series and inferred spot using market data only.
     """
     tk = (ticker or "").strip().upper()
     if not tk:
-        s0_session = _session_spot_value()
-        s0_default = float(s0_session) if s0_session is not None else None
         return {
-            "S0": s0_default,
+            "S0": None,
             "ticker": "",
             "close_series": pd.Series(dtype=float),
             "close_available": False,
@@ -56,8 +44,8 @@ def build_option_context(ticker: str) -> dict:
         close_series = _extract_close_series(closes_df)
         close_available = close_series is not None and not close_series.empty
 
-    s0 = _session_spot_value()
-    if s0 is None and not close_series.empty:
+    s0 = None
+    if close_series is not None and not close_series.empty:
         try:
             s0 = float(close_series.iloc[-1])
         except Exception:
