@@ -17,24 +17,24 @@ def render_tab_strangle():
     hist_tkr = ticker
 
     # --- Bootstrap du contexte Spreads/Wings ---
-    common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
+    common_spot_value = float(st.session_state.get("common_spot_value", S0 if S0 is not None else 100.0))
 
     hist_tkr = resolve_common_underlying()
-    S0 = float(common_spot_value)
+    S0 = float(S0 if S0 is not None else common_spot_value)
     # --- Fin bootstrap ---
     k_put_raw = st.slider(
         "Strike put",
-        min_value=0.5 * float(common_spot_value),
-        max_value=1.5 * float(common_spot_value),
-        value=float(common_spot_value),
+        min_value=0.5 * float(S0),
+        max_value=1.5 * float(S0),
+        value=float(S0),
         step=0.5,
         key=_k("strangle_k_put"),
     )
     k_call_raw = st.slider(
         "Strike call",
-        min_value=0.5 * float(common_spot_value),
-        max_value=1.5 * float(common_spot_value),
-        value=float(common_spot_value),
+        min_value=0.5 * float(S0),
+        max_value=1.5 * float(S0),
+        value=float(S0),
         step=0.5,
         key=_k("strangle_k_call"),
     )

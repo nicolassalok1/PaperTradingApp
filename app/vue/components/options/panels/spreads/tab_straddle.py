@@ -17,7 +17,8 @@ def render_tab_straddle():
     hist_tkr = ticker
 
     # --- Bootstrap du contexte Spreads/Wings ---
-    common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
+    common_spot_value = float(st.session_state.get("common_spot_value", S0 if S0 is not None else 100.0))
+    spot_anchor = float(S0 if S0 is not None else common_spot_value)
 
     hist_tkr = resolve_common_underlying()
     S0 = float(common_spot_value)
@@ -39,9 +40,9 @@ def render_tab_straddle():
     mc_model = mc_label_to_model.get(mc_choice, list(mc_label_to_model.values())[0])
     strike_slider = st.slider(
         "Strike",
-        min_value=0.5 * float(common_spot_value),
-        max_value=1.5 * float(common_spot_value),
-        value=float(common_spot_value),
+        min_value=0.5 * spot_anchor,
+        max_value=1.5 * spot_anchor,
+        value=spot_anchor,
         step=0.5,
         key=_k("straddle_k"),
     )

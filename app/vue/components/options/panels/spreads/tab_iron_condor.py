@@ -17,23 +17,24 @@ def render_tab_iron_condor():
     hist_tkr = ticker
 
     # --- Bootstrap du contexte Spreads/Wings ---
-    common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
+    common_spot_value = float(st.session_state.get("common_spot_value", S0 if S0 is not None else 100.0))
 
     hist_tkr = resolve_common_underlying()
-    S0 = float(common_spot_value)
+    spot_anchor = float(S0 if S0 is not None else common_spot_value)
+    S0 = spot_anchor
     # --- Fin bootstrap ---
     k_center = st.slider(
         "Strike central (iron condor)",
-        min_value=0.5 * float(common_spot_value),
-        max_value=1.5 * float(common_spot_value),
-        value=float(common_spot_value),
+        min_value=0.5 * spot_anchor,
+        max_value=1.5 * spot_anchor,
+        value=spot_anchor,
         step=0.5,
         key=_k("iron_condor_center"),
     )
     inner = st.slider(
         "Écart strikes courts",
         min_value=max(0.1, 0.02 * float(common_spot_value)),
-        max_value=max(1.0, 0.5 * float(common_spot_value)),
+        max_value=max(1.0, 0.5 * spot_anchor),
         value=max(0.5, 0.05 * float(common_spot_value)),
         step=0.1,
         key=_k("iron_condor_inner"),

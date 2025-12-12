@@ -26,7 +26,7 @@ def render_tab_calendar():
     st.subheader("Calendar spread – vue Notebook")
     s0_ref = float(common_spot_value)
 
-    strike_anchor_cal = float(common_spot_value)
+    strike_anchor_cal = float(S0 if S0 is not None else common_spot_value)
     col1, col2 = st.columns(2)
     col1_ctx = col1 if hasattr(col1, "__enter__") else contextlib.nullcontext()
     col2_ctx = col2 if hasattr(col2, "__enter__") else contextlib.nullcontext()
@@ -36,7 +36,7 @@ def render_tab_calendar():
             "Strike",
             min_value=0.6 * strike_anchor_cal,
             max_value=1.4 * strike_anchor_cal,
-            value=float(floor_n(strike_anchor_cal, 0)),
+            value=float(strike_anchor_cal),
             step=0.5,
             key=_k("calendar_strike"),
         )

@@ -25,14 +25,14 @@ def render_tab_grp_barrier():
     s0_ref = float(common_spot_value)
     hist_tkr, close_series = load_shared_close_series(s0_ref)
 
-    strike_anchor_bar = float(common_spot_value)
+    strike_anchor_bar = float(S0 if S0 is not None else common_spot_value)
     col1, col2, col3 = st.columns(3)
     with col1:
         strike_b = st.slider(
             "Strike",
             min_value=0.6 * strike_anchor_bar,
             max_value=1.4 * strike_anchor_bar,
-            value=float(floor_n(strike_anchor_bar, 0)),
+            value=float(strike_anchor_bar),
             step=0.5,
             key=_k("barrier_all_strike"),
         )
@@ -40,7 +40,7 @@ def render_tab_grp_barrier():
             "Barrière",
             min_value=0.5 * strike_anchor_bar,
             max_value=1.8 * strike_anchor_bar,
-            value=float(floor_n(strike_anchor_bar, 0)),
+            value=float(strike_anchor_bar),
             step=0.5,
             key=_k("barrier_all_level"),
         )

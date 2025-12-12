@@ -22,12 +22,12 @@ def render_tab_cliquet():
     clq_label, clq_char = _choose_option_select("opt_choice_cliquet_tab", option_char)
     option_label, option_char = clq_label, clq_char
     st.subheader("Cliquet / Ratchet – vue Notebook")
-    k_cliquet_anchor = float(common_spot_value)
+    k_cliquet_anchor = float(S0 if S0 is not None else common_spot_value)
     strike_clq = st.slider(
         "Strike / niveau de référence",
         min_value=0.6 * k_cliquet_anchor,
         max_value=1.4 * k_cliquet_anchor,
-        value=float(floor_n(k_cliquet_anchor, 0)),
+        value=float(k_cliquet_anchor),
         step=0.5,
         key=_k("cliquet_k"),
     )

@@ -25,7 +25,7 @@ def render_tab_lookback_fixed():
             "Min path",
             min_value=0.8 * S0,
             max_value=1.0 * S0,
-            value=float(floor_n(S0, 0)),
+            value=float(S0),
             step=0.5,
             key=_k("lbf_min"),
         )
@@ -33,7 +33,7 @@ def render_tab_lookback_fixed():
             "Max path",
             min_value=1.0 * S0,
             max_value=1.2 * S0,
-            value=float(floor_n(S0, 0)),
+            value=float(S0),
             step=0.5,
             key=_k("lbf_max"),
         )
@@ -42,7 +42,7 @@ def render_tab_lookback_fixed():
             "Strike",
             min_value=0.8 * S0,
             max_value=1.2 * S0,
-            value=float(floor_n(S0, 0)),
+            value=float(S0),
             step=0.5,
             key=_k("lbf_k"),
         )

@@ -81,7 +81,7 @@ def render_tab_rainbow():
             close_b = pd.Series([S0_a], index=pd.Index([pd.Timestamp.today()]))
     S0_b = float(close_b.iloc[-1]) if close_b is not None and not close_b.empty else float(S0_a)
 
-    strike_anchor = np.nanmean([float(S0_a), float(S0_b)])
+    strike_anchor = float(S0_a)
     strike_val = st.slider(
         "Strike commun",
         min_value=0.5 * strike_anchor,

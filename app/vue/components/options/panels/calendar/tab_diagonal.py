@@ -26,7 +26,7 @@ def render_tab_diagonal():
     st.subheader("Diagonal spread – vue Notebook")
     s0_ref = float(common_spot_value)
 
-    strike_anchor_diag = float(common_spot_value)
+    strike_anchor_diag = float(S0 if S0 is not None else common_spot_value)
     col1, col2 = st.columns(2)
     col1_ctx = col1 if hasattr(col1, "__enter__") else contextlib.nullcontext()
     col2_ctx = col2 if hasattr(col2, "__enter__") else contextlib.nullcontext()
@@ -36,7 +36,7 @@ def render_tab_diagonal():
             "Strike near",
             min_value=0.6 * strike_anchor_diag,
             max_value=1.4 * strike_anchor_diag,
-            value=float(floor_n(strike_anchor_diag, 0)),
+            value=float(strike_anchor_diag),
             step=0.5,
             key=_k("diag_k_near"),
         )
@@ -44,7 +44,7 @@ def render_tab_diagonal():
             "Strike far",
             min_value=0.6 * strike_anchor_diag,
             max_value=1.6 * strike_anchor_diag,
-            value=float(floor_n(strike_anchor_diag * 1.02, 0)),
+            value=float(strike_anchor_diag),
             step=0.5,
             key=_k("diag_k_far"),
         )

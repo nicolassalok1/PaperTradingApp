@@ -17,18 +17,19 @@ def render_tab_quanto():
     hist_tkr = ticker
 
     # --- Contexte exotiques ---
-    common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
+    common_spot_value = float(st.session_state.get("common_spot_value", S0 if S0 is not None else 100.0))
     hist_tkr = resolve_common_underlying()
-    S0 = float(common_spot_value)
+    base_spot = float(S0 if S0 is not None else common_spot_value)
+    S0 = base_spot
     # -----------------------------
     opt_label_quanto, opt_char_quanto = _choose_option_select("opt_choice_quanto", option_char)
     option_label = opt_label_quanto
     option_char_selected = opt_char_quanto
     strike = st.slider(
         "Strike",
-        min_value=0.5 * float(common_spot_value),
-        max_value=1.5 * float(common_spot_value),
-        value=float(common_spot_value),
+        min_value=0.5 * base_spot,
+        max_value=1.5 * base_spot,
+        value=base_spot,
         step=0.5,
         key=_k("quanto_k"),
     )

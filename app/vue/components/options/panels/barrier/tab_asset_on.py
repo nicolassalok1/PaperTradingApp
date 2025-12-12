@@ -16,6 +16,7 @@ def render_tab_asset_on():
     # Legacy defaults to avoid NameError
     option_char = st.session_state.get("option_char", "c")
     common_spot_value = float(st.session_state.get("common_spot_value", S0))
+    spot_anchor = float(S0 if S0 is not None else common_spot_value)
     common_maturity_value = float(st.session_state.get("common_maturity_value", 1.0))
     common_rate_value = float(st.session_state.get("common_rate_value", 0.01))
     common_sigma_value = float(st.session_state.get("common_sigma_value", 0.2))
@@ -26,9 +27,9 @@ def render_tab_asset_on():
     option_label, option_char = opt_label_aon, opt_char_aon
     strike = st.slider(
         "Strike",
-        min_value=0.5 * float(common_spot_value),
-        max_value=1.5 * float(common_spot_value),
-        value=float(common_spot_value),
+        min_value=0.5 * spot_anchor,
+        max_value=1.5 * spot_anchor,
+        value=spot_anchor,
         step=0.5,
         key=_k("asset_on_k"),
     )

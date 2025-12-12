@@ -25,7 +25,7 @@ def render_tab_forward_start():
         "Spot de départ (S_start)",
         min_value=0.5 * float(S0),
         max_value=1.5 * float(S0),
-        value=float(floor_n(S0, 0)),
+        value=float(S0),
         step=0.5,
         key=_k("forward_start_s_start"),
     )
@@ -33,7 +33,7 @@ def render_tab_forward_start():
         "Strike (K = m × S_start)",
         min_value=0.8 * float(S0),
         max_value=1.2 * float(S0),
-        value=float(floor_n(S0, 0)),
+        value=float(S0),
         step=0.5,
         key=_k("forward_start_k"),
     )

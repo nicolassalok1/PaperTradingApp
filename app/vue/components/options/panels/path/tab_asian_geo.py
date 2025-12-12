@@ -26,7 +26,7 @@ def render_tab_asian_geo():
             "Strike",
             min_value=0.6 * S0,
             max_value=1.4 * S0,
-            value=float(floor_n(S0, 0)),
+            value=float(S0),
             step=0.5,
             key=_k("asian_geo_k"),
         )
@@ -34,7 +34,7 @@ def render_tab_asian_geo():
             "Moyenne (ref)",
             min_value=0.5 * S0,
             max_value=1.5 * S0,
-            value=float(floor_n(S0, 0)),
+            value=float(S0),
             step=0.5,
             key=_k("asian_geo_avg"),
         )

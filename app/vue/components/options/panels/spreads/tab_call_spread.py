@@ -17,24 +17,25 @@ def render_tab_call_spread():
     hist_tkr = ticker
 
     # --- Bootstrap du contexte Spreads/Wings ---
-    common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
+    common_spot_value = float(st.session_state.get("common_spot_value", S0 if S0 is not None else 100.0))
 
     hist_tkr = resolve_common_underlying()
-    S0 = float(common_spot_value)
+    spot_anchor = float(S0 if S0 is not None else common_spot_value)
+    S0 = spot_anchor
     # --- Fin bootstrap ---
     k_long_raw = st.slider(
         "Strike call long",
-        min_value=0.5 * float(common_spot_value),
-        max_value=1.5 * float(common_spot_value),
-        value=float(common_spot_value),
+        min_value=0.5 * spot_anchor,
+        max_value=1.5 * spot_anchor,
+        value=spot_anchor,
         step=0.5,
         key=_k("call_spread_k_long"),
     )
     k_short_raw = st.slider(
         "Strike call short",
-        min_value=0.5 * float(common_spot_value),
-        max_value=1.5 * float(common_spot_value),
-        value=float(common_spot_value),
+        min_value=0.5 * spot_anchor,
+        max_value=1.5 * spot_anchor,
+        value=spot_anchor,
         step=0.5,
         key=_k("call_spread_k_short"),
     )
