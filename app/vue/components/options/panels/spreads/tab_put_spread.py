@@ -112,3 +112,4 @@ def render_tab_put_spread():
 
     st.session_state[_k("put_spread_pre_price")] = premium
     price = float(premium)
+    st.metric("Prix de l'option", f"${price:.6f}")

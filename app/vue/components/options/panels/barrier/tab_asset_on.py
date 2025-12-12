@@ -84,3 +84,4 @@ def render_tab_asset_on():
 
     st.session_state[_k("asset_on_pre_price")] = premium
     price = float(premium)
+    st.metric("Prix de l'option", f"${price:.6f}")

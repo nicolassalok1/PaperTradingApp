@@ -133,3 +133,4 @@ def render_tab_calendar():
     ax_pay.set_title(f"Calendar spread ({option_type_cal})")
     figs.append(fig_pay)
     render_figures_grid(figs)
+    st.metric("Prix de l'option", f"${premium:.6f}")

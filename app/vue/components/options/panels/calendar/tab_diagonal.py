@@ -143,3 +143,4 @@ def render_tab_diagonal():
     ax_pay.set_title(f"Diagonal spread ({option_type_diag})")
     figs.append(fig_pay)
     render_figures_grid(figs)
+    st.metric("Prix de l'option", f"${premium:.6f}")

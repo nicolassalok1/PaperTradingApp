@@ -146,3 +146,4 @@ def render_tab_condor():
 
     st.session_state[_k("condor_pre_price")] = premium
     price = float(premium)
+    st.metric("Prix de l'option", f"${price:.6f}")

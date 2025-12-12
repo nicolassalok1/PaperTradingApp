@@ -120,3 +120,4 @@ def render_tab_straddle():
     # Stocke la prime et affiche directement le formulaire d'ajout (équivalent dropdown)
     st.session_state[_k("straddle_pre_price")] = premium
     price = float(premium)
+    st.metric("Prix de l'option", f"${price:.6f}")

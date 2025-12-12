@@ -131,3 +131,4 @@ def render_tab_grp_barrier():
     ax_pay.set_title(f"Barrier {'binaire' if binary_b else 'vanilla'} ({direction_b} / {knock_b})")
     figs.append(fig_pay)
     render_figures_grid(figs)
+    st.metric("Prix de l'option", f"${premium:.6f}")

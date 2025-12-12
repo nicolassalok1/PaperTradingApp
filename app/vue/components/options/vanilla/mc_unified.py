@@ -55,25 +55,4 @@ def render_mc_panel(default_style: str = "european"):
         else:
             ex_ctrl = None
 
-    if st.button("Lancer le pricing MC", key=_k(f"{key_prefix}_price_btn"), type="primary"):
-        try:
-            res = cb.price_option_mc_unified(
-                ticker=ticker,
-                S0=S0,
-                K=float(strike),
-                T=float(T),
-                sigma=float(sigma),
-                option_type=option_type,
-                style=style_choice,
-                n_paths=int(n_paths),
-                n_steps=int(n_steps),
-                freq=int(ex_ctrl) if ex_ctrl is not None else None,
-            )
-            price = float(res.get("price", float("nan")))
-            stderr = float(res.get("stderr", float("nan")))
-            ee_ratio = res.get("early_exercise_ratio", 0.0)
-            st.success(f"Prix MC ({_style_label(style_choice)}): {price:.6f} ± {stderr:.6f}")
-            if style_choice != "european":
-                st.caption(f"Taux d'exercice anticipé ≈ {ee_ratio:.3f}")
-        except Exception as exc:
-            st.error(f"Pricing MC échoué: {exc}")
+    st.info("Pricing Monte Carlo désactivé pour les Vanilla. Utilise le pricer Black-Scholes.")

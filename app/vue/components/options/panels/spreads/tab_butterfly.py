@@ -125,3 +125,4 @@ def render_tab_butterfly():
 
     st.session_state[_k("butterfly_pre_price")] = premium
     price = float(premium)
+    st.metric("Prix de l'option", f"${price:.6f}")

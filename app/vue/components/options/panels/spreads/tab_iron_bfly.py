@@ -148,3 +148,4 @@ def render_tab_iron_bfly():
 
     st.session_state[_k("iron_bfly_pre_price")] = premium
     price = float(price_display)
+    st.metric("Prix de l'option", f"${price:.6f}")

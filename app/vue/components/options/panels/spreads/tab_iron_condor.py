@@ -146,4 +146,5 @@ def render_tab_iron_condor():
 
     st.session_state[_k("iron_condor_pre_price")] = premium
     price = float(price_display)
+    st.metric("Prix de l'option", f"${price:.6f}")
     # --- Bouton Add-to-Dashboard Clean ---

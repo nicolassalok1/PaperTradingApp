@@ -97,3 +97,4 @@ def render_tab_asian():
     ax_pay.set_ylabel("Payoff / P&L")
     ax_pay.set_title(f"Asian arithmétique ({option_type_as})")
     render_figures_grid([fig_ts, fig_pay])
+    st.metric("Prix de l'option", f"${premium:.6f}")

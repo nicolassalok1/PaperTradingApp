@@ -145,3 +145,4 @@ def render_tab_rainbow():
     ax_pay.set_title(f"Rainbow ({opt_type})")
     figs.append(fig_pay)
     render_figures_grid(figs)
+    st.metric("Prix de l'option", f"${premium:.6f}")

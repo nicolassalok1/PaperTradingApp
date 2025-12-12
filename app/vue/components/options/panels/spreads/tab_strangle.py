@@ -109,3 +109,4 @@ def render_tab_strangle():
 
     st.session_state[_k("strangle_pre_price")] = premium
     price = float(premium)
+    st.metric("Prix de l'option", f"${price:.6f}")

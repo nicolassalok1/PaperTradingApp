@@ -6,7 +6,7 @@ from app.vue.components.page_utils import render_page_header
 
 
 def render():
-    snapshot = yc.get_curve_snapshot(risk_free_maturity=1.0, ensure_cache=False)
+    snapshot = yc.get_curve_snapshot(risk_free_maturity=1.0, ensure_cache=True)
 
     maturities = snapshot.get("maturities") or []
     zero_rates = snapshot.get("zero_rates") or []

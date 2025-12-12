@@ -85,3 +85,4 @@ def render_tab_digital():
 
     st.session_state[_k("digital_pre_price")] = premium
     price = float(premium)
+    st.metric("Prix de l'option", f"${price:.6f}")

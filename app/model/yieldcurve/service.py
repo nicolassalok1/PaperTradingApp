@@ -14,7 +14,6 @@ from typing import Any, Dict, Iterable, List, Tuple
 import pandas as pd
 
 from app.model.market_data.realtime import get_data
-from app.model.market_data.rates import get_r
 from app.model.yieldcurve.loader import (
     YIELD_CURVE_CACHE_FILE,
     download_yield_curve_to_cache,
@@ -52,7 +51,7 @@ def get_spot(sym: str):
 
 
 def get_rate():
-    return get_r
+    return get_risk_free_rate
 
 
 def load_forwards() -> dict:
@@ -213,7 +212,7 @@ def _get_curve_rate(df_curve: pd.DataFrame, T_years: float) -> float | None:
     if rate is not None:
         return rate
     try:
-        return float(get_r(T_years))
+        return float(get_risk_free_rate(T_years))
     except Exception:
         return None
 

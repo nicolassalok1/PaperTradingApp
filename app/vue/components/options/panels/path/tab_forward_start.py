@@ -92,3 +92,4 @@ def render_tab_forward_start():
 
     st.session_state[_k("forward_start_pre_price")] = premium
     price = float(premium)
+    st.metric("Prix de l'option", f"${price:.6f}")
