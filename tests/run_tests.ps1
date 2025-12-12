@@ -22,7 +22,8 @@ $tests = @(
     "test_options_model_integrity.py",
     "test_options_pricing_core.py",
     "test_portfolio_valuation.py",
-    "test_yieldcurve_builder.py"
+    "test_yieldcurve_builder.py",
+    "test_optionable_universe.py"
 ) | ForEach-Object { Join-Path $repoRoot "scripts/$_" }
 
 $failed = 0

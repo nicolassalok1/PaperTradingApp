@@ -92,6 +92,7 @@ from app.model.options.service import (
     price_option_mc_unified,
     price_european_from_cboe,
 )
+from app.model.options.logic import download_options_alpaca as _download_options_alpaca
 from app.model.options.engines.tree import build_crr_tree, plot_crr_tree
 from app.model.options.core.trees import (
     price_asian_geo_mc,
@@ -163,6 +164,13 @@ def compute_price_mc(option_dict, mc_model: str = "bs", n_paths: int = 10000, n_
     )
 
 
+def download_alpaca_options_chain(ticker: str):
+    """
+    Thin wrapper to expose Alpaca options snapshots to the UI via the controller.
+    """
+    return _download_options_alpaca(ticker)
+
+
 __all__ = [
     # Core service wrappers
     "compute_price",
@@ -173,6 +181,7 @@ __all__ = [
     "compute_price_mc",
     "price_european_from_cboe",
     "price_option_mc_unified",
+    "download_alpaca_options_chain",
     # Black-Scholes / spreads
     "black_scholes_price",
     "price_asset_or_nothing",

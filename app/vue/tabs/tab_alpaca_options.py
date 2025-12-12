@@ -1,14 +1,21 @@
+import os
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
 from app.controller import trading_controller as ctrl
-from app.model.options.logic import download_options_alpaca, fetch_alpaca_option_tickers
+from app.controller import options_controller as opt_ctrl
 from app.vue.components.page_utils import render_page_header
 
 
 _CHAIN_STATE_KEY = "alpaca_options_chain_df"
 _CHAIN_TICKER_KEY = "alpaca_options_chain_ticker"
 _TICKERS_STATE_KEY = "alpaca_options_underlyings"
+
+_OPTIONABLE_TICKERS_CSV = Path(
+    os.getenv("ALPACA_OPTIONABLE_TICKERS_PATH", "data/alpaca_optionable_tickers.csv")
+)
 
 
 def _to_float(val) -> float:
@@ -142,18 +149,27 @@ def _render_manual_opra_form() -> None:
 def _render_option_market_order_form() -> None:
     st.markdown("### Trade options via Alpaca chain")
     st.caption(
-        "Choose a ticker, option type, time to maturity and strike. "
+        "Choose an underlying (from the precomputed list), option type, time to maturity and strike. "
         "We fetch the options chain from Alpaca and build the OPRA symbol for you."
     )
 
-    # --- Load / cache the available underlying tickers from Alpaca ---
+    # --- Load / cache the optionable underlyings from CSV (built offline) ---
     tickers = st.session_state.get(_TICKERS_STATE_KEY)
     if tickers is None:
-        with st.spinner("Loading available tickers from Alpaca..."):
-            tickers = fetch_alpaca_option_tickers(limit=200)
+        tickers = []
+        try:
+            if _OPTIONABLE_TICKERS_CSV.exists():
+                df_tickers = pd.read_csv(_OPTIONABLE_TICKERS_CSV)
+                if not df_tickers.empty:
+                    col = "symbol" if "symbol" in df_tickers.columns else df_tickers.columns[0]
+                    symbols = df_tickers[col].dropna().astype(str)
+                    tickers = sorted({s.strip().upper() for s in symbols if s.strip()})
+        except Exception as exc:
+            st.warning(f"Unable to load optionable tickers list: {exc}")
+            tickers = []
         st.session_state[_TICKERS_STATE_KEY] = tickers
 
-    # --- Load / cache the options chain for a given underlying ---
+    # --- Choose underlying & load the options chain ---
     default_ticker = st.session_state.get(_CHAIN_TICKER_KEY)
     col_ticker, col_button = st.columns([3, 1])
     with col_ticker:
@@ -174,7 +190,7 @@ def _render_option_market_order_form() -> None:
     if load_clicked and ticker:
         try:
             with st.spinner(f"Loading options for {ticker} from Alpaca..."):
-                df_chain = download_options_alpaca(ticker)
+                df_chain = opt_ctrl.download_alpaca_options_chain(ticker)
         except Exception as exc:
             st.error(f"Unable to load options from Alpaca: {exc}")
             df_chain = None
