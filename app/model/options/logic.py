@@ -69,6 +69,46 @@ def _load_alpaca_credentials():
     return key, secret, base
 
 
+def fetch_alpaca_option_tickers(limit: int = 200) -> list[str]:
+    """
+    Fetch a universe of underlying tickers from Alpaca that are active/tradable.
+    Used to populate UI selectors for options trading.
+    """
+    key, secret, base = _load_alpaca_credentials()
+    if not key or not secret or not base:
+        return []
+
+    headers = {
+        "APCA-API-KEY-ID": key or "",
+        "APCA-API-SECRET-KEY": secret or "",
+    }
+    url = f"{(base or '').rstrip('/')}/v2/assets"
+    params = {"status": "active", "asset_class": "us_equity"}
+
+    try:
+        resp = requests.get(url, headers=headers, params=params, timeout=10)
+        resp.raise_for_status()
+        assets = resp.json() or []
+    except Exception as exc:
+        logging.warning(f"[alpaca-options] failed to fetch assets universe: {exc}")
+        return []
+
+    symbols: list[str] = []
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        if not asset.get("tradable", False):
+            continue
+        sym = (asset.get("symbol") or "").strip().upper()
+        if sym:
+            symbols.append(sym)
+
+    symbols = sorted(set(symbols))
+    if limit and len(symbols) > limit:
+        symbols = symbols[:limit]
+    return symbols
+
+
 def _period_to_days(period: str) -> int:
     """Approx convert period string to day count (1y->365, 6mo->180, etc.)."""
     if not period:

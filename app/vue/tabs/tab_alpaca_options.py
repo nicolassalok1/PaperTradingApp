@@ -2,12 +2,13 @@ import pandas as pd
 import streamlit as st
 
 from app.controller import trading_controller as ctrl
-from app.model.options.logic import download_options_alpaca
+from app.model.options.logic import download_options_alpaca, fetch_alpaca_option_tickers
 from app.vue.components.page_utils import render_page_header
 
 
 _CHAIN_STATE_KEY = "alpaca_options_chain_df"
 _CHAIN_TICKER_KEY = "alpaca_options_chain_ticker"
+_TICKERS_STATE_KEY = "alpaca_options_underlyings"
 
 
 def _to_float(val) -> float:
@@ -145,11 +146,28 @@ def _render_option_market_order_form() -> None:
         "We fetch the options chain from Alpaca and build the OPRA symbol for you."
     )
 
+    # --- Load / cache the available underlying tickers from Alpaca ---
+    tickers = st.session_state.get(_TICKERS_STATE_KEY)
+    if tickers is None:
+        with st.spinner("Loading available tickers from Alpaca..."):
+            tickers = fetch_alpaca_option_tickers(limit=200)
+        st.session_state[_TICKERS_STATE_KEY] = tickers
+
     # --- Load / cache the options chain for a given underlying ---
-    default_ticker = st.session_state.get(_CHAIN_TICKER_KEY, "AAPL")
+    default_ticker = st.session_state.get(_CHAIN_TICKER_KEY)
     col_ticker, col_button = st.columns([3, 1])
     with col_ticker:
-        ticker = st.text_input("Underlying ticker", default_ticker).upper().strip()
+        if tickers:
+            if not default_ticker or default_ticker not in tickers:
+                default_ticker = tickers[0]
+            ticker = st.selectbox(
+                "Underlying ticker",
+                options=tickers,
+                index=tickers.index(default_ticker),
+            )
+        else:
+            default_ticker = default_ticker or "AAPL"
+            ticker = st.text_input("Underlying ticker", default_ticker).upper().strip()
     with col_button:
         load_clicked = st.button("Load options chain", use_container_width=True)
 
@@ -287,4 +305,3 @@ def render_tab() -> None:
 def render() -> None:
     """Keeps parity with other tabs if a generic router is used."""
     render_tab()
-
