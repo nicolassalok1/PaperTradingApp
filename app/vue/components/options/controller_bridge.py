@@ -61,6 +61,9 @@ view_cliquet = oc.view_cliquet
 view_condor = oc.view_condor
 view_diagonal_spread = oc.view_diagonal_spread
 view_digital = oc.view_digital
+view_european = oc.view_european
+view_american = oc.view_american
+view_bermudan = oc.view_bermudan
 view_forward_start = oc.view_forward_start
 view_iron_butterfly = oc.view_iron_butterfly
 view_iron_condor = oc.view_iron_condor
@@ -217,6 +220,25 @@ def render_figures_grid(figs):
             plt.close(fig)
 
 
+def build_close_with_strike_fig(close_series, ticker: str, strike: float | None):
+    """Build a closing-price figure with an optional horizontal strike overlay."""
+    if close_series is None or getattr(close_series, "empty", True):
+        return None
+    tkr = (ticker or "Ticker").strip().upper() or "Ticker"
+    try:
+        fig, ax = plt.subplots(figsize=(8, 3))
+        ax.plot(close_series.index, close_series.values, label=f"{tkr} close")
+        if strike is not None:
+            ax.axhline(float(strike), color="gray", linestyle="--", label=f"Strike = {float(strike):.2f}")
+        ax.set_ylabel("Prix")
+        ax.set_title(f"Clôtures {tkr} (strike)")
+        ax.legend(loc="best")
+        fig.autofmt_xdate()
+        return fig
+    except Exception:
+        return None
+
+
 def show_and_close(fig):
     """Render a matplotlib figure in Streamlit and close it to avoid figure leaks."""
     try:
@@ -257,6 +279,9 @@ __all__ = [
     "view_condor",
     "view_diagonal_spread",
     "view_digital",
+    "view_european",
+    "view_american",
+    "view_bermudan",
     "view_forward_start",
     "view_iron_butterfly",
     "view_iron_condor",
@@ -281,6 +306,7 @@ __all__ = [
     "load_shared_close_series",
     "render_static_line_chart",
     "render_figures_grid",
+    "build_close_with_strike_fig",
     "show_and_close",
     "floor_n",
     "datetime",

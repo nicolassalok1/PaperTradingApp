@@ -4,6 +4,7 @@ from typing import Iterable, Tuple
 
 import numpy as np
 import pandas as pd
+from app.model.options.engines.crr import price_american_crr, price_bermuda_crr
 from app.model.market_data.service import fetch_historical_prices
 from app.utils.math_utils import floor_n
 from app.utils.paths import CACHE_CSV_DIR
@@ -383,6 +384,97 @@ def _build_view(
         "premium": premium,
         "breakevens": tuple(breakevens),
     }
+
+
+def _breakevens(option_type: str, strike: float, premium: float) -> Tuple[float, ...]:
+    is_call = str(option_type or "c").lower().startswith("c")
+    return (strike + premium,) if is_call else (strike - premium,)
+
+
+def view_european(
+    s0: float,
+    strike: float,
+    option_type: str = "call",
+    span: float = 0.5,
+    n: int = 300,
+    **kwargs,
+):
+    is_call = str(option_type or "c").lower().startswith("c")
+    price_fn = bs_price_call if is_call else bs_price_put
+    premium = price_fn(
+        s0,
+        strike,
+        r=kwargs.get("r", DEFAULT_R),
+        q=kwargs.get("q", DEFAULT_Q),
+        sigma=kwargs.get("sigma", DEFAULT_SIGMA),
+        T=kwargs.get("T", DEFAULT_T),
+    )
+    payoff_fn = payoff_call if is_call else payoff_put
+    breakevens = _breakevens("c" if is_call else "p", strike, premium)
+    return _build_view(payoff_fn, premium, s0, (strike,), breakevens, span, n)
+
+
+def view_american(
+    s0: float,
+    strike: float,
+    option_type: str = "call",
+    steps: int = 252,
+    span: float = 0.5,
+    n: int = 300,
+    **kwargs,
+):
+    is_call = str(option_type or "c").lower().startswith("c")
+    premium = price_american_crr(
+        S0=s0,
+        K=strike,
+        r=kwargs.get("r", DEFAULT_R),
+        q=kwargs.get("q", DEFAULT_Q),
+        T=kwargs.get("T", DEFAULT_T),
+        sigma=kwargs.get("sigma", DEFAULT_SIGMA),
+        steps=int(steps),
+        option_type="call" if is_call else "put",
+    )
+    payoff_fn = payoff_call if is_call else payoff_put
+    breakevens = _breakevens("c" if is_call else "p", strike, premium)
+    return _build_view(payoff_fn, premium, s0, (strike,), breakevens, span, n)
+
+
+def _default_exercise_dates(steps: int, exercise_count: int = 8) -> Tuple[int, ...]:
+    total_steps = max(1, int(steps))
+    count = max(1, int(exercise_count))
+    interval = max(1, total_steps // count)
+    dates = set(range(interval, total_steps + 1, interval))
+    dates.add(total_steps)
+    return tuple(sorted(dates))
+
+
+def view_bermudan(
+    s0: float,
+    strike: float,
+    option_type: str = "call",
+    steps: int = 252,
+    exercise_dates: Tuple[int, ...] | None = None,
+    exercise_count: int = 8,
+    span: float = 0.5,
+    n: int = 300,
+    **kwargs,
+):
+    is_call = str(option_type or "c").lower().startswith("c")
+    exercise = exercise_dates or _default_exercise_dates(int(steps), int(exercise_count))
+    premium = price_bermuda_crr(
+        S0=s0,
+        K=strike,
+        r=kwargs.get("r", DEFAULT_R),
+        q=kwargs.get("q", DEFAULT_Q),
+        T=kwargs.get("T", DEFAULT_T),
+        sigma=kwargs.get("sigma", DEFAULT_SIGMA),
+        steps=int(steps),
+        exercise_dates=exercise,
+        option_type="call" if is_call else "put",
+    )
+    payoff_fn = payoff_call if is_call else payoff_put
+    breakevens = _breakevens("c" if is_call else "p", strike, premium)
+    return _build_view(payoff_fn, premium, s0, (strike,), breakevens, span, n)
 
 
 def view_vanilla_call(s0: float, strike: float, span: float = 0.5, n: int = 300, **kwargs):

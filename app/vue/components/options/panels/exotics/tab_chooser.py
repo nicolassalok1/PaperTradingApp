@@ -14,16 +14,16 @@ def render_tab_chooser():
     if not ensure_close_history(ctx):
         return
     # --------------------------------
-    hist_tkr = ticker
+    if not isinstance(close_series, pd.Series):
+        close_series = pd.Series([S0], index=pd.Index([pd.Timestamp.today()]))
+    hist_tkr = resolve_common_underlying() or ticker
 
     # --- Contexte exotiques ---
     common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
     spot_anchor = float(S0 if S0 is not None else common_spot_value)
-    hist_tkr = resolve_common_underlying()
     S0 = float(common_spot_value)
     # -----------------------------
-    opt_label_chooser, opt_char_chooser = _choose_option_select("opt_choice_chooser", option_char)
-    option_label = opt_label_chooser
+    _, opt_char_chooser = _choose_option_select("opt_choice_chooser", option_char)
     option_char_selected = opt_char_chooser
     strike = st.slider(
         "Strike",
@@ -66,21 +66,26 @@ def render_tab_chooser():
     payoff_grid = view_dyn["payoff"]
     pnl_grid = view_dyn["pnl"]
 
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(s_grid, payoff_grid, label="Payoff brut")
-    ax.plot(s_grid, pnl_grid, label="P&L net", color="darkorange")
-    ax.axvline(
+    fig_pay, ax_pay = plt.subplots(figsize=(7, 4))
+    ax_pay.plot(s_grid, payoff_grid, label="Payoff brut")
+    ax_pay.plot(s_grid, pnl_grid, label="P&L net", color="darkorange")
+    ax_pay.axvline(
+        float(strike), color="gray", linestyle="--", label=f"K = {float(strike):.2f}"
+    )
+    ax_pay.axvline(
         float(common_spot_value),
         color="crimson",
         linestyle="-.",
         label=f"S_0 = {float(common_spot_value):.2f}",
     )
-    ax.axhline(0, color="black", linewidth=0.8)
-    ax.set_xlabel("Spot")
-    ax.set_ylabel("Payoff / P&L")
-    ax.set_title("Chooser (payoff & P&L avec prime BS)")
-    ax.legend(loc="lower right")
-    show_and_close(fig)
+    ax_pay.axhline(0, color="black", linewidth=0.8)
+    ax_pay.set_xlabel("Spot")
+    ax_pay.set_ylabel("Payoff / P&L")
+    ax_pay.set_title("Chooser (payoff & P&L avec prime BS)")
+    ax_pay.legend(loc="lower right")
+
+    close_fig = build_close_with_strike_fig(close_series, hist_tkr, strike)
+    render_figures_grid([close_fig, fig_pay])
 
     st.session_state[_k("chooser_pre_price")] = premium
     price = float(premium)
