@@ -42,13 +42,18 @@ class LiveStateBuilderV2:
         api_key = os.getenv("APCA_API_KEY_ID") or ""
         api_secret = os.getenv("APCA_API_SECRET_KEY") or ""
         base_url = os.getenv("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
-        if not api_key or not api_secret:
-            raise EnvironmentError("APCA_API_KEY_ID and APCA_API_SECRET_KEY must be set")
+        self.offline = False
+        if (not api_key or not api_secret) or api_key.lower().startswith("dummy") or api_secret.lower().startswith("dummy"):
+            self.offline = True
 
-        is_paper = "paper" in (base_url or "").lower()
         self.base_url = base_url
-        self.trading = TradingClient(api_key, api_secret, paper=is_paper)
-        self.data = StockHistoricalDataClient(api_key=api_key, secret_key=api_secret)
+        if self.offline:
+            self.trading = None
+            self.data = None
+        else:
+            is_paper = "paper" in (base_url or "").lower()
+            self.trading = TradingClient(api_key, api_secret, paper=is_paper)
+            self.data = StockHistoricalDataClient(api_key=api_key, secret_key=api_secret)
 
     def _latest_price(self, symbol: str) -> float:
         req = StockBarsRequest(symbol_or_symbols=symbol, timeframe=TimeFrame.Day, limit=1)
@@ -69,6 +74,24 @@ class LiveStateBuilderV2:
         return float(df.iloc[-1][price_col])
 
     def get_live_state(self, underlying_symbol: str) -> Tuple[List[float], Dict[str, Any]]:
+        if self.offline or self.trading is None:
+            return [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ], {
+                "underlying": (underlying_symbol or "").strip().upper(),
+                "equity_position": 0.0,
+                "cash": 0.0,
+                "greeks": {},
+                "time": datetime.utcnow().isoformat(),
+            }
+
         acc = _to_dict(self.trading.get_account())
         positions = self.trading.get_all_positions()
         underlying = (underlying_symbol or "").strip().upper()

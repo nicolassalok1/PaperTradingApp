@@ -133,7 +133,10 @@ class DashboardV2Client:
         base_url = os.getenv("APCA_API_BASE_URL")
 
         self.offline = False
-        if not api_key or not api_secret or not base_url:
+        def _invalid(k: str | None) -> bool:
+            return not k or str(k).lower().startswith("dummy")
+
+        if _invalid(api_key) or _invalid(api_secret) or not base_url:
             self.offline = True
             self.trading = None
             self.data = None

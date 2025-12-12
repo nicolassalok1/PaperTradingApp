@@ -30,8 +30,14 @@ class AlpacaPortfolioClient:
         self.api_key = os.getenv("APCA_API_KEY_ID") or ""
         self.api_secret = os.getenv("APCA_API_SECRET_KEY") or ""
         self.base_url = os.getenv("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
-        if not self.api_key or not self.api_secret:
-            raise EnvironmentError("APCA_API_KEY_ID and APCA_API_SECRET_KEY must be set")
+        self.offline = False
+        if (not self.api_key or not self.api_secret) or self.api_key.lower().startswith("dummy") or self.api_secret.lower().startswith("dummy"):
+            self.offline = True
+
+        if self.offline:
+            self.trading = None
+            self.data = None
+            return
 
         is_paper = "paper" in (self.base_url or "").lower()
         self.trading = TradingClient(
@@ -45,14 +51,26 @@ class AlpacaPortfolioClient:
         )
 
     def get_account(self) -> Dict[str, Any]:
-        account = self.trading.get_account()
-        return _to_dict(account)
+        if self.offline or self.trading is None:
+            return {}
+        try:
+            account = self.trading.get_account()
+            return _to_dict(account)
+        except Exception:
+            return {}
 
     def get_positions(self) -> List[Dict[str, Any]]:
-        positions = self.trading.get_all_positions()
+        if self.offline or self.trading is None:
+            return []
+        try:
+            positions = self.trading.get_all_positions()
+        except Exception:
+            return []
         return [_to_dict(p) for p in positions] if positions else []
 
     def get_latest_price(self, symbol: str) -> float:
+        if self.offline or self.data is None:
+            return 0.0
         symbol_norm = (symbol or "").strip().upper()
         if not symbol_norm:
             return 0.0

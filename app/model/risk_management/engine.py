@@ -30,14 +30,22 @@ class AlpacaKeys:
         api_key = os.getenv("APCA_API_KEY_ID") or ""
         api_secret = os.getenv("APCA_API_SECRET_KEY") or ""
         base_url = os.getenv("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
-        if not api_key or not api_secret:
+        if (not api_key or not api_secret) or api_key.lower().startswith("dummy") or api_secret.lower().startswith("dummy"):
             raise EnvironmentError("APCA_API_KEY_ID and APCA_API_SECRET_KEY must be set")
         return cls(api_key=api_key, api_secret=api_secret, base_url=base_url)
 
 
 class RiskEngine:
     def __init__(self, keys: AlpacaKeys | None = None) -> None:
-        self.keys = keys or AlpacaKeys.from_env()
+        self.offline = False
+        try:
+            self.keys = keys or AlpacaKeys.from_env()
+        except Exception:
+            self.offline = True
+            self.trading_client = None
+            self.data_client = None
+            return
+
         is_paper = "paper" in (self.keys.base_url or "").lower()
         self.trading_client = TradingClient(
             self.keys.api_key,
@@ -71,13 +79,24 @@ class RiskEngine:
             return {"value": obj}
 
     def _positions(self) -> list[dict[str, Any]]:
-        positions = self.trading_client.get_all_positions()
+        if self.offline or self.trading_client is None:
+            return []
+        try:
+            positions = self.trading_client.get_all_positions()
+        except Exception:
+            return []
         return [self._to_dict(p) for p in positions] if positions else []
 
     # --- Public API -----------------------------------------------------
     def get_account_snapshot(self) -> dict[str, Any]:
-        account = self.trading_client.get_account()
-        acc = self._to_dict(account)
+        if self.offline or self.trading_client is None:
+            acc = {}
+        else:
+            try:
+                account = self.trading_client.get_account()
+                acc = self._to_dict(account)
+            except Exception:
+                acc = {}
         return {
             "equity": float(acc.get("equity", 0.0) or 0.0),
             "cash": float(acc.get("cash", 0.0) or 0.0),

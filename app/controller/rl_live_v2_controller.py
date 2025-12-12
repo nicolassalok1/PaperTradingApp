@@ -60,10 +60,19 @@ def _data_client() -> StockHistoricalDataClient:
 
 
 def get_live_snapshot() -> Dict[str, Any]:
-    client = _state_builder().trading
-    account = client.get_account()
-    positions = client.get_all_positions()
-    return {"account": account.dict() if hasattr(account, "dict") else account, "positions": [p.dict() if hasattr(p, "dict") else p for p in positions]}
+    sb = _state_builder()
+    client = getattr(sb, "trading", None)
+    if client is None:
+        return {"account": {}, "positions": []}
+    try:
+        account = client.get_account()
+        positions = client.get_all_positions()
+    except Exception:
+        return {"account": {}, "positions": []}
+    return {
+        "account": account.dict() if hasattr(account, "dict") else account,
+        "positions": [p.dict() if hasattr(p, "dict") else p for p in positions],
+    }
 
 
 def get_rl_suggestion(underlying_symbol: str) -> Dict[str, Any]:
