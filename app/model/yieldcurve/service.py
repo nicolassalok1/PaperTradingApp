@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import datetime
 import math
+import os
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 import pandas as pd
 
@@ -24,6 +25,7 @@ from app.utils.math_utils import floor_4
 from app.utils.paths import JSON_DIR
 
 FORWARDS_FILE = JSON_DIR / "forwards_portfolio.json"
+DEFAULT_RF = float(os.getenv("DEFAULT_RF_RATE", "0.02"))
 
 
 def load_curve(ensure_cache: bool = False) -> Tuple[pd.DataFrame | None, Path | None]:
@@ -102,6 +104,97 @@ def _interpolate_from_points(
         return float(series.reindex(series.index.union([T_years])).interpolate().loc[T_years])
     except Exception:
         return None
+
+
+class YieldCurve:
+    """
+    Lightweight curve abstraction providing zero rates and discount factors.
+    """
+
+    def __init__(
+        self,
+        tenors_years: List[float],
+        zero_rates: List[float],
+        source: Path | None = None,
+        default_rate: float = DEFAULT_RF,
+    ):
+        pairs = [
+            (float(t), float(r))
+            for t, r in zip(tenors_years, zero_rates)
+            if t is not None and r is not None and math.isfinite(t) and math.isfinite(r)
+        ]
+        pairs.sort(key=lambda x: x[0])
+        self._tenors, self._rates = zip(*pairs) if pairs else ((), ())
+        self._default_rate = float(default_rate)
+        self.source = source
+
+    @property
+    def maturities(self) -> List[float]:
+        return list(self._tenors)
+
+    def zero_rate(self, T_years: float) -> float:
+        T = float(T_years)
+        if not self._tenors:
+            return self._default_rate
+        val = _interpolate_from_points(list(self._tenors), list(self._rates), T)
+        if val is None or not math.isfinite(val):
+            return self._default_rate
+        return float(val)
+
+    def discount_factor(self, T_years: float) -> float:
+        try:
+            r = self.zero_rate(T_years)
+            return math.exp(-float(r) * float(T_years))
+        except Exception:
+            return math.exp(-self._default_rate * float(T_years))
+
+    def forward_rate(self, start_years: float, end_years: float) -> float | None:
+        if end_years <= start_years or end_years <= 0:
+            return None
+        try:
+            df1 = self.discount_factor(max(start_years, 0.0))
+            df2 = self.discount_factor(end_years)
+            return -(math.log(df2) - math.log(df1)) / (float(end_years) - float(start_years))
+        except Exception:
+            return None
+
+    def risk_free_rate(self, T_ref: float = 1.0) -> float:
+        return self.zero_rate(T_ref)
+
+
+def _build_curve_model(df_curve: pd.DataFrame | None, source: Path | None) -> YieldCurve:
+    tenors, rates = _latest_curve_points(df_curve) if df_curve is not None else ([], [])
+    if not tenors or not rates:
+        tenors = [0.25, 1.0, 2.0]
+        rates = [DEFAULT_RF] * len(tenors)
+    return YieldCurve(tenors, rates, source=source, default_rate=DEFAULT_RF)
+
+
+def get_active_curve(ensure_cache: bool = True) -> tuple[YieldCurve, Path | None]:
+    df_curve, source_path = load_yield_curve_csv(ensure_cache=ensure_cache)
+    curve = _build_curve_model(df_curve, source_path)
+    return curve, source_path
+
+
+def get_curve_snapshot(risk_free_maturity: float = 1.0, ensure_cache: bool = True) -> dict[str, Any]:
+    curve, source_path = get_active_curve(ensure_cache=ensure_cache)
+    maturities = curve.maturities
+    zero_rates = [curve.zero_rate(t) for t in maturities]
+    discount_factors = [curve.discount_factor(t) for t in maturities]
+    risk_free_rate = curve.risk_free_rate(risk_free_maturity)
+    return {
+        "maturities": maturities,
+        "zero_rates": zero_rates,
+        "discount_factors": discount_factors,
+        "risk_free_rate": risk_free_rate,
+        "risk_free_maturity": float(risk_free_maturity),
+        "source_path": source_path,
+    }
+
+
+def get_risk_free_rate(T_ref: float = 1.0, ensure_cache: bool = True) -> float:
+    curve, _ = get_active_curve(ensure_cache=ensure_cache)
+    return float(curve.risk_free_rate(T_ref))
 
 
 def interpolate_curve_rate(df_curve: pd.DataFrame, T_years: float) -> float | None:
@@ -238,6 +331,9 @@ __all__ = [
     "yield_curve_cache_file",
     "get_spot",
     "get_rate",
+    "get_active_curve",
+    "get_curve_snapshot",
+    "get_risk_free_rate",
     "load_forwards",
     "save_forwards",
     "compute_forward_price",
@@ -247,4 +343,5 @@ __all__ = [
     "compute_instantaneous_rates",
     "interpolate_curve_rate",
     "prepare_forward_rows",
+    "YieldCurve",
 ]

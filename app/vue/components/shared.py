@@ -176,7 +176,6 @@ __all__ = [
     "choose_option_select",
     "render_option_text",
     "render_unlock_sidebar_button",
-    "render_add_to_dashboard_button",
     "render_method_explainer",
     "render_general_definition_explainer",
     "render_section_explainer",

@@ -4,15 +4,12 @@ Controller for Options domain (thin wrappers over model services).
 
 from __future__ import annotations
 
-from typing import Dict, Iterable
-
 from app.model.market_data.history import (
     clear_closing_history_cache,
     load_close_series_for_ticker,
     load_or_fetch_closing_history,
 )
 from app.model.market_data.realtime import get_data
-from app.model.options.add_to_dashboard import add_option_to_dashboard_clean
 from app.model.options.engines.black_scholes import (
     black_scholes_price,
     price_asset_or_nothing,
@@ -34,7 +31,6 @@ from app.model.options.engines.black_scholes import (
     price_straddle,
     price_strangle,
 )
-from app.model.options.core.book import load_options_book, save_options_book
 from app.model.options.engines.crr import price_american_crr, price_bermuda_crr
 from app.model.options.data.iv_surface import (
     fetch_iv_surface,
@@ -58,8 +54,6 @@ from app.model.options.core.iv import (
     save_cached_option_history,
     save_options_meta,
 )
-from app.model.options.logs import log_action
-from app.model.options.core.pnl import compute_option_pnl, load_expired, save_expired
 from app.model.options.core.pricing_lib import price_iron_butterfly_bs
 from app.model.options.ui_gateway.pricing_ui import (
     view_asian_arith,
@@ -110,7 +104,6 @@ from app.model.options.context import (
     get_option_context_from_state as _get_option_context_from_state,
 )
 from app.utils.math_utils import floor_n as _floor_n
-from app.utils.paths import JSON_DIR as _JSON_DIR
 
 
 def refresh_underlying_cache(ticker: str):
@@ -135,11 +128,6 @@ def refresh_underlying_cache(ticker: str):
 def floor_n(x, n=2):
     """Expose floor_n to the UI without a direct utils dependency."""
     return _floor_n(x, n)
-
-
-def get_json_dir():
-    """Expose JSON_DIR to the UI without a direct utils dependency."""
-    return _JSON_DIR
 
 
 def build_option_context(state_dict):
@@ -246,17 +234,8 @@ __all__ = [
     # Helper exports
     "_get_cached_iv_for",
     "floor_n",
-    "get_json_dir",
     "build_option_context",
     "get_shared",
-    # Book / PnL / logging
-    "add_option_to_dashboard_clean",
-    "log_action",
-    "load_options_book",
-    "save_options_book",
-    "compute_option_pnl",
-    "load_expired",
-    "save_expired",
     # Market data
     "get_data",
     "load_or_fetch_closing_history",

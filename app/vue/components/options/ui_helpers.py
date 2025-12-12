@@ -1,20 +1,14 @@
 """
-UI helpers for the Options panels (Streamlit widgets, dashboard actions, visuals).
+UI helpers for the Options panels (Streamlit widgets and visuals).
 """
 
 from __future__ import annotations
-
-import datetime
-import json
 
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
 
-from app.controller.options_ui_controller import (
-    get_cached_iv_for as ui_get_cached_iv_for,
-    get_json_dir,
-)
+from app.controller.options_ui_controller import get_cached_iv_for as ui_get_cached_iv_for
 
 
 def _choose_option_select(key_prefix: str, option_char: str | None = None):
@@ -74,44 +68,6 @@ def _render_heatmaps_for_current_option(
         st.info("Heatmap non disponible.")
 
 
-def render_add_to_dashboard_button(
-    product_label: str,
-    option_char: str,
-    price_value: float,
-    strike: float,
-    maturity: float,
-    key_prefix: str,
-    spot: float | None = None,
-    premium_paid: float | None = None,
-    qty: float | None = None,
-    misc: dict | None = None,
-):
-    """Append a priced structure to the dashboard JSON cache."""
-    key = f"{key_prefix}_{product_label}_{option_char}_{strike}_{maturity}"
-    if st.button(f"Ajouter {product_label} ({'Call' if option_char == 'c' else 'Put'})", key=key):
-        dashboard_entry = {
-            "product": product_label,
-            "type": "Call" if option_char == "c" else "Put",
-            "price": float(price_value),
-            "strike": float(strike),
-            "maturity": float(maturity),
-            "timestamp": datetime.datetime.utcnow().isoformat(),
-            "spot": float(spot) if spot is not None else None,
-            "premium_paid": float(premium_paid) if premium_paid is not None else None,
-            "qty": float(qty) if qty is not None else None,
-            "misc": misc or {},
-        }
-        path = get_json_dir() / "dashboard_entries.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            entries = json.loads(path.read_text()) if path.exists() else []
-        except Exception:
-            entries = []
-        entries.append(dashboard_entry)
-        path.write_text(json.dumps(entries, indent=2))
-        st.success(f"{product_label} ajoute au dashboard !")
-
-
 def _common_defaults():
     """Fetch common option parameters with safe fallbacks."""
     try:
@@ -143,7 +99,6 @@ __all__ = [
     "render_method_explainer",
     "_get_cached_iv_for",
     "_render_heatmaps_for_current_option",
-    "render_add_to_dashboard_button",
     "common_spot_value",
     "common_maturity_value",
     "common_rate_value",
@@ -151,5 +106,4 @@ __all__ = [
     "d_common",
     "option_char",
     "_k",
-    "datetime",
 ]

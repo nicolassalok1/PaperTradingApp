@@ -6,7 +6,6 @@ All logic is routed through app.controller.options_controller (no direct model c
 from __future__ import annotations
 
 import datetime
-import math
 import streamlit as st
 import altair as alt
 
@@ -26,7 +25,6 @@ _render_option_text = opt_ui._render_option_text
 render_method_explainer = opt_ui.render_method_explainer
 _get_cached_iv_for = oc._get_cached_iv_for
 _render_heatmaps_for_current_option = opt_ui._render_heatmaps_for_current_option
-render_add_to_dashboard_button = opt_ui.render_add_to_dashboard_button
 common_spot_value = opt_ui.common_spot_value
 common_maturity_value = opt_ui.common_maturity_value
 common_rate_value = opt_ui.common_rate_value
@@ -75,15 +73,6 @@ view_straddle = oc.view_straddle
 view_strangle = oc.view_strangle
 view_asian_arith = oc.view_asian_arith
 view_asian_geom = oc.view_asian_geom
-
-# Book / PnL / logging
-add_option_to_dashboard_clean = oc.add_option_to_dashboard_clean
-log_action = oc.log_action
-load_options_book = oc.load_options_book
-save_options_book = oc.save_options_book
-compute_option_pnl = oc.compute_option_pnl
-load_expired = oc.load_expired
-save_expired = oc.save_expired
 
 # Market data
 get_data = oc.get_data
@@ -250,7 +239,6 @@ __all__ = [
     "render_method_explainer",
     "_get_cached_iv_for",
     "_render_heatmaps_for_current_option",
-    "render_add_to_dashboard_button",
     "common_spot_value",
     "common_maturity_value",
     "common_rate_value",
@@ -281,14 +269,7 @@ __all__ = [
     "view_strangle",
     "view_asian_arith",
     "view_asian_geom",
-    "add_option_to_dashboard_clean",
-    "log_action",
     "get_option_context",
-    "load_options_book",
-    "save_options_book",
-    "compute_option_pnl",
-    "load_expired",
-    "save_expired",
     "compute_price_mc",
     "price_european_from_cboe",
     "get_data",
@@ -302,7 +283,6 @@ __all__ = [
     "render_figures_grid",
     "show_and_close",
     "floor_n",
-    "math",
     "datetime",
     "np",
     "pd",

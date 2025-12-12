@@ -4,14 +4,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from app.vue.components.options.controller_bridge import (
-    add_option_to_dashboard_clean,
     common_rate_value,
     common_sigma_value,
     d_common,
     ensure_close_history,
     get_option_context,
     load_close_series_for_ticker,
-    log_action,
     render_figures_grid,
     resolve_common_underlying,
     view_rainbow,
@@ -20,7 +18,7 @@ from app.vue.components.options.controller_bridge import (
 
 def render_tab_rainbow():
     """
-    Rainbow option (deux sous-jacents) avec pricing MC et push dashboard.
+    Rainbow option (deux sous-jacents) avec pricing Monte Carlo.
     """
     # --- Contexte global Options ---
     ctx = get_option_context()
@@ -147,34 +145,3 @@ def render_tab_rainbow():
     ax_pay.set_title(f"Rainbow ({opt_type})")
     figs.append(fig_pay)
     render_figures_grid(figs)
-
-    st.markdown("### Ajouter au dashboard")
-    qty = st.number_input("Quantité", min_value=1, value=1, step=1, key=_k("rainbow_qty"))
-    if st.button("Ajouter au dashboard", key=_k("rainbow_add"), type="primary"):
-        payload = {
-            "underlying": f"{(ticker_a or 'A').upper()} / {(ticker_b or 'B').upper()}",
-            "option_type": opt_type,
-            "product_type": "Rainbow",
-            "type": "Rainbow",
-            "strike": float(strike_val),
-            "quantity": int(qty),
-            "avg_price": float(premium),
-            "side": "long",
-            "S0": float(S0_a),
-            "S0_b": float(S0_b),
-            "maturity_years": float(T_val),
-            "T_0": datetime.date.today().isoformat(),
-            "price": float(premium),
-            "misc": {
-                "sigma_a": float(sigma_a),
-                "sigma_b": float(sigma_b),
-                "rho": float(rho_val),
-                "span": float(span_val),
-                "n_paths": int(n_paths),
-                "spot_at_pricing_a": float(S0_a),
-                "spot_at_pricing_b": float(S0_b),
-            },
-        }
-        oid = add_option_to_dashboard_clean(payload)
-        log_action("add_option", {"id": oid, "payload": payload})
-        st.success(f"Option ajoutée au dashboard (id={oid})")
