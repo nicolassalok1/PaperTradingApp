@@ -21,7 +21,7 @@ def _render_account() -> None:
     c4.metric("Buying Power", f"${bp:,.2f}")
 
 
-def _render_positions() -> None:
+def _render_positions() -> list[dict]:
     st.markdown("### Positions (equities & options)")
     equities = ctrl.get_equity_positions()
     options = ctrl.get_option_positions()
@@ -38,16 +38,28 @@ def _render_positions() -> None:
         st.caption("Option positions")
         st.dataframe(pd.DataFrame(options), hide_index=True, use_container_width=True)
 
+    return options
 
-def _render_dqn_panel() -> None:
+
+def _render_dqn_panel(option_positions: list[dict]) -> None:
     st.markdown("### DQN Hedging Panel")
-    underlying = st.text_input("Underlying symbol", value="AAPL").upper()
+
+    choices = [
+        f"{pos.get('symbol', '')} | {pos.get('side', '')} {pos.get('qty', '')}"
+        for pos in option_positions
+    ]
+    selected_label = st.selectbox("Option to hedge", choices)
+    try:
+        idx = choices.index(selected_label)
+    except ValueError:
+        idx = 0
+    option_symbol = str(option_positions[idx].get("symbol", "")).upper()
 
     if st.button("Get DQN hedge suggestion"):
         try:
-            suggestion = ctrl.get_dqn_hedge_suggestion(underlying)
+            suggestion = ctrl.get_dqn_hedge_suggestion_for_option(option_symbol)
             st.info(
-                f"Suggestion: side={suggestion.get('side')} | "
+                f"Suggestion for {option_symbol}: side={suggestion.get('side')} | "
                 f"delta_qty={suggestion.get('delta_qty')} | "
                 f"comment={suggestion.get('comment')}"
             )
@@ -56,8 +68,8 @@ def _render_dqn_panel() -> None:
 
     if st.button("Execute DQN hedge on Alpaca"):
         try:
-            result = ctrl.execute_dqn_hedge(underlying)
-            st.success(f"Executed: {result}")
+            result = ctrl.execute_dqn_hedge_for_option(option_symbol)
+            st.success(f"Executed hedge for {option_symbol}: {result}")
         except Exception as exc:
             st.error(f"Hedge execution failed: {exc}")
 
@@ -74,18 +86,17 @@ def render_tab() -> None:
         badge="Hedging",
     )
 
-    # Top row: account snapshot vs DQN hedging panel
-    col_left, col_right = st.columns(2)
-    with col_left:
-        _render_account()
-
-    with col_right:
-        _render_dqn_panel()
-
+    # Account snapshot
+    _render_account()
     st.divider()
 
     # Positions shown read-only
-    _render_positions()
+    option_positions = _render_positions()
+
+    # DQN hedging panel shown only if there are option positions to hedge
+    if option_positions:
+        st.divider()
+        _render_dqn_panel(option_positions)
 
 
 def render() -> None:

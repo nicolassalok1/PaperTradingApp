@@ -61,6 +61,33 @@ def execute_dqn_hedge(underlying_symbol: str) -> Dict[str, Any]:
     return {"suggestion": suggestion, "order": order_resp}
 
 
+def _underlying_from_option_symbol(option_symbol: str) -> str:
+    """
+    Derive the underlying ticker from an OCC-style option symbol.
+
+    Very simple heuristic: take characters up to the first digit.
+    """
+    sym = (option_symbol or "").strip().upper()
+    if not sym:
+        return ""
+    root = []
+    for ch in sym:
+        if ch.isdigit():
+            break
+        root.append(ch)
+    return "".join(root) or sym
+
+
+def get_dqn_hedge_suggestion_for_option(option_symbol: str) -> Dict[str, Any]:
+    underlying = _underlying_from_option_symbol(option_symbol)
+    return get_dqn_hedge_suggestion(underlying)
+
+
+def execute_dqn_hedge_for_option(option_symbol: str) -> Dict[str, Any]:
+    underlying = _underlying_from_option_symbol(option_symbol)
+    return execute_dqn_hedge(underlying)
+
+
 __all__ = [
     "get_client",
     "get_account_snapshot",
@@ -69,4 +96,6 @@ __all__ = [
     "manual_order",
     "get_dqn_hedge_suggestion",
     "execute_dqn_hedge",
+    "get_dqn_hedge_suggestion_for_option",
+    "execute_dqn_hedge_for_option",
 ]
