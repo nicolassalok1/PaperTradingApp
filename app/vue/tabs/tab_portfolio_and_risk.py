@@ -2,8 +2,7 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 
-from app.controller import risk_management_controller as risk_ctrl
-from app.controller import portfolio_allocation_controller as alloc_ctrl
+from app.controller import portfolio_and_risk_controller as ctrl
 from app.vue.components.page_utils import render_page_header
 
 TAB_LABEL = "?? Portfolio & Risk"
@@ -136,11 +135,11 @@ def _render_rebalancing_tools() -> None:
     method = _alloc_method_mapping(method_label)
 
     if st.button("Compute target allocation", type="primary"):
-        allocation_result = alloc_ctrl.compute_allocation(method, lookback_days)
+        allocation_result = ctrl.compute_allocation(method, lookback_days)
         _render_allocation_results(allocation_result)
 
     if st.button("Generate rebalance plan"):
-        plan_result = alloc_ctrl.generate_rebalance_plan(method, lookback_days)
+        plan_result = ctrl.generate_rebalance_plan(method, lookback_days)
         orders = plan_result.get("orders", [])
         _render_orders_table(orders)
 
@@ -148,7 +147,7 @@ def _render_rebalancing_tools() -> None:
         "Executing live orders will send market orders to Alpaca. Use with caution."
     )
     if st.button("Execute rebalance on Alpaca (DANGEROUS)", type="secondary"):
-        exec_result = alloc_ctrl.execute_rebalance(method, lookback_days)
+        exec_result = ctrl.execute_rebalance(method, lookback_days)
         executions = exec_result.get("executions", [])
         if executions:
             st.success("Rebalance executed.")
@@ -167,8 +166,8 @@ def render_tab() -> None:
         badge="Portfolio",
     )
 
-    account = risk_ctrl.get_account()
-    summary = risk_ctrl.get_risk_summary()
+    account = ctrl.get_account()
+    summary = ctrl.get_risk_summary()
 
     # Top row: account + alerts vs. PnL
     col_left, col_right = st.columns(2)

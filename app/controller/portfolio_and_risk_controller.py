@@ -1,11 +1,19 @@
 """
-Controller for Alpaca-based portfolio allocation.
+Unified controller for the 📊 Portfolio & Risk tab.
+
+This module aggregates:
+- Risk management metrics (exposure, VaR-lite, per-position metrics, PnL series)
+- Portfolio allocation & rebalance tools (Markowitz, risk parity, eigen-portfolios)
+
+The goal is to provide a single, thin controller per tab while keeping all
+business logic inside the model layer.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.model import risk_management as risk_engine
 from app.model.portfolio_allocation.engine import (
     AlpacaPortfolioClient,
     compute_rebalance_orders,
@@ -21,13 +29,73 @@ _CLIENT: AlpacaPortfolioClient | None = None
 
 
 def _client() -> AlpacaPortfolioClient:
+    """
+    Lazy singleton for the AlpacaPortfolioClient used by allocation routines.
+    """
     global _CLIENT
     if _CLIENT is None:
         _CLIENT = AlpacaPortfolioClient()
     return _CLIENT
 
 
+# --- Risk management helpers -------------------------------------------------
+
+def get_account() -> Dict[str, Any]:
+    """
+    Alpaca account snapshot used for the portfolio & risk dashboard.
+    """
+    return risk_engine.get_account_snapshot()
+
+
+def get_positions() -> List[Dict[str, Any]]:
+    """
+    Aggregated positions summary from the risk engine.
+    """
+    return risk_engine.get_positions_summary()
+
+
+def get_risk_summary(confidence: float = 0.95) -> Dict[str, Any]:
+    """
+    Build a compact risk summary dictionary for the view layer.
+
+    Contains:
+    - exposure / net_exposure
+    - unrealized_pnl_total
+    - per_position_metrics
+    - var_lite
+    - alerts
+    - pnl_series
+    """
+    positions = get_positions()
+    exposure = risk_engine.compute_exposure()
+    net_exposure = risk_engine.compute_net_exposure()
+    unrealized_pnl_total = risk_engine.compute_unrealized_pnl_total()
+    per_position_metrics = [
+        risk_engine.compute_position_risk_metrics(pos.get("symbol"))
+        for pos in positions
+        if pos.get("symbol")
+    ]
+    var_lite = risk_engine.compute_var_lite(confidence=confidence)
+    alerts = risk_engine.trigger_alerts()
+    pnl_series = risk_engine.compute_portfolio_pnl_series()
+
+    return {
+        "exposure": exposure,
+        "net_exposure": net_exposure,
+        "unrealized_pnl_total": unrealized_pnl_total,
+        "per_position_metrics": [m for m in per_position_metrics if m],
+        "var_lite": var_lite,
+        "alerts": alerts,
+        "pnl_series": pnl_series,
+    }
+
+
+# --- Allocation & rebalance helpers ------------------------------------------
+
 def get_portfolio_snapshot() -> Dict[str, Any]:
+    """
+    Snapshot of the current Alpaca portfolio (equity, cash, weights).
+    """
     client = _client()
     snapshot = get_current_portfolio(client)
     return {
@@ -40,11 +108,17 @@ def get_portfolio_snapshot() -> Dict[str, Any]:
 
 
 def get_available_symbols() -> List[str]:
+    """
+    List of tradable symbols present in the current portfolio snapshot.
+    """
     snap = get_portfolio_snapshot()
     return snap.get("symbols", [])
 
 
 def compute_allocation(method: str, lookback_days: int = 60) -> Dict[str, Any]:
+    """
+    Compute target portfolio weights given a risk model and lookback window.
+    """
     client = _client()
     symbols = get_available_symbols()
     returns_data = compute_returns_matrix(client, symbols, lookback_days)
@@ -69,6 +143,10 @@ def compute_allocation(method: str, lookback_days: int = 60) -> Dict[str, Any]:
 
 
 def generate_rebalance_plan(method: str, lookback_days: int = 60) -> Dict[str, Any]:
+    """
+    Compute a rebalance plan (desired trades) to move from current portfolio
+    weights to the target allocation produced by compute_allocation().
+    """
     client = _client()
     current = get_current_portfolio(client)
     target = compute_allocation(method, lookback_days)
@@ -86,6 +164,9 @@ def generate_rebalance_plan(method: str, lookback_days: int = 60) -> Dict[str, A
 
 
 def execute_rebalance(method: str, lookback_days: int = 60) -> Dict[str, Any]:
+    """
+    Execute the rebalance plan on Alpaca and return execution details.
+    """
     client = _client()
     plan = generate_rebalance_plan(method, lookback_days)
     executions = execute_rebalance_orders(client, plan.get("orders", []))
@@ -93,9 +174,15 @@ def execute_rebalance(method: str, lookback_days: int = 60) -> Dict[str, Any]:
 
 
 __all__ = [
+    # Risk metrics / exposure
+    "get_account",
+    "get_positions",
+    "get_risk_summary",
+    # Allocation tools
     "get_portfolio_snapshot",
     "get_available_symbols",
     "compute_allocation",
     "generate_rebalance_plan",
     "execute_rebalance",
 ]
+

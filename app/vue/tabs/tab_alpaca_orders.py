@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from app.controller import alpaca_orders_controller as ctrl
+from app.controller import trading_controller as ctrl
 from app.vue.components.page_utils import render_page_header
 
 
@@ -15,7 +15,7 @@ def _to_float(val) -> float:
 def _render_account_section() -> None:
     st.markdown("### Account metrics")
     try:
-        account = ctrl.get_account()
+        account = ctrl.get_orders_account()
     except Exception as exc:
         st.error(f"Unable to load account: {exc}")
         return
@@ -40,7 +40,7 @@ def _render_account_section() -> None:
 def _render_positions_section() -> None:
     st.markdown("### Positions")
     try:
-        positions = ctrl.get_positions()
+        positions = ctrl.get_orders_positions()
     except Exception as exc:
         st.error(f"Unable to load positions: {exc}")
         return
@@ -68,7 +68,7 @@ def _render_positions_section() -> None:
 def _render_orders_section() -> None:
     st.markdown("### Open orders")
     try:
-        orders = ctrl.get_open_orders()
+        orders = ctrl.get_open_advanced_orders()
     except Exception as exc:
         st.error(f"Unable to load orders: {exc}")
         return

@@ -255,27 +255,26 @@ def alpaca_assets_test():
 
 def controllers_smoke():
     step("Controller smoke tests")
-    from app.controller import dashboard_v2_controller as dash_ctrl
-    from app.controller import hedger_v2_controller as hedger_ctrl
-    from app.controller import rl_live_v2_controller as rl_ctrl
-    from app.controller import portfolio_allocation_controller as pa_ctrl
+    from app.controller import (
+        dashboard_v2_controller as dash_ctrl,
+        options_controller as options_ctrl,
+        trading_controller as trading_ctrl,
+        portfolio_and_risk_controller as pr_ctrl,
+        hedger_v2_controller as hedger_ctrl,
+        yieldcurve_controller as yc_ctrl,
+        calibration_controller as calib_ctrl,
+    )
 
     summary = dash_ctrl.get_account_summary()
     assert isinstance(summary, dict)
-    _ = hedger_ctrl.get_equity_positions()
-    _ = rl_ctrl.get_rl_suggestion("AAPL")
-    _ = pa_ctrl.get_portfolio_snapshot()
 
-
-def rl_inference_test():
-    step("RL inference sanity test")
-    from app.controller import rl_live_v2_controller as rl_ctrl
-
-    suggestion = rl_ctrl.get_rl_suggestion("AAPL")
-    action = suggestion.get("action", {})
-    for key in ("action_id", "side", "delta_qty"):
-        if key not in action:
-            fail(f"RL action missing key: {key}")
+    # Smoke-test a handful of controller entrypoints
+    _ = options_ctrl.get_shared()
+    _ = trading_ctrl.get_spot_account()
+    _ = pr_ctrl.get_risk_summary()
+    _ = hedger_ctrl.get_option_positions()
+    _ = yc_ctrl.get_curve_snapshot()
+    _ = calib_ctrl.CalibrationController()
 
 
 def ui_crawler_test():
@@ -310,7 +309,6 @@ def main():
     alpaca_activities_test()
     alpaca_assets_test()
     controllers_smoke()
-    rl_inference_test()
     ui_crawler_test()
     print("ALL TESTS PASSED - ENV STABLE - MVC CLEAN - NO ERRORS")
 

@@ -1,5 +1,5 @@
 """
-Controller for Dashboard v2 (Alpaca overview).
+Controller for Dashboard v2 (Alpaca overview + PnL attribution).
 """
 
 from __future__ import annotations
@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.model.dashboard_v2.engine import DashboardV2Client
+from app.model.pnl_attribution.engine import compute_pnl_attribution
 
 _CLIENT: DashboardV2Client | None = None
 
@@ -84,6 +85,11 @@ def get_exposure_by_sector() -> List[Dict[str, Any]]:
     return get_client().get_exposure_by_sector()
 
 
+def get_pnl_attribution() -> Dict[str, Any]:
+    """PnL attribution for the current dashboard universe."""
+    return compute_pnl_attribution(get_client())
+
+
 __all__ = [
     "get_account_summary",
     "get_spot_positions",
@@ -97,4 +103,5 @@ __all__ = [
     "get_volatility",
     "get_exposure_by_symbol",
     "get_exposure_by_sector",
+    "get_pnl_attribution",
 ]

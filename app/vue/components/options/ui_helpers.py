@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
 
-from app.controller.options_ui_controller import get_cached_iv_for as ui_get_cached_iv_for
+from app.controller.options_controller import _get_cached_iv_for as ui_get_cached_iv_for
 
 
 def _choose_option_select(key_prefix: str, option_char: str | None = None):
