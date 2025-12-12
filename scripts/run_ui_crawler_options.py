@@ -274,13 +274,25 @@ def run_ui_crawler_options():
                 return
 
             if not _wait_for_closings_loaded(page, timeout_ms=20000):
-                _save_error("Clôtures non chargées pour AAPL", error_type="DataError", location="OptionsTab")
+                err_data = base_crawler.extract_error(page.content())
+                _save_error(
+                    "Clôtures non chargées pour AAPL",
+                    error_type="DataError",
+                    location="OptionsTab",
+                    traceback_text=(err_data or {}).get("traceback", ""),
+                )
                 browser.close()
                 return
 
             clicked = _click_add_buttons(page)
             if clicked == 0:
-                _save_error("Aucun bouton 'Ajouter au dashboard' cliqué", error_type="ActionError", location="OptionsTab")
+                err_data = base_crawler.extract_error(page.content())
+                _save_error(
+                    "Aucun bouton 'Ajouter au dashboard' cliqué",
+                    error_type="ActionError",
+                    location="OptionsTab",
+                    traceback_text=(err_data or {}).get("traceback", ""),
+                )
             else:
                 err_after = base_crawler.extract_error(page.content())
                 if err_after and not _is_ignorable_api_error(err_after):
