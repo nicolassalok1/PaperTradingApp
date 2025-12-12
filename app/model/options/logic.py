@@ -1301,7 +1301,7 @@ def download_options_cboe(symbol: str, option_type: str):
 def download_options_alpaca(symbol: str) -> pd.DataFrame:
     """
     Download option snapshots from Alpaca Market Data API v1beta1.
-    Returns a normalized DataFrame with columns: symbol, K, T, S0, iv, type.
+    Returns a normalized DataFrame with columns: symbol, opra, K, T, S0, iv, type.
     """
     sym = _normalize_symbol(symbol)
     if not sym:
@@ -1388,6 +1388,7 @@ def download_options_alpaca(symbol: str) -> pd.DataFrame:
         records.append(
             {
                 "symbol": sym,
+                "opra": str(opra) if opra is not None else "",
                 "K": float(strike),
                 "T": float(T),
                 "S0": s0_val,
@@ -1396,7 +1397,7 @@ def download_options_alpaca(symbol: str) -> pd.DataFrame:
             }
         )
 
-    df = pd.DataFrame(records, columns=["symbol", "K", "T", "S0", "iv", "type"])
+    df = pd.DataFrame(records, columns=["symbol", "opra", "K", "T", "S0", "iv", "type"])
     try:
         CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
         out_path = CACHE_CSV_DIR / f"options_alpaca_{sym}.csv"
