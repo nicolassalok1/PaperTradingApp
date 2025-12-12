@@ -84,9 +84,8 @@ def render_tab() -> None:
 
     st.divider()
 
-    # Positions shown read-only in an expander
-    with st.expander("Current positions (equities & options)", expanded=False):
-        _render_positions()
+    # Positions shown read-only
+    _render_positions()
 
 
 def render() -> None:
