@@ -12,9 +12,11 @@ import sys
 import pandas as pd
 import streamlit as st
 import altair as alt
+
 alt.themes.enable("dark")
 
 import plotly.io as pio
+
 pio.templates.default = "plotly_dark"
 
 from app.vue.tabs.tab_dashboard_v2 import render_tab as render_dashboard_v2
@@ -26,6 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+# Top‑level grouping and ordering (user‑visible labels)
 TAB_GROUPS = {
     "📊 Overview": [
         "📊 Dashboard v2",
@@ -42,28 +45,28 @@ TAB_GROUPS = {
     ],
 }
 
+
+# Explicit labels for tab modules (override TAB_LABEL when present)
 DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     "tab_dashboard_v2": "📊 Dashboard v2",
     "tab_options": "📈 Options",
-    "tab_yieldcurve": "🧮 Yield Curve",
-    "tab_calibration": "🧮 Calibration",
-    "tab_alpaca_orders": "💹 Advanced Orders",
-    "tab_risk_management": "🧱 Risk Management",
-    "tab_portfolio_allocation": "📐 Portfolio Allocation",
-    "tab_hedger_v2": "🛡️ Hedger v2",
-    "tab_hedger_rl_live_v2": "🤖 Hedger RL Live v2",
     "tab_trading": "💹 Trading",
     "tab_portfolio_and_risk": "📊 Portfolio & Risk",
     "tab_hedging_systems": "🛡️ Hedging Systems",
+    "tab_yieldcurve": "🧮 Yield Curve",
+    "tab_calibration": "🧮 Calibration",
+    # Internal trading sub‑tabs (kept inside 💹 Trading only)
+    "tab_alpaca_spot": "Alpaca Spot",
+    "tab_alpaca_orders": "Advanced Orders",
+    "tab_alpaca_options_trading": "Alpaca Options",
 }
 
+
+# Labels that should never appear as top‑level tabs
 EXCLUDED_LABELS: set[str] = {
-    "💹 Advanced Orders",
     "Alpaca Spot",
-    "📐 Portfolio Allocation",
-    "🧱 Risk Management",
-    "🛡️ Hedger v2",
-    "🤖 Hedger RL Live v2",
+    "Advanced Orders",
+    "Alpaca Options",
 }
 
 
@@ -82,9 +85,10 @@ def autodiscover_tabs() -> Dict[str, Callable[[], None]]:
             continue
         module = importlib.import_module(f"app.vue.tabs.{module_info.name}")
 
-        label = getattr(module, "TAB_LABEL", None)
+        # Prefer explicit overrides, then TAB_LABEL, then a derived name
+        label = DEFAULT_LABEL_OVERRIDES.get(module_info.name)
         if not label:
-            label = DEFAULT_LABEL_OVERRIDES.get(module_info.name)
+            label = getattr(module, "TAB_LABEL", None)
         if not label:
             label = _derive_label(module_info.name)
 
@@ -102,7 +106,9 @@ def autodiscover_tabs() -> Dict[str, Callable[[], None]]:
 
 def ordered_tab_labels(all_tabs: Dict[str, Callable[[], None]]) -> list[str]:
     ordered: list[str] = []
-    seen = set()
+    seen: set[str] = set()
+
+    # Respect explicit group ordering first
     for _, labels in TAB_GROUPS.items():
         for lbl in labels:
             if lbl in EXCLUDED_LABELS:
@@ -110,19 +116,25 @@ def ordered_tab_labels(all_tabs: Dict[str, Callable[[], None]]) -> list[str]:
             if lbl in all_tabs and lbl not in seen:
                 ordered.append(lbl)
                 seen.add(lbl)
+
+    # Add any remaining tabs (non‑grouped) in alpha order
     for lbl in sorted(all_tabs.keys()):
         if lbl in EXCLUDED_LABELS:
             continue
         if lbl not in seen:
             ordered.append(lbl)
             seen.add(lbl)
+
     return ordered
 
 
 def sidebar_menu(all_tabs: Dict[str, Callable[[], None]], tab_labels: list[str]) -> None:
     """Sidebar kept for branding/info; navigation handled by tabs only."""
     st.sidebar.markdown("### PaperTradingApp")
-    st.sidebar.info("Navigation via les onglets en haut. La barre latérale reste disponible pour d'éventuels réglages.")
+    st.sidebar.info(
+        "Navigation via les onglets en haut. "
+        "La barre latérale reste disponible pour d'éventuels réglages."
+    )
 
 
 ALL_TABS = autodiscover_tabs()
@@ -142,7 +154,7 @@ def _configure_page() -> None:
     try:
         st.set_page_config(
             page_title="AI Trading Bot",
-            page_icon="🤖",
+            page_icon="📊",
             layout="wide",
             initial_sidebar_state="collapsed",
         )
@@ -152,7 +164,6 @@ def _configure_page() -> None:
 
 
 def _inject_global_styles() -> None:
-    from pathlib import Path
     theme_path = Path(__file__).parent / "styles" / "theme_animated.css"
     if theme_path.exists():
         with open(theme_path, "r", encoding="utf-8") as f:
@@ -171,7 +182,9 @@ def _patch_streamlit_charts() -> None:
         cfg = kwargs.pop("config", {}) or {}
         base_cfg = {"scrollZoom": False, "displayModeBar": False}
         merged_cfg = {**base_cfg, **cfg}
-        return _orig_plotly_chart(fig, use_container_width=use_container_width, config=merged_cfg, **kwargs)
+        return _orig_plotly_chart(
+            fig, use_container_width=use_container_width, config=merged_cfg, **kwargs
+        )
 
     st.plotly_chart = _plotly_chart  # type: ignore[assignment]
     st._charts_patched = True  # type: ignore[attr-defined]
@@ -239,3 +252,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
