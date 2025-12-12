@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+import altair as alt
 
 from app.controller import yieldcurve_controller as yc
 from app.vue.components.page_utils import render_page_header
@@ -29,6 +30,7 @@ def render():
 
     nodes = snapshot.get("nodes") or []
     grid = snapshot.get("grid") or []
+    ns_curve = snapshot.get("ns_curve") or []
     risk_free_rate = snapshot.get("risk_free_rate")
     source_path = snapshot.get("source_path")
     source_kind = snapshot.get("source_kind") or "cache"
@@ -75,21 +77,62 @@ def render():
     else:
         st.info("Aucun nœud trouvé, courbe plate par défaut (DEFAULT_RF_RATE).")
 
-    st.markdown("#### Zero rates (term structure)")
+    st.markdown("#### Zero rates (observed vs Nelson–Siegel)")
     df_grid = pd.DataFrame(grid)
-    if not df_grid.empty:
-        df_grid = df_grid.sort_values("t_years").set_index("t_years")
-        st.line_chart(df_grid[["zero_rate"]], height=260)
-        st.dataframe(
-            df_grid.reset_index().rename(columns={"t_years": "T (years)", "zero_rate": "Zero rate"}),
-            hide_index=True,
-            use_container_width=True,
-        )
+    df_ns = pd.DataFrame(ns_curve)
+    if not df_nodes.empty or not df_ns.empty:
+        df_nodes_plot = df_nodes.copy()
+        if "t_years" in df_nodes_plot.columns and "zero_rate" in df_nodes_plot.columns:
+            df_nodes_plot["rate_pct"] = df_nodes_plot["zero_rate"].astype(float) * 100.0
+        else:
+            df_nodes_plot = pd.DataFrame()
+
+        df_ns_plot = df_ns.copy()
+        if "t_years" in df_ns_plot.columns and "zero_rate" in df_ns_plot.columns:
+            df_ns_plot["rate_pct"] = df_ns_plot["zero_rate"].astype(float) * 100.0
+        else:
+            df_ns_plot = pd.DataFrame()
+
+        x_enc = alt.X("t_years:Q", title="Maturité (années)")
+        y_enc = alt.Y("rate_pct:Q", title="Taux zéro-coupon (%)")
+
+        charts = []
+        if not df_nodes_plot.empty:
+            charts.append(
+                alt.Chart(df_nodes_plot)
+                .mark_circle(size=70, color="#ffcc66")
+                .encode(x=x_enc, y=y_enc, tooltip=["tenor:N", "t_years:Q", "rate_pct:Q"])
+            )
+        if not df_ns_plot.empty:
+            charts.append(
+                alt.Chart(df_ns_plot)
+                .mark_line(color="#00e5ff")
+                .encode(x=x_enc, y=y_enc)
+            )
+        if charts:
+            chart = charts[0]
+            for ch in charts[1:]:
+                chart = chart + ch
+            chart = chart.properties(height=260)
+            st.altair_chart(chart, use_container_width=True)
+
+        if not df_grid.empty:
+            df_grid = df_grid.sort_values("t_years").set_index("t_years")
+            st.dataframe(
+                df_grid.reset_index().rename(
+                    columns={"t_years": "T (years)", "zero_rate": "Zero rate", "discount_factor": "DF"}
+                ),
+                hide_index=True,
+                use_container_width=True,
+            )
     else:
         st.info("Aucune courbe à afficher. Ajoute des fichiers *_nodes.csv sous data/yield_curves/.")
 
     st.markdown("#### Discount factors")
     if not df_grid.empty:
-        st.area_chart(df_grid[["discount_factor"]], height=220)
+        df_df = df_grid.copy()
+        if "t_years" in df_df.columns:
+            df_df = df_df.sort_values("t_years").set_index("t_years")
+        st.area_chart(df_df[["discount_factor"]], height=220)
     else:
         st.info("Pas de discount factors calculables sans courbe.")

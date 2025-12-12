@@ -11,19 +11,23 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
+import requests
+import numpy as np
 import pandas as pd
 
 from app.model.market_data.realtime import get_data
 from app.model.yieldcurve.base import YieldCurve
 from app.model.yieldcurve.curves import FlatYieldCurve, NodeYieldCurve
+from app.model.yieldcurve.engine import (
+    fit_nelson_siegel_grid_search,
+    nelson_siegel_yield,
+)
 from app.model.yieldcurve.loader import (
     YIELD_CURVE_CACHE_FILE,
     download_yield_curve_to_cache,
     load_yield_curve_csv,
 )
 from app.model.yieldcurve.parsing import load_nodes_from_file
-from app.services.yieldcurve_api.fred_provider import fetch_usd_nodes_from_fred
-from app.services.yieldcurve_api.ecb_provider import fetch_eur_nodes_from_ecb
 from app.utils.io import load_json_file, save_json_file
 from app.utils.math_utils import floor_4
 from app.utils.paths import JSON_DIR
@@ -202,13 +206,138 @@ def _load_nodes_for_currency(currency: str, ensure_cache: bool = True) -> tuple[
     return nodes, source
 
 
+def _safe_get_json(url: str, params: Dict[str, Any] | None = None, timeout: float = 5.0) -> Dict[str, Any] | None:
+    """
+    Local, minimal clone of a safe HTTP GET returning JSON or None.
+    Never laisse remonter les exceptions jusqu'à la Vue.
+    """
+    try:
+        resp = requests.get(url, params=params, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+
+
+def _fetch_usd_nodes_from_fred() -> list[dict]:
+    """
+    Fetch USD curve nodes from FRED (optional). Returns list of node dicts.
+    Kept strictement côté modèle pour respecter le MVC.
+    """
+    fred_series: Dict[str, str] = {
+        "1M": "DTB1M",
+        "3M": "DTB3",
+        "6M": "DTB6",
+        "1Y": "DGS1",
+        "2Y": "DGS2",
+        "5Y": "DGS5",
+        "10Y": "DGS10",
+    }
+    tenor_years: Dict[str, float] = {
+        "1M": 1.0 / 12.0,
+        "3M": 0.25,
+        "6M": 0.5,
+        "1Y": 1.0,
+        "2Y": 2.0,
+        "5Y": 5.0,
+        "10Y": 10.0,
+    }
+
+    api_key = os.getenv("FRED_API_KEY")
+
+    def _fetch_series(series_id: str) -> float | None:
+        url = "https://api.stlouisfed.org/fred/series/observations"
+        params = {
+            "series_id": series_id,
+            "api_key": api_key or "",
+            "file_type": "json",
+            "sort_order": "desc",
+            "limit": 1,
+        }
+        data = _safe_get_json(url, params=params, timeout=5)
+        if data is None:
+            return None
+        try:
+            obs = data.get("observations", [])
+            if not obs:
+                return None
+            val_str = obs[0].get("value")
+            val = float(val_str)
+            return val / 100.0
+        except Exception:
+            return None
+
+    nodes: list[dict] = []
+    for tenor, series in fred_series.items():
+        t_years = tenor_years.get(tenor)
+        if t_years is None:
+            continue
+        val = _fetch_series(series)
+        if val is None:
+            continue
+        nodes.append(
+            {
+                "tenor": tenor,
+                "t_years": float(t_years),
+                "zero_rate": float(val),
+                "discount_factor": None,
+            }
+        )
+    return nodes
+
+
+def _fetch_eur_nodes_from_ecb() -> list[dict]:
+    """
+    Fetch EUR curve nodes from a lightweight ECB SDW endpoint (optional).
+    """
+    ecb_base = "https://data-api.ecb.europa.eu/service/data"
+    series_map: Dict[str, tuple[str, float]] = {
+        "0.5Y": ("YC/B.U2.EUR.4F.G_N.A.SV_C_YM.SR_6M", 0.5),
+        "1Y": ("YC/B.U2.EUR.4F.G_N.A.SV_C_YM.SR_1Y", 1.0),
+        "2Y": ("YC/B.U2.EUR.4F.G_N.A.SV_C_YM.SR_2Y", 2.0),
+        "5Y": ("YC/B.U2.EUR.4F.G_N.A.SV_C_YM.SR_5Y", 5.0),
+        "10Y": ("YC/B.U2.EUR.4F.G_N.A.SV_C_YM.SR_10Y", 10.0),
+    }
+
+    def _fetch_single_series(series_code: str) -> float | None:
+        url = f"{ecb_base}/{series_code}"
+        params = {"lastNObservations": 1, "format": "jsondata"}
+        data = _safe_get_json(url, params=params, timeout=5)
+        if data is None:
+            return None
+        try:
+            obs = data.get("data", {}).get("dataSets", [{}])[0].get("series", {})
+            first_series = next(iter(obs.values()))
+            values = first_series.get("observations", {})
+            first_obs = next(iter(values.values()))
+            val = float(first_obs[0])
+            return val / 100.0
+        except Exception:
+            return None
+
+    nodes: list[dict] = []
+    for tenor, (series_code, t_years) in series_map.items():
+        val = _fetch_single_series(series_code)
+        if val is None:
+            continue
+        nodes.append(
+            {
+                "tenor": tenor,
+                "t_years": float(t_years),
+                "zero_rate": float(val),
+                "discount_factor": None,
+            }
+        )
+    return nodes
+
+
 def _fetch_nodes_from_provider(currency: str) -> list[dict]:
     ccy = currency.upper()
     try:
         if ccy == "USD":
-            return fetch_usd_nodes_from_fred()
+            return _fetch_usd_nodes_from_fred()
         if ccy == "EUR":
-            return fetch_eur_nodes_from_ecb()
+            return _fetch_eur_nodes_from_ecb()
     except Exception:
         return []
     return []
@@ -232,6 +361,75 @@ def _pick_currency(currency: str | None = None) -> str:
 
 
 _CURVE_CACHE: Dict[str, tuple[YieldCurve, Path | None, list[dict], str, datetime.datetime | None]] = {}
+
+
+def _compute_nelson_siegel_from_curve(
+    curve: YieldCurve, maturities_grid: List[float]
+) -> tuple[Dict[str, float] | None, List[dict]]:
+    """
+    Calibrate a Nelson–Siegel curve from the underlying nodes (if any).
+    Returns (params, curve_points) where params is a dict with beta0/beta1/beta2/tau,
+    and curve_points is a list of dict(t_years, zero_rate) evaluated on maturities_grid.
+    Fails silently and returns (None, []) on any error.
+    """
+    raw_nodes = getattr(curve, "nodes", None)
+    if not raw_nodes:
+        return None, []
+
+    ts: List[float] = []
+    rs: List[float] = []
+    for n in raw_nodes:
+        try:
+            t = float(getattr(n, "t_years", 0.0))
+            r = float(getattr(n, "zero_rate", DEFAULT_RF))
+        except Exception:
+            continue
+        if not math.isfinite(t) or not math.isfinite(r) or t <= 0:
+            continue
+        ts.append(t)
+        rs.append(r)
+
+    if len(ts) < 3:
+        # Too few points to robustly calibrate NS; skip silently.
+        return None, []
+
+    try:
+        beta0, beta1, beta2, tau = fit_nelson_siegel_grid_search(ts, rs)
+        if not all(math.isfinite(x) for x in (beta0, beta1, beta2, tau)):
+            return None, []
+        params = {
+            "beta0": float(beta0),
+            "beta1": float(beta1),
+            "beta2": float(beta2),
+            "tau": float(tau),
+        }
+
+        # Evaluate NS curve on provided grid (or on a fallback dense grid).
+        if maturities_grid:
+            grid = sorted({float(t) for t in maturities_grid if t > 0})
+        else:
+            t_min = min(ts)
+            t_max = max(ts)
+            if not math.isfinite(t_min) or not math.isfinite(t_max) or t_max <= 0:
+                return params, []
+            grid = np.linspace(t_min, t_max, 32).tolist()
+
+        t_arr = np.asarray(grid, dtype=float)
+        y_arr = nelson_siegel_yield(t_arr, beta0, beta1, beta2, tau)
+
+        ns_curve: List[dict] = []
+        for t, r in zip(t_arr, y_arr):
+            try:
+                t_f = float(t)
+                r_f = float(r)
+            except Exception:
+                continue
+            if not math.isfinite(t_f) or not math.isfinite(r_f) or t_f <= 0:
+                continue
+            ns_curve.append({"t_years": t_f, "zero_rate": r_f})
+        return params, ns_curve
+    except Exception:
+        return None, []
 
 
 def get_active_curve(
@@ -307,6 +505,9 @@ def get_curve_snapshot(
         for t in maturities_grid
     ]
     risk_free_rate = curve.zero_rate(risk_free_maturity)
+
+    # Nelson–Siegel smoothing (optional, fully contained in the model layer).
+    ns_params, ns_curve = _compute_nelson_siegel_from_curve(curve, maturities_grid)
     nodes_table = []
     for n in getattr(curve, "nodes", []):
         nodes_table.append(
@@ -326,6 +527,8 @@ def get_curve_snapshot(
         "source_path": source_path,
         "source_kind": source_kind,
         "last_updated": last_updated.isoformat() if last_updated else None,
+        "ns_params": ns_params,
+        "ns_curve": ns_curve,
     }
 
 
