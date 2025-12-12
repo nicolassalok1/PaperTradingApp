@@ -14,6 +14,9 @@ from app.model.options.heatmaps import compute_crr_heatmaps, heatmap_axis
 from app.model.options.engines.pricing import CrankNicolsonBS, bs_option_price
 from app.model.options.data.iv_surface import fetch_iv_surface, interpolate_surface
 from app.model.options.mc_engine import MCModel, price_european_mc
+from app.model.options.exercise import build_exercise_dates
+from app.model.options.mc_engine import price_mc_lsmc
+from app.model.yieldcurve.rates_utils import get_q, get_r
 
 
 def compute_price(option_dict: dict, market: dict) -> float:
@@ -141,6 +144,59 @@ def price_option_mc(
     )
 
 
+def price_option_mc_unified(
+    ticker: str,
+    S0: float,
+    K: float,
+    T: float,
+    sigma: float,
+    *,
+    option_type: str = "call",
+    style: str = "european",
+    n_paths: int = 20000,
+    n_steps: int = 252,
+    freq: int | None = None,
+) -> dict:
+    """
+    Unified MC pricing (European/Bermudan/American) using LSMC when early exercise is possible.
+    """
+    opt_style = (style or "european").lower()
+    try:
+        r = float(get_r(T))
+    except Exception:
+        r = 0.01
+    try:
+        q = float(get_q(ticker)) if ticker else 0.0
+    except Exception:
+        q = 0.0
+
+    if opt_style.startswith("eu"):
+        return price_mc_european(
+            S0=S0,
+            K=K,
+            T=T,
+            sigma=sigma,
+            option_type=option_type,
+            n_paths=n_paths,
+            n_steps=n_steps,
+            ticker=ticker,
+        )
+
+    exercise_dates = build_exercise_dates(opt_style, T, frequency=freq)
+    return price_mc_lsmc(
+        S0=S0,
+        K=K,
+        T=T,
+        sigma=sigma,
+        option_type=option_type,
+        exercise_dates=exercise_dates,
+        r=r,
+        q=q,
+        n_steps=n_steps,
+        n_paths=n_paths,
+    )
+
+
 def price_european_from_market(
     ticker: str,
     K: float,
@@ -240,6 +296,7 @@ __all__ = [
     "load_iv_surface",
     "price_and_greeks",
     "price_option_mc",
+    "price_option_mc_unified",
     "price_european_from_market",
     "price_european_from_cboe",
 ]

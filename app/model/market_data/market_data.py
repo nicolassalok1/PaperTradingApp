@@ -95,7 +95,7 @@ def fetch_closing_prices(symbol: str, period: str = "2y", interval: str = "1d") 
 
 def _cache_path(ticker: str, period: str, interval: str) -> Path:
     safe = f"{ticker}_{period}_{interval}".replace("/", "_").replace(" ", "_")
-    return CACHE_CSV_DIR / f"closing_{safe}.csv"
+    return CACHE_CSV_DIR / f"ohlc_{safe}.csv"
 
 
 def load_or_fetch_closing_history(
@@ -105,12 +105,16 @@ def load_or_fetch_closing_history(
     if not tk:
         return None, None, False
     path = _cache_path(tk, period, interval)
+    # Support legacy filename if present
+    legacy_path = CACHE_CSV_DIR / f"closing_{tk}_{period}_{interval}.csv"
     from_cache = False
-    if path.exists():
+    for p in (path, legacy_path):
+        if not p.exists():
+            continue
         try:
-            df = pd.read_csv(path, parse_dates=["Date"])
+            df = pd.read_csv(p, parse_dates=["Date"])
             if df is not None and not df.empty:
-                return df, path, True
+                return df, p, True
         except Exception:
             pass
     df = fetch_closing_prices(tk, period=period, interval=interval)

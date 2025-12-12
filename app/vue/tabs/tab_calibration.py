@@ -57,19 +57,25 @@ def render_tab():
         st.info("Sélectionnez HESTON pour lancer la calibration NN.")
         return
 
-    st.subheader("Surface IV marché")
+    st.subheader("Surface IV marché (CSV: K, T, S0, iv, type)")
     uploaded_file = st.file_uploader("Charger une surface IV (CSV)", type=["csv"])
+    S0_default = 100.0
     if uploaded_file:
         try:
-            preview_df = pd.read_csv(uploaded_file).head()
-            st.dataframe(preview_df, hide_index=True, use_container_width=True)
+            df_preview = pd.read_csv(uploaded_file)
+            st.dataframe(df_preview.head(), hide_index=True, use_container_width=True)
+            if "S0" in df_preview.columns:
+                s0_vals = pd.to_numeric(df_preview["S0"], errors="coerce")
+                s0_pos = s0_vals[s0_vals > 0]
+                if not s0_pos.empty:
+                    S0_default = float(s0_pos.median())
         except Exception as exc:
             st.warning(f"Impossible de lire le CSV: {exc}")
 
     st.subheader("Paramètres du sous-jacent")
     col1, col2, col3 = st.columns(3)
     with col1:
-        S0 = st.number_input("S0", value=100.0, min_value=0.01, step=1.0)
+        S0 = st.number_input("S0", value=S0_default, min_value=0.01, step=1.0)
     with col2:
         r = st.number_input("Taux sans risque r", value=0.02, step=0.001, format="%.4f")
     with col3:
@@ -86,7 +92,7 @@ def render_tab():
             "r": r,
             "q": q,
         }
-        result = ctrl.run_heston_nn_calibration(payload)
+        result = ctrl.run_heston_nn_from_surface(payload)
         st.session_state["last_calibration_result"] = result
 
     result = st.session_state.get("last_calibration_result")

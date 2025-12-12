@@ -55,6 +55,11 @@ def render_options_router():
             title=f"{tkr_label} - Clotures (cache)",
             y_label="Prix de cloture",
         )
+    else:
+        st.info(
+            "Aucune clôture disponible pour ce ticker. Utilise un symbole Stooq (ex: AAPL, MSFT, SPY) "
+            "ou recharge un ticker supporté pour afficher la courbe."
+        )
 
     families = [
         "Vanilla / Early Exercise",

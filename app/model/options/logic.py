@@ -1085,7 +1085,7 @@ def _closing_cache_path_for_ticker(ticker: str, period: str = "1y", interval: st
     ticker_norm = (ticker or "").strip().upper()
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", ticker_norm) or "TICKER"
     suffix = f"{period}_{interval}".replace("/", "-")
-    return CACHE_CSV_DIR / f"closing_{safe}_{suffix}.csv"
+    return CACHE_CSV_DIR / f"ohlc_{safe}_{suffix}.csv"
 
 
 def load_or_fetch_closing_history(
