@@ -1,5 +1,6 @@
 import streamlit as st
 
+from app.vue.components.page_utils import render_page_header
 from app.vue.tabs import tab_portfolio_allocation as alloc_tab
 from app.vue.tabs import tab_risk_management as risk_tab
 
@@ -7,21 +8,22 @@ TAB_LABEL = "📊 Portfolio & Risk"
 
 
 def render_tab() -> None:
-    st.title("📊 Portfolio & Risk")
-    section = st.radio(
-        "Section",
-        options=["Allocation", "Risk"],
-        horizontal=True,
-        key="portfolio_risk_section",
+    render_page_header(
+        "Portfolio & Risk",
+        "Alpaca portfolio allocation, rebalancing, and live risk metrics.",
+        icon="📊",
+        badge="Portfolio",
     )
-    st.divider()
 
-    if section == "Allocation":
+    alloc_tab_obj, risk_tab_obj = st.tabs(["Allocation & Rebalance", "Risk & Exposure"])
+
+    with alloc_tab_obj:
         if hasattr(alloc_tab, "render_tab"):
             alloc_tab.render_tab()
         else:
             alloc_tab.render()
-    else:
+
+    with risk_tab_obj:
         if hasattr(risk_tab, "render_tab"):
             risk_tab.render_tab()
         else:
@@ -30,4 +32,3 @@ def render_tab() -> None:
 
 def render() -> None:
     render_tab()
-

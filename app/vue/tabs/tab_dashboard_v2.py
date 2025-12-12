@@ -38,17 +38,6 @@ def _render_positions(title: str, data):
         st.info("No data to display.")
 
 
-def _render_placeholders(placeholders: dict):
-    st.subheader("Forwards Portfolio (placeholder)")
-    _render_positions("", placeholders.get("forwards", []))
-    st.markdown("---")
-    st.subheader("Options Expired (archive placeholder)")
-    _render_positions("", placeholders.get("options_expired", []))
-    st.markdown("---")
-    st.subheader("Options Portfolio (live placeholder)")
-    _render_positions("", placeholders.get("options_portfolio", []))
-
-
 def _render_charts(lookback_days: int):
     left, right = st.columns(2)
     with left:
@@ -170,10 +159,6 @@ def render_tab() -> None:
     st.markdown("---")
 
     _render_risk_panel()
-    st.markdown("---")
-
-    placeholders = ctrl.get_placeholder_positions()
-    _render_placeholders(placeholders)
 
 
 def render():
