@@ -199,6 +199,7 @@ def get_curve_snapshot(
     ensure_cache: bool = True,
     grid_size: int = 16,
 ) -> dict[str, Any]:
+    ccy = _pick_currency(currency)
     curve, source_path, nodes = get_active_curve(currency=currency, ensure_cache=ensure_cache)
     maturities_nodes = [n.get("t_years") for n in nodes if n.get("t_years") is not None]
     maturities_nodes = [float(t) for t in maturities_nodes if math.isfinite(float(t))]
