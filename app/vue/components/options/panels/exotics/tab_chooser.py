@@ -89,7 +89,7 @@ def render_tab_chooser():
 
     underlying = (
         (
-            st.session_state.get("heston_cboe_ticker")
+            st.session_state.get("tkr_common")
             or st.session_state.get("tkr_common")
             or st.session_state.get("common_underlying")
             or st.session_state.get("ticker_default")

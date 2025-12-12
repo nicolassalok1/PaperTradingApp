@@ -4,6 +4,7 @@ from typing import Iterable, Tuple
 
 import numpy as np
 import pandas as pd
+from app.services.market_data_service import fetch_historical_prices
 from app.utils.math_utils import floor_n
 from app.utils.paths import CACHE_CSV_DIR
 
@@ -91,12 +92,13 @@ def fetch_spy_history(
                 return cached["Close"]
     except Exception:
         pass
-    import yfinance as yf
-
-    data = yf.download(ticker_norm, period=period, interval=interval, progress=False)
-    if data.empty or "Close" not in data:
+    data = fetch_historical_prices(ticker_norm, freq="D")
+    if data is None or data.empty or "close" not in data.columns:
         raise RuntimeError(f"Impossible de récupérer les prix pour {ticker_norm}")
-    close = data["Close"]
+    if "date" in data.columns:
+        close = pd.Series(data["close"].values, index=pd.to_datetime(data["date"]), name="Close")
+    else:
+        close = data["close"]
     _save_closing_cache(close, effective_cache)
     return close
 

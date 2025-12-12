@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-import yfinance as yf
+from app.services.market_data_service import fetch_historical_prices
 
 from app.controller import backtest_controller as ctrl
 from app.vue.components.page_utils import render_closing_history_chart, render_page_header
@@ -401,15 +401,19 @@ def render():
                 )
                 st.dataframe(levels_df, hide_index=True)
 
+                hist = pd.DataFrame()
                 try:
-                    hist = yf.Ticker(symbol).history(period="1mo", interval="1d")
+                    hist_src = fetch_historical_prices(symbol, freq="D")
+                    if hist_src is not None and not hist_src.empty:
+                        hist = hist_src.copy()
+                        if "date" in hist.columns:
+                            hist = hist.rename(columns={"date": "Date", "close": "Close"})
+                            hist["Date"] = pd.to_datetime(hist["Date"])
                 except Exception:
                     hist = pd.DataFrame()
                 if not hist.empty and {"Close"}.issubset(hist.columns):
                     week_hist = hist.tail(7)
-                    price_df = week_hist.reset_index()[["Date", "Close"]].rename(
-                        columns={"Close": "Price"}
-                    )
+                    price_df = week_hist[["Date", "Close"]].rename(columns={"Close": "Price"})
                     lvl_items = sorted(data["levels"].items(), key=lambda kv: kv[0])
                     level_rows = []
                     palette = [

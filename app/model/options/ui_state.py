@@ -14,4 +14,4 @@ class OptionConfig:
     option_type: Literal["call", "put"]
     side: Literal["long", "short"]
     quantity: float
-    model: str  # e.g. "CRR", "BS", "Heston"
+    model: str  # e.g. "CRR", "BS", "MC"

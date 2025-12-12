@@ -2,9 +2,8 @@
 Payoff helpers covering all option types in the dashboard schema.
 
 Each function accepts the JSON schema used by the dashboard (option dict).
-If a payoff needs price paths (Asian, barrier…), recent closes are fetched via
-yfinance and saved as CSV files under cache/. These CSVs are
-then reused for computation.
+If a payoff needs price paths (Asian, barrier…), recent closes are fetched and cached
+as CSV files under cache/ for reuse.
 """
 
 from __future__ import annotations
@@ -16,11 +15,7 @@ from typing import Dict, Iterable, Sequence
 import numpy as np
 import pandas as pd
 
-try:
-    import yfinance as yf  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    yf = None  # type: ignore
-
+from app.services.market_data_service import fetch_historical_prices
 from app.utils.paths import CACHE_CSV_DIR
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -36,8 +31,6 @@ def download_prices_to_csv(
 ) -> Dict[str, Path]:
     """Download close prices per ticker into CSV; return mapping ticker->path. Skip download if file already exists."""
     paths: Dict[str, Path] = {}
-    if yf is None:
-        return paths
     for tkr in set(tickers):
         if not tkr:
             continue
@@ -46,12 +39,13 @@ def download_prices_to_csv(
             paths[tkr] = out
             continue
         try:
-            df = yf.download(
-                tkr, period=period, interval=interval, progress=False, auto_adjust=False
-            )
-            if df.empty:
+            df = fetch_historical_prices(tkr, freq="D")
+            if df is None or df.empty or "close" not in df.columns:
                 continue
-            close = df["Close"] if "Close" in df.columns else df.iloc[:, 0]
+            date_col = pd.to_datetime(df["date"]) if "date" in df.columns else None
+            close = df["close"] if "close" in df.columns else df.iloc[:, 0]
+            if date_col is not None:
+                close = pd.Series(close.values, index=date_col, name="Close")
             close.to_csv(out, index_label="Date")
             paths[tkr] = out
         except Exception:

@@ -78,7 +78,7 @@ def render_option_text(title: str, key: str | None = None) -> None:
 def render_unlock_sidebar_button(context_key: str, label: str) -> None:
     """Simple button to unlock sidebar interactions; kept for backward compatibility."""
     if st.button(label, key=f"unlock_sidebar_{context_key}"):
-        st.session_state["heston_tab_locked"] = False
+        st.session_state["options_tab_locked"] = False
 
 
 def render_method_explainer(title: str, body: str) -> None:

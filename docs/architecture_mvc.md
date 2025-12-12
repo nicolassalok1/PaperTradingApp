@@ -4,7 +4,7 @@
 
 Le projet est structuré selon une architecture MVC stricte :
 
-- `app/model/` : logique métier pure (pricing, hedging, backtesting, yield curves, Heston, etc.).
+- `app/model/` : logique métier pure (pricing, hedging, backtesting, yield curves, etc.).
 - `app/controller/` : couche de coordination entre la vue (Streamlit) et le modèle.
 - `app/vue/` : couche UI (Streamlit), 100 % orientée présentation.
 - `app/utils/` : utilitaires génériques (I/O, maths, chemins), sans logique métier.
@@ -35,7 +35,7 @@ Le sous-module Options est organisé en sous-domaines :
   - `basket/`, `quanto/`, etc.
 
 - `app/model/options/engines/`  
-  Implémentations des moteurs de pricing non-Heston :
+  Implémentations des moteurs de pricing déterministes / MC :
   - Black–Scholes.
   - CRR / binomial.
   - Engines de grid/pricing déterministe.
@@ -43,16 +43,6 @@ Le sous-module Options est organisé en sous-domaines :
 - `app/model/options/ui_gateway/`  
   - `pricing_ui.py` : façade métier exposant des helpers de pricing « UI-friendly »
     (grilles de payoff, objets prêts à tracer), **sans aucune dépendance Streamlit**.
-
-#### Séparation Heston / Options
-
-Toute la logique Heston (processus, calibration, pricing) vit désormais dans :
-
-- `app/model/heston/engines/`
-- `app/model/heston/pricing/`
-- `app/model/heston/calibration/`
-
-Le module `options` ne contient plus de code Heston : il consomme Heston via des interfaces explicites côté modèle ou contrôleur.
 
 ### 2.2. Autres domaines
 

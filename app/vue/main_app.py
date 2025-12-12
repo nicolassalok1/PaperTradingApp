@@ -54,7 +54,6 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     "tab_hedger": "🛡️ Hedger",
     "tab_yieldcurve": "🧮 Yield Curve",
     "tab_backtest": "🧪 Trading Systems / Backtest",
-    "tab_heston": "📉 Heston",
     "tab_alpaca_orders": "💹 Advanced Orders",
     "tab_risk_management": "🧱 Risk Management",
     "tab_portfolio_allocation": "📐 Portfolio Allocation",

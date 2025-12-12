@@ -19,7 +19,6 @@ if (-not (Get-Variable -Name "__test_transcript_active" -Scope Global -ErrorActi
 
 # Liste des tests a executer (desormais dans scripts/)
 $tests = @(
-    "test_heston_separation.py",
     "test_options_model_integrity.py",
     "test_options_pricing_core.py",
     "test_portfolio_valuation.py",

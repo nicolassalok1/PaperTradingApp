@@ -102,7 +102,7 @@ def render_tab_asian():
     st.metric("Prix calculé", f"${premium:.6f}")
     underlying = (
         (
-            st.session_state.get("heston_cboe_ticker")
+            st.session_state.get("tkr_common")
             or st.session_state.get("tkr_common")
             or st.session_state.get("common_underlying")
             or st.session_state.get("ticker_default")

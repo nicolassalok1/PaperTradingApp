@@ -8,13 +8,11 @@ import os
 import re
 import datetime
 import logging
-import io
 import json
-import contextlib
 from urllib.parse import quote_plus
 import requests
 from scipy.stats import norm
-import yfinance as yf
+from app.model.market_data.market_data import fetch_closing_prices as md_fetch_closing_prices
 
 from app.model.market_data.market_data import fetch_spot_price
 
@@ -69,24 +67,6 @@ def _load_alpaca_credentials():
     secret = os.getenv("APCA_API_SECRET_KEY")
     base = os.getenv("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
     return key, secret, base
-
-
-def _yfinance_disabled() -> bool:
-    return str(os.getenv("DISABLE_YFINANCE") or os.getenv("YFINANCE_DISABLED") or "").lower() in {
-        "1",
-        "true",
-        "yes",
-    }
-
-
-def _yfinance_ohlc_allowed() -> bool:
-    """
-    Whether yfinance is allowed for OHLC. Default: False (Alpaca-only) unless explicitly enabled.
-    Set ALLOW_YFINANCE_OHLC=1/true to permit fallback.
-    """
-    if _yfinance_disabled():
-        return False
-    return str(os.getenv("ALLOW_YFINANCE_OHLC") or "").lower() in {"1", "true", "yes"}
 
 
 def _period_to_days(period: str) -> int:
@@ -925,63 +905,6 @@ def _fetch_ohlc_alpaca(symbol: str, period: str = "1y", interval: str = "1d") ->
         return pd.DataFrame()
 
 
-def _yf_history_robust(symbol: str, period="1y", interval="1d") -> pd.DataFrame:
-    """
-    Robust YF fetch:
-    - Avoids all metadata (source of 'currentTradingPeriod' errors)
-    - Tries chart API manually
-    - Falls back to yf.download()
-    """
-    if _yfinance_disabled():
-        logging.info(f"[closing] yfinance disabled via env, skip {symbol}")
-        return pd.DataFrame()
-    sym = symbol.upper()
-
-    # --- 1) Try raw download() (NEVER uses metadata) ---
-    buf = io.StringIO()
-    try:
-        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-            df = yf.download(
-                sym,
-                period=period,
-                interval=interval,
-                progress=False,
-                auto_adjust=True,
-                threads=False,
-            )
-        if df is not None and not df.empty:
-            df = df.reset_index()
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
-            return df
-    except Exception as exc:
-        logging.error(f"[closing] download() failed for {sym}: {exc}")
-
-    # --- 2) Try history() but shield metadata access ---
-    try:
-        ticker = yf.Ticker(sym)
-        df = ticker.history(period=period, interval=interval, raise_errors=False)
-
-        # history() may still raise due to metadata -> catch and ignore
-        if df is not None and not df.empty:
-            df = df.reset_index()
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
-            return df
-
-    except KeyError as exc:
-        if "currentTradingPeriod" in str(exc):
-            logging.warning(f"[closing] metadata bug for {sym} -> forced fallback")
-        else:
-            logging.error(f"[closing] history() key error for {sym}: {exc}")
-    except Exception as exc:
-        logging.error(f"[closing] history exception for {sym}: {exc}")
-
-    # --- 3) Final fallback: return empty ---
-    logging.warning(f"[closing] no data for {sym}")
-    return pd.DataFrame()
-
-
 def fetch_closing_prices(
     tickers: str | Iterable[str], period: str = "1y", interval: str = "1d"
 ) -> pd.DataFrame:
@@ -994,18 +917,10 @@ def fetch_closing_prices(
     frames: list[pd.DataFrame] = []
     for sym in tickers:
         sym_norm = _normalize_symbol(sym)
-        df_raw = _fetch_ohlc_alpaca(sym_norm, period=period, interval=interval)
-        if (df_raw is None or df_raw.empty) and _yfinance_ohlc_allowed():
-            df_raw = _yf_history_robust(sym_norm, period=period, interval=interval)
-        if df_raw is None or df_raw.empty:
-            logging.warning(f"[closing] no data for {sym_norm}")
+        df = md_fetch_closing_prices(sym_norm, period=period, interval=interval)
+        if df is None or df.empty:
             continue
-        date_col = next(
-            (c for c in df_raw.columns if str(c).lower() in {"date", "datetime"}), df_raw.columns[0]
-        )
-        price_col = "Close" if "Close" in df_raw.columns else df_raw.columns[-1]
-        df = df_raw[[date_col, price_col]].rename(columns={date_col: "Date", price_col: sym_norm})
-        frames.append(df)
+        frames.append(df.rename(columns={sym_norm: sym_norm}))
 
     if not frames:
         return pd.DataFrame()
@@ -1017,102 +932,12 @@ def fetch_closing_prices(
         except Exception:
             pass
 
-    name = tickers[0] if len(tickers) == 1 else "_".join(tickers)
     try:
-        suffix = f"_{period.replace(' ', '_')}_{interval.replace(' ', '_')}"
-        save_csv(out, f"closing_{name}{suffix}.csv")
-    except Exception as exc:
-        logging.warning(f"[closes] Failed to save closing CSV: {exc}")
-
-    try:
+        CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
         out.to_csv(CLOSING_CACHE_FILE, index=False)
     except Exception:
         pass
-
-    # Merge des résultats Alpaca/CBOE s'il y en a
-    if frames:
-        prices = frames[0]
-        for df_other in frames[1:]:
-            try:
-                prices = prices.merge(df_other, on="Date", how="outer")
-            except Exception:
-                pass
-    else:
-        prices = pd.DataFrame()
-
-    # 2) Fallback yfinance (explicitly allowed only)
-    if (prices is None or prices.empty) and _yfinance_ohlc_allowed():
-        logging.info(f"[closing] Alpaca empty for {tickers}, fallback yfinance")
-        buf = io.StringIO()
-        try:
-            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-                data = yf.download(
-                    tickers=tickers,
-                    period=period,
-                    interval=interval,
-                    auto_adjust=True,
-                    progress=False,
-                    threads=False,
-                )
-            logging.info(
-                f"[closing] yfinance.download ok tickers={tickers} rows={0 if data is None else getattr(data, 'shape', [0])[0]}"
-            )
-        except Exception as exc:
-            logging.warning(
-                f"[closing] yfinance download failed for {tickers} ({period}/{interval}): {exc}"
-            )
-            data = pd.DataFrame()
-
-        if data is not None and not data.empty:
-            prices = _build_prices_from_yf(data)
-
-        # Fallback: endpoint CSV Yahoo par ticker (plus permissif)
-        if prices is None or prices.empty:
-            alt_frames: list[pd.DataFrame] = []
-            for tk in tickers:
-                df_alt = _download_history_csv(tk)
-                if df_alt is not None and not df_alt.empty:
-                    alt_frames.append(df_alt)
-            if alt_frames:
-                prices = alt_frames[0]
-                for df_alt in alt_frames[1:]:
-                    try:
-                        prices = prices.merge(df_alt, on="Date", how="outer")
-                    except Exception:
-                        pass
-
-        # Dernier recours : appel .history unitaire (évite certains bugs multi-ticker)
-        if (prices is None or prices.empty) and len(tickers) == 1 and yf is not None:
-            try:
-                yt = yf.Ticker(tickers[0])
-                hist = yt.history(period=period, interval=interval, actions=False)
-                prices = _build_prices_from_yf(hist)
-            except Exception:
-                prices = pd.DataFrame()
-
-    if prices is not None and not prices.empty:
-        logging.info(
-            f"[closing] fetch_closing_prices success tickers={tickers} rows={prices.shape[0]} cols={prices.shape[1]}"
-        )
-    else:
-        logging.info(f"[closing] fetch_closing_prices empty tickers={tickers}")
-        return pd.DataFrame()
-
-    try:
-        CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
-        agg_path = CACHE_CSV_DIR / "closing_prices.csv"
-        prices.to_csv(CLOSING_CACHE_FILE, index=False)
-        prices.to_csv(agg_path, index=False)
-        for tk in tickers:
-            if tk in prices.columns:
-                try:
-                    _update_closing_cache_series(tk, prices.set_index(prices.columns[0])[tk])
-                except Exception:
-                    pass
-        logging.info(f"[closing] cached to {CLOSING_CACHE_FILE} and {agg_path}")
-    except Exception as exc:
-        logging.warning(f"[closing] failed to cache closing prices: {exc}")
-    return prices
+    return out
 
 
 def compute_corr_from_prices(prices_df: pd.DataFrame):
@@ -1270,7 +1095,7 @@ def load_or_fetch_closing_history(
     interval: str = "1d",
 ) -> tuple[pd.DataFrame | None, Path | None, bool]:
     """
-    Retourne les clÃ´tures 1 an du ticker en lisant le cache CSV ou via yfinance.
+    Retourne les clÃ´tures 1 an du ticker en lisant le cache CSV ou via fetch_closing_prices.
     Loggue chaque Ã©tape pour visibilitÃ© console/UI.
     """
 
@@ -1303,43 +1128,6 @@ def load_or_fetch_closing_history(
         _log(f"[closing] cache miss -> download {ticker_norm} ({period}/{interval})")
         try:
             df_hist = fetch_closing_prices(ticker_norm, period=period, interval=interval)
-            if (df_hist is None or df_hist.empty) and yf is not None:
-                try:
-                    _log(f"[closing] try direct yf.Ticker.history for {ticker_norm}")
-                    yt = yf.Ticker(ticker_norm)
-                    hist = yt.history(period=period, interval=interval)
-                    if not hist.empty:
-                        df_hist = hist.reset_index()[["Date", "Close"]].rename(
-                            columns={"Close": ticker_norm}
-                        )
-                except Exception:
-                    pass
-            if (df_hist is None or df_hist.empty) and yf is not None:
-                try:
-                    yt = yf.Ticker(ticker_norm)
-                    fast = getattr(yt, "fast_info", {}) or {}
-                    spot_val = None
-                    for key in ("lastPrice", "last_price", "last_close", "previousClose"):
-                        if fast.get(key) not in (None, ""):
-                            spot_val = fast.get(key)
-                            break
-                    if spot_val is None:
-                        hist = yt.history(period="5d", interval="1d")
-                        if not hist.empty:
-                            for col in ("Close", "Adj Close"):
-                                if col in hist.columns and not hist[col].empty:
-                                    spot_val = hist[col].iloc[-1]
-                                    break
-                    if spot_val is not None and float(spot_val) > 0:
-                        df_hist = pd.DataFrame(
-                            {
-                                "Date": [pd.Timestamp.utcnow().normalize()],
-                                ticker_norm: [float(spot_val)],
-                            }
-                        )
-                        _log(f"[closing] using spot fallback for {ticker_norm}: {spot_val}")
-                except Exception:
-                    pass
             if df_hist is not None and not df_hist.empty:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 df_hist.to_csv(cache_path, index=False)
@@ -1349,28 +1137,6 @@ def load_or_fetch_closing_history(
             _log(f"[closing] error while fetching {ticker_norm}: {exc}")
             df_hist = None
             from_cache = False
-
-    # Dernier recours : construire un point depuis fast_info (évite répétitions vaines)
-    if (df_hist is None or df_hist.empty) and yf is not None:
-        try:
-            yt = yf.Ticker(ticker_norm)
-            fi = getattr(yt, "fast_info", {}) or {}
-            price_val = None
-            for k in ("lastPrice", "last_price", "last_close", "previousClose"):
-                v = fi.get(k)
-                if v not in (None, ""):
-                    price_val = float(v)
-                    break
-            if price_val is not None and price_val > 0:
-                df_hist = pd.DataFrame(
-                    {"Date": [pd.Timestamp.utcnow().normalize()], ticker_norm: [price_val]}
-                )
-                cache_path.parent.mkdir(parents=True, exist_ok=True)
-                df_hist.to_csv(cache_path, index=False)
-                _log(f"[closing] minimal fast_info cache for {ticker_norm} ({price_val})")
-                from_cache = False
-        except Exception as exc:
-            _log(f"[closing] fast_info fallback failed for {ticker_norm}: {exc}")
 
     if df_hist is not None and not df_hist.empty:
         _log(

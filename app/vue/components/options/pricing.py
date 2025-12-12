@@ -21,7 +21,6 @@ price_straddle = oc.price_straddle
 price_strangle = oc.price_strangle
 price_american_crr = oc.price_american_crr
 price_bermuda_crr = oc.price_bermuda_crr
-price_heston_european_call = oc.price_heston_european_call
 price_asian_geo_mc = oc.price_asian_geo_mc
 price_asian_mc = oc.price_asian_mc
 price_barrier_digital = oc.price_barrier_digital
@@ -52,7 +51,6 @@ __all__ = [
     "price_strangle",
     "price_american_crr",
     "price_bermuda_crr",
-    "price_heston_european_call",
     "price_asian_geo_mc",
     "price_asian_mc",
     "price_barrier_digital",

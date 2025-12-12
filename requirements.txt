@@ -11,10 +11,9 @@ pyyaml==6.0
 ujson==5.9.0
 
 ############################################################
-# Finance & data APIs (Alpaca + Yahoo + official Alpaca SDK)
+# Finance & data APIs (Alpaca SDK)
 ############################################################
 alpaca-py==0.12.0                # NEW official SDK required for RL/Hedger/Portfolio Allocation
-yfinance==0.2.43
 
 ############################################################
 # Visualization & Dashboard

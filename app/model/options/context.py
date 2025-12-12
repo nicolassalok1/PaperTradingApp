@@ -88,7 +88,6 @@ def get_option_context_from_state(state_dict=None):
     tk = (
         state.get("common_underlying")
         or state.get("tkr_common")
-        or state.get("heston_cboe_ticker")
         or state.get("ticker")
         or ""
     )

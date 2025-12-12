@@ -9,8 +9,6 @@ from typing import Dict, List, Tuple
 
 from app.model.hedger.service import (
     OptionSpec,
-    calibrate_heston_params,
-    check_heston_support,
     load_options_portfolio,
     option_specs_from_portfolio,
     simulate_hedge,
@@ -35,8 +33,6 @@ def run_simulation(
 
 __all__ = [
     "OptionSpec",
-    "calibrate_heston_params",
-    "check_heston_support",
     "load_option_specs",
     "train_agent",
     "run_simulation",

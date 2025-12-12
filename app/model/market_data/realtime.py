@@ -63,18 +63,11 @@ def spot_live_exp(
 
 
 def get_data(symbol: str) -> Dict[str, Any]:
-    """Fetch a simple price dictionary for a ticker (yfinance last close)."""
-    try:
-        import yfinance as yf
-    except Exception:
-        return {"price": -1}
+    """Fetch a simple price dictionary for a ticker using Stooq-backed spot."""
+    from app.model.market_data.market_data import fetch_spot_price
+
     sym = (symbol or "").strip().upper()
     if not sym:
         return {"price": -1}
-    try:
-        hist = yf.Ticker(sym).history(period="5d", interval="1d")
-        if not hist.empty and "Close" in hist.columns:
-            return {"price": float(hist["Close"].iloc[-1])}
-    except Exception:
-        pass
-    return {"price": -1}
+    px = fetch_spot_price(sym)
+    return {"price": float(px) if px is not None else -1}

@@ -16,13 +16,13 @@ Pure domain logic:
 - yield curve builder
 - market data fetchers
 - portfolio repository, valuation, stats
-- Heston / Greeks / heatmaps / surfaces
+- MC pricers / Greeks / heatmaps / surfaces
 - trading systems, logs, execution
 - dashboard domain logic
 
 Model rules:
 - MAY read/write local database (JSON/Cache/CSV)
-- MAY call external APIs (Alpaca, yfinance, FRED…)
+- MAY call external APIs (Alpaca, Stooq, FRED…)
 - MUST NOT contain Streamlit or UI logic.
 
 ---

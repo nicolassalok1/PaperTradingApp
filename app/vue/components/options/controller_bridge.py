@@ -145,7 +145,6 @@ def resolve_common_underlying() -> str:
     ticker = (
         st.session_state.get("tkr_common")
         or st.session_state.get("common_underlying")
-        or st.session_state.get("heston_cboe_ticker")
         or st.session_state.get("ticker_default")
         or ""
     )

@@ -2,7 +2,8 @@ import datetime
 from typing import Any, Callable, Dict, Tuple
 
 import pandas as pd
-import yfinance as yf
+
+from app.services.market_data_service import fetch_historical_prices
 
 from app.model.backtesting.signals import compute_level_prices
 
@@ -78,14 +79,13 @@ def auto_execute_trading_levels(
             else (datetime.date.today() - datetime.timedelta(days=lookback_days))
         )
         try:
-            hist = yf.Ticker(symbol).history(
-                start=start_date, end=datetime.date.today(), interval="1d"
-            )
+            hist = fetch_historical_prices(symbol, start=start_date.isoformat(), end=None, freq="D")
         except Exception:
             hist = pd.DataFrame()
-        if hist.empty or "Close" not in hist.columns:
+        if hist.empty or "close" not in hist.columns:
             continue
-        prices = hist["Close"].astype(float)
+        hist = hist[hist["date"] >= pd.Timestamp(start_date)]
+        prices = hist["close"].astype(float)
         p_min, p_max = prices.min(), prices.max()
         lvl_items = sorted(levels.items(), key=lambda kv: kv[0])
         for lvl_key, lvl_price in lvl_items:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-CLI helper to fetch/interpolate risk-free rate r(T) (decimal) using yfinance.
+CLI helper to fetch/interpolate risk-free rate r(T) (decimal) from FRED proxies.
 Falls back to DEFAULT_RF_RATE env var (default 0.02) on failure.
 """
 import sys
@@ -10,7 +10,6 @@ import math
 from typing import Dict, List, Tuple
 
 import numpy as np
-import yfinance as yf
 import requests
 
 RATE_SYMBOLS: Dict[str, float] = {
@@ -42,22 +41,6 @@ def _fetch_from_fred(series_id: str) -> float:
     return float(last_val)
 
 
-def _fetch_last_close(symbol: str) -> float:
-    """Fetch latest daily close via yfinance with retries."""
-    last_err = None
-    for _ in range(MAX_RETRIES):
-        try:
-            hist = yf.Ticker(symbol).history(period="5d", interval="1d")
-            if not hist.empty and "Close" in hist.columns:
-                return float(hist["Close"].iloc[-1])
-        except Exception as exc:  # noqa: BLE001
-            last_err = exc
-        time.sleep(SLEEP_BETWEEN)
-    if last_err:
-        raise RuntimeError(f"Failed to fetch {symbol}: {last_err}") from last_err
-    raise RuntimeError(f"Failed to fetch {symbol}: empty history")
-
-
 def compute_r(T: float) -> float:
     """
     Interpolate risk-free rate r(T) from available proxies or fall back to default.
@@ -69,14 +52,6 @@ def compute_r(T: float) -> float:
     """
     points: List[Tuple[float, float]] = []
     for sym, mat in RATE_SYMBOLS.items():
-        try:
-            pct = _fetch_last_close(sym)
-            val = pct / 100.0
-            if math.isfinite(val) and val > 0:
-                points.append((mat, val))
-                continue
-        except Exception:
-            pass
         fred_id = FRED_SERIES.get(sym)
         if fred_id:
             try:

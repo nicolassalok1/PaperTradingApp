@@ -6,12 +6,6 @@ from __future__ import annotations
 
 from typing import Dict, Iterable
 
-from app.model.heston.calibration.heston_stub import calibrate_heston_stub
-from app.model.heston.heston import price_heston_european_call
-from app.model.heston.pricing.heston import heston_delta, heston_vega, price_heston_call
-from app.model.heston.pricing.heston_fft import price_heston_fft
-from app.model.heston.visuals.heston_surfaces import plot_heatmap as heston_plot_heatmap
-from app.model.heston.visuals.heston_surfaces import plot_surface_3d
 from app.model.market_data.history import (
     clear_closing_history_cache,
     load_close_series_for_ticker,
@@ -100,8 +94,6 @@ from app.model.options.service import (
     price_option_mc,
     price_european_from_cboe,
 )
-from app.model.heston.pricing import compute_heston_price
-from app.model.heston.calibration import calibrate_heston_to_market
 from app.model.options.engines.tree import build_crr_tree, plot_crr_tree
 from app.model.options.core.trees import (
     price_asian_geo_mc,
@@ -185,8 +177,6 @@ __all__ = [
     "compute_greeks",
     "compute_payoff_surface",
     "load_iv_surface",
-    "compute_heston_price",
-    "calibrate_heston_to_market",
     "price_and_greeks",
     "compute_price_mc",
     "price_european_from_cboe",
@@ -220,15 +210,6 @@ __all__ = [
     "price_cliquet",
     "price_lookback_fixed_mc",
     "price_lookback_mc",
-    # Heston
-    "price_heston_european_call",
-    "price_heston_call",
-    "heston_delta",
-    "heston_vega",
-    "price_heston_fft",
-    "calibrate_heston_stub",
-    "plot_surface_3d",
-    "heston_plot_heatmap",
     # Layout helpers
     "compute_crr_heatmaps",
     "heatmap_axis",

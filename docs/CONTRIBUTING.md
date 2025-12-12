@@ -7,7 +7,7 @@
   - `from app.utils.options.layout import option_panel, params_expander, compute_button, render_crr_payoff_surface`
   - domain helpers from `app.model.*` or `app.utils.options.pricing`
   - third-party libs (numpy/pandas/etc.).
-- Keep pricing logic in `app/vue/components/options/pricing.py` or the relevant model module (e.g., `app/model/heston/*`). Avoid heavy computation in UI code.
+- Keep pricing logic in `app/vue/components/options/pricing.py` or the relevant model module. Avoid heavy computation in UI code.
 - UI panels: only orchestration + widgets; no heavy computation inline.
 
 ## UI Glossary (French)

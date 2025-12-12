@@ -38,7 +38,7 @@ def run_cmd(cmd: List[str], cwd: Path | None = None):
 
 def syntax_check():
     step("Syntax check (py_compile)")
-    py_files = [REPO_ROOT / p for p in run_cmd(["git", "ls-files", "*.py"]).splitlines() if p.strip()]
+    py_files = [p for p in REPO_ROOT.rglob("*.py")]
     for f in py_files:
         try:
             run_cmd([sys.executable, "-m", "py_compile", str(f)])
@@ -50,7 +50,7 @@ def syntax_check():
 
 def mvc_check():
     step("MVC import checks")
-    py_files = [Path(p) for p in run_cmd(["git", "ls-files", "*.py"]).splitlines() if p.strip()]
+    py_files = [p for p in REPO_ROOT.rglob("*.py")]
     for f in py_files:
         text = Path(f).read_text(encoding="utf-8", errors="ignore")
         is_model = "app/model/" in str(f).replace("\\", "/")

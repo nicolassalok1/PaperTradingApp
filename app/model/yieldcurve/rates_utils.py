@@ -1,8 +1,8 @@
 """
-Utilities to fetch risk-free rates and dividend yield using yfinance.
+Utilities to fetch risk-free rates and dividend yield.
 
-- get_r(maturity_years): interpolates r(T) from ^IRX (13-week), ^FVX (5Y), ^TNX (10Y).
-- get_q(ticker): returns dividend yield for a given equity ticker.
+- get_r(maturity_years): interpolates r(T) from FRED series when available, otherwise DEFAULT_RF.
+- get_q(ticker): returns 0.0 (placeholder).
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ import sys
 from typing import Dict, List, Tuple
 
 import numpy as np
-import yfinance as yf
 import requests
 from pathlib import Path
 
@@ -51,28 +50,14 @@ def _fetch_from_fred(series_id: str) -> float:
 
 def _fetch_last_close(symbol: str) -> float:
     """
-    Fetch the latest close for a given symbol using yfinance,
-    retrying on transient failures.
+    Fallback helper kept for completeness; returns default if unavailable.
     """
-    last_err: Exception | None = None
-    for _ in range(MAX_RETRIES):
-        try:
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="5d", interval="1d")
-            if not hist.empty and "Close" in hist.columns:
-                return float(hist["Close"].iloc[-1])
-        except Exception as exc:  # noqa: BLE001
-            last_err = exc
-        time.sleep(SLEEP_BETWEEN)
-    if last_err:
-        raise RuntimeError(f"Failed to fetch {symbol}: {last_err}") from last_err
-    raise RuntimeError(f"Failed to fetch {symbol}: empty history")
+    return DEFAULT_RF * 100.0
 
 
 def get_r(maturity_years: float) -> float:
     """
     Interpolate risk-free rate r(T) in decimal from ^IRX (≈0.25y), ^FVX (5y), ^TNX (10y).
-    Values from yfinance are percentages; convert to decimal before interpolation.
     If USE_STATIC_RF_RATE=1, returns DEFAULT_RF_RATE. Otherwise calls the CLI helper
     fetch_r_cli.py (subprocess) to avoid import side-effects inside Streamlit.
     """
@@ -97,21 +82,13 @@ def get_r(maturity_years: float) -> float:
 
     points: List[Tuple[float, float]] = []
     for sym, mat in RATE_SYMBOLS.items():
-        try:
-            pct = _fetch_last_close(sym)
-            val = pct / 100.0
-            if math.isfinite(val) and val > 0:
-                points.append((mat, val))
-                continue
-        except Exception:
-            pass
-        # FRED fallback
         fred_id = FRED_SERIES.get(sym)
         if fred_id:
             try:
                 val = _fetch_from_fred(fred_id) / 100.0
                 if math.isfinite(val) and val > 0:
                     points.append((mat, val))
+                    continue
             except Exception:
                 continue
 
@@ -135,22 +112,9 @@ def get_r(maturity_years: float) -> float:
 
 def get_q(ticker: str) -> float:
     """
-    Return dividend yield (continuous approx) for the given ticker using yfinance.
-    Falls back to 0.0 if unavailable.
+    Return dividend yield (continuous approx) for the given ticker.
+    Fallback to 0.0.
     """
-    last_err: Exception | None = None
-    for _ in range(MAX_RETRIES):
-        try:
-            info = yf.Ticker(ticker).info or {}
-            dy = info.get("dividendYield")
-            if dy is None:
-                return 0.0
-            return float(dy)
-        except Exception as exc:  # noqa: BLE001
-            last_err = exc
-        time.sleep(SLEEP_BETWEEN)
-    if last_err:
-        raise RuntimeError(f"Failed to fetch dividend yield for {ticker}: {last_err}") from last_err
     return 0.0
 
 

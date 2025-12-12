@@ -10,7 +10,6 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
 
 # Unified cache locations under cache/ and data/.
 from app.utils.paths import CACHE_CSV_DIR, JSON_DIR, ROOT_DIR
@@ -64,24 +63,13 @@ def _write_json(path: Path, payload: Any) -> None:
 
 
 def get_option_expiries(ticker: str):
-    tk = yf.Ticker(ticker)
-    return tk.options or []
+    """Placeholder: no remote expiries available via Stooq."""
+    return []
 
 
 def get_option_surface_from_yf(ticker: str, expiry: str):
-    tk = yf.Ticker(ticker)
-    chain = tk.option_chain(expiry)
-
-    frames = []
-    for frame in [chain.calls, chain.puts]:
-        tmp = frame[["strike", "impliedVolatility"]].rename(
-            columns={"strike": "K", "impliedVolatility": "iv"}
-        )
-        tmp["T"] = 0.0
-        frames.append(tmp)
-    df = pd.concat(frames, ignore_index=True)
-    df = df.dropna(subset=["K", "iv"])
-    return df
+    """Placeholder surface fetcher (Stooq has no options); returns empty DataFrame."""
+    return pd.DataFrame(columns=["K", "iv", "T"])
 
 
 def load_options_meta() -> dict:

@@ -56,8 +56,8 @@ if (Test-Path "requirements.txt") {
     Write-Host "Installing Playwright browsers..." -ForegroundColor Cyan
     python -m playwright install --with-deps
 } elseif (-not $envExists) {
-    Write-Host "Installation minimale (streamlit/numpy/pandas/scipy/plotly/yfinance/torch/tensorflow)..."
-    pip install streamlit numpy pandas scipy plotly yfinance tensorflow torch
+    Write-Host "Installation minimale (streamlit/numpy/pandas/scipy/plotly/torch/tensorflow)..."
+    pip install streamlit numpy pandas scipy plotly tensorflow torch
 } else {
     Write-Host "Env existant et aucun requirements.txt : aucune installation de paquets."
 }

@@ -21,10 +21,10 @@ def render_options_history_block() -> None:
       - 1y close chart from load_cached_option_history()
     """
     st.subheader("Historique 1 an du ticker (prix de cloture)")
-    ticker = st.session_state.get("heston_cboe_ticker") or st.session_state.get("tkr_common") or ""
+    ticker = st.session_state.get("tkr_common") or st.session_state.get("common_underlying") or ""
     ticker = str(ticker or "").strip().upper()
     if not ticker:
-        st.info("Charge un ticker via la calibration Heston pour afficher l'historique 1 an.")
+        st.info("Charge un ticker commun pour afficher l'historique 1 an.")
         return
 
     meta = load_options_meta()

@@ -1,36 +1,29 @@
 """
-Small CLI helper to download price history via yfinance and emit CSV to stdout.
+Small CLI helper to download price history via Stooq and emit CSV to stdout.
 Usage:
-    python fetch_history_cli.py --ticker AAPL --period 1y --interval 1d
+    python fetch_history_cli.py --ticker AAPL --start 2023-01-01 --end 2024-01-01 --freq D
 """
 
 import argparse
 import sys
-import yfinance as yf
+
+from app.services.market_data_service import fetch_historical_prices
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ticker", required=True, help="Ticker symbol (ex: AAPL)")
-    parser.add_argument("--period", default="1y", help="History period, default 1y")
-    parser.add_argument("--interval", default="1d", help="Sampling interval, default 1d")
+    parser.add_argument("--start", default=None, help="Start date YYYY-MM-DD")
+    parser.add_argument("--end", default=None, help="End date YYYY-MM-DD")
+    parser.add_argument("--freq", default="D", help="Frequency (D/W/M)")
     args = parser.parse_args()
 
     try:
-        df = yf.download(
-            args.ticker,
-            period=args.period,
-            interval=args.interval,
-            progress=False,
-            auto_adjust=False,
-            actions=False,
-            threads=False,
-        )
-        if df.empty:
+        df = fetch_historical_prices(args.ticker, start=args.start, end=args.end, freq=args.freq)
+        if df is None or df.empty:
             print("", end="")
             return 2
-        # Emit CSV to stdout
-        df.to_csv(sys.stdout)
+        df.to_csv(sys.stdout, index=False)
         return 0
     except Exception as exc:  # noqa: BLE001
         sys.stderr.write(f"error: {exc}\n")

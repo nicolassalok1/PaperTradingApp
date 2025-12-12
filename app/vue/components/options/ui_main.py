@@ -12,7 +12,7 @@ from app.vue.pages.shared_ui import render_page_header
 
 # Mapping of categories to their sub-tabs
 CATEGORY_SUB_TABS = {
-    "Vanilla / Early exercise": ["Europeenne par Heston", "Americaine", "Bermuda"],
+    "Vanilla / Early exercise": ["Americaine", "Bermuda"],
     "Path-dependent": [
         "Asian",
         "Asian geometrique",
@@ -49,7 +49,6 @@ CATEGORY_TO_FOLDER = {
 
 SUBTAB_TO_MODULE = {
     "Vanilla / Early exercise": {
-        "Europeenne par Heston": "european",
         "Americaine": "american",
         "Bermuda": "bermuda",
     },

@@ -6,17 +6,9 @@ from app.vue.components.page_utils import render_page_header
 
 
 def render():
-    ok, err = ctrl.check_heston_support()
-    if not ok:
-        st.error(
-            "Le module Heston (ou PyTorch) est manquant. Installez la dépendance pour utiliser l'onglet Hedger."
-            + (f" Détail: {err}" if err else "")
-        )
-        return
-
     render_page_header(
         "DQN Hedger",
-        "Calibration Heston légère et simulation de hedge par DQN",
+        "Simulation de hedge par DQN",
         icon="🧠",
         badge="Options",
     )
@@ -29,8 +21,6 @@ def render():
     opt_labels = [f"{o.id} | {o.symbol} {o.option_type.upper()} K={o.strike}" for o in option_specs]
     choice = st.selectbox("Option (depuis options_portfolio.json)", options=opt_labels, index=0)
     opt = option_specs[opt_labels.index(choice)]
-    hp_effective = opt.heston_params or {}
-    _local_hp_key = f"hedger_heston_params_{opt.id}"
 
     st.markdown("### Option sélectionnée")
     st.dataframe(
@@ -67,9 +57,6 @@ def render():
         key="hedger_lot",
     )
 
-    # Calibration placeholder (UI can invoke controller.calibrate_heston_params in future).
-    st.session_state.setdefault(_local_hp_key, hp_effective)
-
     if st.button("⚙️ Entraîner un DQN léger", key=f"train_dqn_{opt.id}"):
         progress_dqn = st.progress(0, text="Entrainement DQN en cours...")
         result = ctrl.train_agent(
@@ -79,7 +66,7 @@ def render():
         st.success("Entrainement terminé (léger).")
         st.session_state[f"dqn_agent_state_{opt.id}"] = result.get("agent_state")
 
-    st.markdown("### 🎯 Simulation online (Heston path)")
+    st.markdown("### 🎯 Simulation online (price path)")
     run_sim = st.button("Lancer une simulation de hedge", key=f"run_sim_{opt.id}")
     if run_sim:
         if f"dqn_agent_state_{opt.id}" not in st.session_state:

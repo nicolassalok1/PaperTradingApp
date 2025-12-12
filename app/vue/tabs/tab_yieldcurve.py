@@ -58,16 +58,9 @@ def render():
             with st.spinner("Lecture du cache yield_curve.csv"):
                 df_curve_fwd, curve_path_fwd = yc.load_curve(ensure_cache=False)
     with col_refresh:
-        disable_yf = str(st.session_state.get("DISABLE_YFINANCE") or "").lower() in {
-            "1",
-            "true",
-            "yes",
-        }
-        if st.button("🔄 Rafraîchir via yfinance", key="btn_refresh_curve", disabled=disable_yf):
+        if st.button("🔄 Rafraîchir (Stooq)", key="btn_refresh_curve"):
             with st.spinner("Téléchargement des taux..."):
                 df_curve_fwd, curve_path_fwd = yc.build_curve()
-        elif disable_yf:
-            st.caption("yfinance désactivé via env → pas de téléchargement.")
     with col_upload:
         uploaded = st.file_uploader("Déposer yield_curve.csv", type="csv", key="upload_curve")
         if uploaded is not None:

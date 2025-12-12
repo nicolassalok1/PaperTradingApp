@@ -24,7 +24,7 @@ def render_tab_straddle():
     # --- Fin bootstrap ---
     mc_label_to_model = {
         "Black–Scholes (MC)": "bs",
-        "rHeston (MC)": "rheston",
+        "Stoch vol (MC)": "rheston",
         "rBergomi (MC)": "rbergomi",
         "SABR (MC)": "sabr",
         "Volterra (MC)": "volterra",
@@ -125,7 +125,7 @@ def render_tab_straddle():
     price_mc_val = None
     underlying = (
         (
-            st.session_state.get("heston_cboe_ticker")
+            st.session_state.get("tkr_common")
             or st.session_state.get("tkr_common")
             or st.session_state.get("common_underlying")
             or st.session_state.get("ticker_default")
