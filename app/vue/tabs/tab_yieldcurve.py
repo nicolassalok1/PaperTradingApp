@@ -31,6 +31,8 @@ def render():
     grid = snapshot.get("grid") or []
     risk_free_rate = snapshot.get("risk_free_rate")
     source_path = snapshot.get("source_path")
+    source_kind = snapshot.get("source_kind") or "cache"
+    last_updated = snapshot.get("last_updated")
     currency = snapshot.get("currency") or currency
 
     render_page_header(
@@ -40,9 +42,11 @@ def render():
         badge="Rates",
     )
 
-    st.caption(
-        f"Devise: {currency} • Source: {source_path if source_path else 'data/yield_curves/*_nodes.(csv|json)'}"
-    )
+    source_label = source_path if source_path else "data/yield_curves/*_nodes.(csv|json)"
+    meta = f"Devise: {currency} • Source: {source_kind} -> {source_label}"
+    if last_updated:
+        meta += f" • Last update: {last_updated}"
+    st.caption(meta)
 
     col_rf, col_ref = st.columns([2, 1])
     with col_rf:

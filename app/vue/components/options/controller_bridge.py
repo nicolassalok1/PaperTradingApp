@@ -76,6 +76,8 @@ view_straddle = oc.view_straddle
 view_strangle = oc.view_strangle
 view_asian_arith = oc.view_asian_arith
 view_asian_geom = oc.view_asian_geom
+build_crr_tree = oc.build_crr_tree
+plot_crr_tree = oc.plot_crr_tree
 
 # Market data
 get_data = oc.get_data
@@ -294,6 +296,8 @@ __all__ = [
     "view_strangle",
     "view_asian_arith",
     "view_asian_geom",
+    "build_crr_tree",
+    "plot_crr_tree",
     "get_option_context",
     "compute_price_mc",
     "price_european_from_cboe",

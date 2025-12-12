@@ -21,7 +21,7 @@ def get_r(maturity_years: float, currency: str | None = None) -> float:
     try:
         from app.model.yieldcurve.service import get_active_curve
 
-        curve, _, _ = get_active_curve(currency=currency, ensure_cache=True)
+        curve, _, _, _, _ = get_active_curve(currency=currency, ensure_cache=True, allow_api=False)
         rate = curve.zero_rate(float(maturity_years))
         if math.isfinite(rate):
             return float(rate)

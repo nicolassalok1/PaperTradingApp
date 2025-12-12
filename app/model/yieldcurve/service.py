@@ -22,6 +22,8 @@ from app.model.yieldcurve.loader import (
     load_yield_curve_csv,
 )
 from app.model.yieldcurve.parsing import load_nodes_from_file
+from app.services.yieldcurve_api.fred_provider import fetch_usd_nodes_from_fred
+from app.services.yieldcurve_api.ecb_provider import fetch_eur_nodes_from_ecb
 from app.utils.io import load_json_file, save_json_file
 from app.utils.math_utils import floor_4
 from app.utils.paths import JSON_DIR
@@ -31,6 +33,8 @@ YIELD_CURVE_DATA_DIR = JSON_DIR / "yield_curves"
 YIELD_CURVE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_RF = float(os.getenv("DEFAULT_RF_RATE", "0.02"))
 DEFAULT_CURVE_CCY = os.getenv("DEFAULT_CURVE_CCY", "USD").upper()
+MAX_CACHE_AGE_HOURS = float(os.getenv("YIELD_CURVE_CACHE_MAX_AGE_HOURS", "24"))
+ENABLE_YC_API = os.getenv("YIELD_CURVE_ENABLE_API", "0").lower() in {"1", "true", "yes"}
 
 
 def load_curve(ensure_cache: bool = False) -> Tuple[pd.DataFrame | None, Path | None]:
@@ -52,6 +56,31 @@ def yield_curve_cache_file() -> Path:
     return YIELD_CURVE_CACHE_FILE
 
 
+def _cache_path_for_currency(currency: str) -> Path:
+    return YIELD_CURVE_DATA_DIR / f"{currency.upper()}_nodes.csv"
+
+
+def _file_mtime(path: Path | None) -> datetime.datetime | None:
+    if path and path.exists():
+        try:
+            return datetime.datetime.fromtimestamp(path.stat().st_mtime)
+        except Exception:
+            return None
+    return None
+
+
+def _is_cache_stale(path: Path | None) -> bool:
+    if not path or not path.exists():
+        return True
+    if MAX_CACHE_AGE_HOURS <= 0:
+        return False
+    mtime = _file_mtime(path)
+    if not mtime:
+        return True
+    age = datetime.datetime.now() - mtime
+    return age.total_seconds() > MAX_CACHE_AGE_HOURS * 3600
+
+
 def get_spot(sym: str):
     return get_data(sym)
 
@@ -66,6 +95,18 @@ def load_forwards() -> dict:
 
 def save_forwards(data: dict) -> None:
     save_json_file(FORWARDS_FILE, data)
+
+
+def _save_nodes_to_cache(currency: str, nodes: list[dict]) -> Path | None:
+    if not nodes:
+        return None
+    path = _cache_path_for_currency(currency)
+    try:
+        df = pd.DataFrame(nodes)
+        df.to_csv(path, index=False)
+        return path
+    except Exception:
+        return None
 
 
 def compute_forward_price(spot: float, r: float, T: float) -> float:
@@ -161,6 +202,18 @@ def _load_nodes_for_currency(currency: str, ensure_cache: bool = True) -> tuple[
     return nodes, source
 
 
+def _fetch_nodes_from_provider(currency: str) -> list[dict]:
+    ccy = currency.upper()
+    try:
+        if ccy == "USD":
+            return fetch_usd_nodes_from_fred()
+        if ccy == "EUR":
+            return fetch_eur_nodes_from_ecb()
+    except Exception:
+        return []
+    return []
+
+
 def _build_curve_from_nodes(nodes: list[dict], fallback_rate: float = DEFAULT_RF) -> NodeYieldCurve | FlatYieldCurve:
     if nodes:
         return NodeYieldCurve(nodes, default_rate=fallback_rate)
@@ -178,19 +231,53 @@ def _pick_currency(currency: str | None = None) -> str:
     return DEFAULT_CURVE_CCY
 
 
-_CURVE_CACHE: Dict[str, tuple[YieldCurve, Path | None, list[dict]]] = {}
+_CURVE_CACHE: Dict[str, tuple[YieldCurve, Path | None, list[dict], str, datetime.datetime | None]] = {}
 
 
 def get_active_curve(
-    currency: str | None = None, ensure_cache: bool = True
-) -> tuple[YieldCurve, Path | None, list[dict]]:
+    currency: str | None = None,
+    ensure_cache: bool = True,
+    allow_api: bool = False,
+) -> tuple[YieldCurve, Path | None, list[dict], str, datetime.datetime | None]:
     ccy = _pick_currency(currency)
     if ccy in _CURVE_CACHE:
         return _CURVE_CACHE[ccy]
+
     nodes, source_path = _load_nodes_for_currency(ccy, ensure_cache=ensure_cache)
+    source_kind = "cache" if nodes else "flat"
+    last_updated = _file_mtime(source_path)
+
+    if allow_api and ENABLE_YC_API and (_is_cache_stale(source_path) or not nodes):
+        fetched = _fetch_nodes_from_provider(ccy)
+        if fetched:
+            path = _save_nodes_to_cache(ccy, fetched)
+            if path:
+                source_path = path
+                nodes = fetched
+                source_kind = "api_refresh"
+                last_updated = _file_mtime(path)
+
     curve = _build_curve_from_nodes(nodes, fallback_rate=DEFAULT_RF)
-    _CURVE_CACHE[ccy] = (curve, source_path, nodes)
-    return curve, source_path, nodes
+    _CURVE_CACHE[ccy] = (curve, source_path, nodes, source_kind, last_updated)
+    return curve, source_path, nodes, source_kind, last_updated
+
+
+def refresh_curve_cache_from_api(currency: str | None = None) -> bool:
+    """
+    Optional manual refresh using API provider; never called during pricing/UI render.
+    """
+    if not ENABLE_YC_API:
+        return False
+    ccy = _pick_currency(currency)
+    fetched = _fetch_nodes_from_provider(ccy)
+    if not fetched:
+        return False
+    path = _save_nodes_to_cache(ccy, fetched)
+    if not path:
+        return False
+    # invalidate cache entry
+    _CURVE_CACHE.pop(ccy, None)
+    return True
 
 
 def get_curve_snapshot(
@@ -200,7 +287,9 @@ def get_curve_snapshot(
     grid_size: int = 16,
 ) -> dict[str, Any]:
     ccy = _pick_currency(currency)
-    curve, source_path, nodes = get_active_curve(currency=currency, ensure_cache=ensure_cache)
+    curve, source_path, nodes, source_kind, last_updated = get_active_curve(
+        currency=currency, ensure_cache=ensure_cache, allow_api=False
+    )
     maturities_nodes = [n.get("t_years") for n in nodes if n.get("t_years") is not None]
     maturities_nodes = [float(t) for t in maturities_nodes if math.isfinite(float(t))]
     base_grid = sorted(set(maturities_nodes))
@@ -233,13 +322,15 @@ def get_curve_snapshot(
         "risk_free_rate": risk_free_rate,
         "risk_free_maturity": float(risk_free_maturity),
         "source_path": source_path,
+        "source_kind": source_kind,
+        "last_updated": last_updated.isoformat() if last_updated else None,
     }
 
 
 def get_risk_free_rate(
     T_ref: float = 1.0, currency: str | None = None, ensure_cache: bool = True
 ) -> float:
-    curve, _, _ = get_active_curve(currency=currency, ensure_cache=ensure_cache)
+    curve, _, _, _, _ = get_active_curve(currency=currency, ensure_cache=ensure_cache, allow_api=False)
     return float(curve.zero_rate(T_ref))
 
 
@@ -379,6 +470,7 @@ __all__ = [
     "get_spot",
     "get_rate",
     "get_active_curve",
+    "refresh_curve_cache_from_api",
     "get_curve_snapshot",
     "get_risk_free_rate",
     "load_forwards",

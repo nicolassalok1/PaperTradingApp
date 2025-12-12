@@ -53,6 +53,7 @@ def render_tab_american():
     else:
         st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
+    steps_tree = 50
     view_dyn = view_american(
         float(common_spot_value),
         strike,
@@ -61,6 +62,7 @@ def render_tab_american():
         q=float(d_common),
         sigma=float(sigma_am),
         T=float(T_am),
+        steps=steps_tree,
     )
     premium = float(view_dyn.get("premium", 0.0))
     s_grid = view_dyn["s_grid"]
@@ -85,8 +87,23 @@ def render_tab_american():
     ax_pay.set_title("Vanilla américaine (payoff & P&L)")
     ax_pay.legend(loc="lower right")
 
+    class _CrrOption:
+        def __init__(self, s0, k, T, is_call):
+            self.s0 = float(s0)
+            self.K = float(k)
+            self.T = float(T)
+            self.is_call = is_call
+
+        def payoff(self, s):
+            arr = np.asarray(s, dtype=float)
+            return np.maximum(arr - self.K, 0.0) if self.is_call else np.maximum(self.K - arr, 0.0)
+
+    option_obj = _CrrOption(S0, strike, T_am, opt_char == "c")
+    spot_tree, value_tree = build_crr_tree(option_obj, r=float(common_rate_value), sigma=float(sigma_am), n_steps=steps_tree)
+    fig_tree = plot_crr_tree(spot_tree, value_tree)
+
     close_fig = build_close_with_strike_fig(close_series, hist_tkr, strike)
-    render_figures_grid([close_fig, fig_pay])
+    render_figures_grid([close_fig, fig_pay, fig_tree])
 
     st.session_state[_k("american_pre_price")] = premium
     price = float(premium)
