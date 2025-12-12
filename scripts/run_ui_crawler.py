@@ -270,9 +270,18 @@ def main():
 
         had_error = check_tabs(page)
         if not had_error:
-            ok_payload = {"status": "ok"}
-            ERROR_JSON.write_text(json.dumps(ok_payload, indent=2), encoding="utf-8")
-            print("\n[V] ui_error.json mis a jour (pas d'erreur).")
+            # If ui_error.json still has an error payload, treat as KO
+            try:
+                existing = json.loads(ERROR_JSON.read_text(encoding="utf-8"))
+                if existing and existing.get("error_type"):
+                    had_error = True
+                    print("\n[KO] ui_error.json contient une erreur, marquage KO.")
+            except Exception:
+                pass
+            if not had_error:
+                ok_payload = {"status": "ok"}
+                ERROR_JSON.write_text(json.dumps(ok_payload, indent=2), encoding="utf-8")
+                print("\n[V] ui_error.json mis a jour (pas d'erreur).")
 
         browser.close()
         if streamlit_proc:

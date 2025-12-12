@@ -1,6 +1,7 @@
 import streamlit as st
 from app.vue.components.options.panels.vanilla.tab_american import render_tab_american
 from app.vue.components.options.panels.vanilla.tab_bermudan import render_tab_bermudan
+from app.vue.components.options.panels.vanilla.tab_european import render_tab_european
 from app.vue.components.options.controller_bridge import *
 
 
@@ -13,14 +14,17 @@ def render_panel_vanilla():
     if not available:
         return
     models = [
-        "AmＳicaine",
+        "Européenne",
+        "Américaine",
         "Bermudan",
     ]
     model_tabs = st.tabs(models)
 
     for label, tab in zip(models, model_tabs):
         with tab:
-            if label == "AmＳicaine":
+            if label == "Européenne":
+                render_tab_european()
+            elif label == "Américaine":
                 render_tab_american()
             elif label == "Bermudan":
                 render_tab_bermudan()

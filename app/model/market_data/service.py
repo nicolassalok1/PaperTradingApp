@@ -27,16 +27,22 @@ def _download_stooq_csv(params: dict) -> pd.DataFrame:
     df = pd.read_csv(io.StringIO(resp.text))
     if df.empty:
         return pd.DataFrame()
-    df = df.rename(
-        columns={
-            "Date": "date",
-            "Open": "open",
-            "High": "high",
-            "Low": "low",
-            "Close": "close",
-            "Volume": "volume",
-        }
-    )
+    # Handle both English and Polish headers returned by Stooq
+    rename_map = {
+        "Date": "date",
+        "Data": "date",
+        "Open": "open",
+        "Otwarcie": "open",
+        "High": "high",
+        "Najwyzszy": "high",
+        "Low": "low",
+        "Najnizszy": "low",
+        "Close": "close",
+        "Zamkniecie": "close",
+        "Volume": "volume",
+        "Wolumen": "volume",
+    }
+    df = df.rename(columns={c: rename_map.get(c, c) for c in df.columns})
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date"]).sort_values("date")

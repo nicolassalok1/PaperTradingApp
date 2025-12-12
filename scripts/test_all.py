@@ -286,9 +286,11 @@ def ui_crawler_test():
         raise RuntimeError("Playwright is required for UI crawler tests but is not installed.")
 
     from scripts.run_ui_crawler import run_ui_crawler
+    from scripts.run_ui_crawler_options import run_ui_crawler_options
 
     run_ui_crawler()
-    for fname in ["ui_error.json", "ui_errors.json"]:
+    run_ui_crawler_options()
+    for fname in ["ui_error.json", "ui_errors.json", "ui_error_options.json"]:
         fp = REPO_ROOT / fname
         if fp.exists():
             try:
