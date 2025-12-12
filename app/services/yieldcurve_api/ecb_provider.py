@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-import requests
+from app.services.yieldcurve_api.base import safe_get_json
 
 # ECB Statistical Data Warehouse: daily par yield curve (example for EUR, AAA-rated)
 # We use a lightweight endpoint; if unavailable, this provider returns empty.
@@ -20,11 +20,8 @@ SERIES = {
 def _fetch_single_series(series_code: str) -> float | None:
     url = f"{ECB_BASE}/{series_code}"
     params = {"lastNObservations": 1, "format": "jsondata"}
-    try:
-        resp = requests.get(url, params=params, timeout=6)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception:
+    data = safe_get_json(url, params=params, timeout=5)
+    if data is None:
         return None
     try:
         obs = data.get("data", {}).get("dataSets", [{}])[0].get("series", {})

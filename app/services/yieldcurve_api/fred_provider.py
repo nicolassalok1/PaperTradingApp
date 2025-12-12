@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Dict, List
 
-import requests
+from app.services.yieldcurve_api.base import safe_get_json
 
 FRED_SERIES: Dict[str, str] = {
     "1M": "DTB1M",
@@ -27,11 +27,8 @@ def _fetch_series(series_id: str, api_key: str | None) -> float | None:
         "sort_order": "desc",
         "limit": 1,
     }
-    try:
-        resp = requests.get(url, params=params, timeout=6)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception:
+    data = safe_get_json(url, params=params, timeout=5)
+    if data is None:
         return None
     try:
         obs = data.get("observations", [])

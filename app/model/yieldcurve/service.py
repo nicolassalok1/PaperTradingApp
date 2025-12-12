@@ -244,7 +244,7 @@ def get_active_curve(
         return _CURVE_CACHE[ccy]
 
     nodes, source_path = _load_nodes_for_currency(ccy, ensure_cache=ensure_cache)
-    source_kind = "cache" if nodes else "flat"
+    source_kind = "cache" if nodes else "flat_fallback"
     last_updated = _file_mtime(source_path)
 
     if allow_api and ENABLE_YC_API and (_is_cache_stale(source_path) or not nodes):
@@ -258,6 +258,8 @@ def get_active_curve(
                 last_updated = _file_mtime(path)
 
     curve = _build_curve_from_nodes(nodes, fallback_rate=DEFAULT_RF)
+    if not nodes:
+        source_kind = "flat_fallback"
     _CURVE_CACHE[ccy] = (curve, source_path, nodes, source_kind, last_updated)
     return curve, source_path, nodes, source_kind, last_updated
 

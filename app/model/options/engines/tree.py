@@ -57,12 +57,24 @@ def plot_crr_tree(spot_tree: np.ndarray, value_tree: np.ndarray):
     """
     fig, ax = plt.subplots(figsize=(8, 5))
     max_depth = spot_tree.shape[0] - 1
+    # Color nodes by option value for visual readability; no text overlays.
+    vals = value_tree[: max_depth + 1, : max_depth + 1].flatten()
+    vmin, vmax = float(vals.min()), float(vals.max())
+    norm = plt.Normalize(vmin=vmin, vmax=vmax if vmax > vmin else vmin + 1e-6)
     for i in range(max_depth + 1):
         for j in range(i + 1):
-            ax.scatter(i, spot_tree[i, j], color="steelblue", s=25)
-            ax.text(
-                i, spot_tree[i, j], f"{value_tree[i, j]:.2f}", fontsize=8, ha="center", va="bottom"
+            ax.scatter(
+                i,
+                spot_tree[i, j],
+                c=[[plt.cm.viridis(norm(value_tree[i, j]))]],
+                s=32,
+                edgecolors="k",
+                linewidths=0.3,
             )
+    sm = plt.cm.ScalarMappable(cmap="viridis", norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label("Valeur de l'option")
     ax.set_xlabel("Étapes")
     ax.set_ylabel("Spot")
     ax.set_title("Arbre CRR (spot & valeur)")

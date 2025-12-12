@@ -46,6 +46,8 @@ def render():
     meta = f"Devise: {currency} • Source: {source_kind} -> {source_label}"
     if last_updated:
         meta += f" • Last update: {last_updated}"
+    if source_kind == "flat_fallback":
+        st.warning("Données indisponibles: courbe plate (DEFAULT_RF_RATE) utilisée en secours.")
     st.caption(meta)
 
     col_rf, col_ref = st.columns([2, 1])

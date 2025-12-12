@@ -20,15 +20,15 @@ def render_tab_european():
     hist_tkr = resolve_common_underlying() or ticker
     # --------------------------------
     common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
-    spot_anchor = float(S0 if S0 is not None else common_spot_value)
+    spot_base = float(S0 if S0 is not None else common_spot_value)
     S0 = float(common_spot_value)
 
     _, opt_char = _choose_option_select("opt_choice_european", option_char)
     strike = st.slider(
         "Strike",
-        min_value=0.5 * spot_anchor,
-        max_value=1.5 * spot_anchor,
-        value=spot_anchor,
+        min_value=0.5 * spot_base,
+        max_value=1.5 * spot_base,
+        value=spot_base,
         step=0.5,
         key=_k("european_k"),
     )
