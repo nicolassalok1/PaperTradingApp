@@ -32,16 +32,16 @@ if str(PROJECT_ROOT) not in sys.path:
 TAB_GROUPS = {
     "📊 Overview": [
         "📊 Dashboard v2",
+        "📊 Portfolio & Risk",
     ],
     "📈 Trading": [
-        "📈 Options",
         "💹 Trading",
-        "📊 Portfolio & Risk",
         "🛡️ Hedging Systems",
     ],
     "🧮 Models": [
         "🧮 Yield Curve",
         "🧮 Calibration",
+        "📈 Options",
     ],
 }
 
@@ -250,4 +250,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
