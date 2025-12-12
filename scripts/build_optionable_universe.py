@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from app.model.options.logic import fetch_alpaca_option_tickers, download_options_alpaca
 from app.utils.paths import CACHE_CSV_DIR
+from app.utils.symbol_mapper import map_to_stooq
 
 
 DEFAULT_OUTPUT = Path("data/alpaca_optionable_tickers.csv")
@@ -30,6 +31,19 @@ def _delete_downloaded_options(sym: str) -> None:
         pass
 
 
+def _delete_stooq_cache(sym: str) -> None:
+    """Remove Stooq price cache used transiently for spot lookup."""
+    mapped = map_to_stooq(sym)
+    if not mapped:
+        return
+    for suffix in ("D", "d"):
+        cache_file = CACHE_CSV_DIR / f"stooq_{mapped}_start_end_{suffix}.csv"
+        try:
+            cache_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
 def build_optionable_universe(limit_assets: int, min_contracts: int, output: Path) -> int:
     """
     Build a list of underlyings that have options available via Alpaca.
@@ -38,7 +52,7 @@ def build_optionable_universe(limit_assets: int, min_contracts: int, output: Pat
     2) For each symbol, call download_options_alpaca().
     3) Keep only symbols with a non-empty options DataFrame (and at least min_contracts rows).
     4) Save the result to a CSV file for use in the UI.
-    5) Remove downloaded options cache files so only the summary CSV remains.
+    5) Remove downloaded options and spot cache files so only the summary CSV remains.
     """
     symbols = fetch_alpaca_option_tickers(limit=limit_assets)
     optionable: List[dict] = []
@@ -46,6 +60,7 @@ def build_optionable_universe(limit_assets: int, min_contracts: int, output: Pat
     for sym in symbols:
         df = download_options_alpaca(sym)
         _delete_downloaded_options(sym)
+        _delete_stooq_cache(sym)
         if df is None or df.empty:
             continue
         if len(df) < min_contracts:
