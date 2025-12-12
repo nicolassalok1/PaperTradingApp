@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from app.vue.components.options.controller_bridge import (
     common_rate_value,
     common_sigma_value,
+    current_spot,
+    current_ticker,
     d_common,
     ensure_close_history,
     get_option_context,

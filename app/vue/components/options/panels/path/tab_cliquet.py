@@ -18,9 +18,8 @@ def render_tab_cliquet():
     # --------------------------------
     hist_tkr = current_ticker(ctx) or ticker
     S0 = float(current_spot(ctx))
-    opt_char_base = option_char if option_char else "c"
+    opt_char_base = st.session_state.get("option_char", "c")
     _, clq_char = _choose_option_select("opt_choice_cliquet_tab", opt_char_base)
-    option_char = clq_char
     st.subheader("Cliquet / Ratchet – vue Notebook")
     k_cliquet_anchor = float(S0 if S0 is not None else common_spot_value)
     st.caption(f"Spot actuel ({hist_tkr}) : {k_cliquet_anchor:.2f}")
