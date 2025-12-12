@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 from typing import List
 
 import pandas as pd
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.append(str(REPO_ROOT))
 
 from app.model.options.logic import fetch_alpaca_option_tickers, download_options_alpaca
 from app.utils.paths import CACHE_CSV_DIR
