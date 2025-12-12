@@ -17,13 +17,14 @@ def render_tab_european():
         return
     if not isinstance(close_series, pd.Series):
         close_series = pd.Series([S0], index=pd.Index([pd.Timestamp.today()]))
-    hist_tkr = resolve_common_underlying() or ticker
+    hist_tkr = ctx.get("ticker") or resolve_common_underlying() or ticker
     # --------------------------------
     common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
-    spot_base = float(S0 if S0 is not None else common_spot_value)
-    S0 = float(common_spot_value)
+    spot_base = float(close_series.iloc[-1]) if hasattr(close_series, "iloc") and len(close_series) else float(S0 if S0 is not None else common_spot_value)
+    S0 = float(spot_base)
 
     _, opt_char = _choose_option_select("opt_choice_european", option_char)
+    st.caption(f"Spot actuel ({hist_tkr}) : {spot_base:.2f}")
     strike = st.slider(
         "Strike",
         min_value=0.5 * spot_base,
@@ -54,7 +55,7 @@ def render_tab_european():
         st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
     view_dyn = view_european(
-        float(common_spot_value),
+        float(spot_base),
         strike,
         option_type="call" if opt_char == "c" else "put",
         r=float(common_rate_value),

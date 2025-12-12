@@ -17,18 +17,19 @@ def render_tab_american():
         return
     if not isinstance(close_series, pd.Series):
         close_series = pd.Series([S0], index=pd.Index([pd.Timestamp.today()]))
-    hist_tkr = resolve_common_underlying() or ticker
+    hist_tkr = ctx.get("ticker") or resolve_common_underlying() or ticker
     # --------------------------------
     common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
-    spot_anchor = float(S0 if S0 is not None else common_spot_value)
-    S0 = float(common_spot_value)
+    spot_base = float(close_series.iloc[-1]) if hasattr(close_series, "iloc") and len(close_series) else float(S0 if S0 is not None else common_spot_value)
+    S0 = float(spot_base)
 
     _, opt_char = _choose_option_select("opt_choice_american", option_char)
+    st.caption(f"Spot actuel ({hist_tkr}) : {spot_base:.2f}")
     strike = st.slider(
         "Strike",
-        min_value=0.5 * spot_anchor,
-        max_value=1.5 * spot_anchor,
-        value=spot_anchor,
+        min_value=0.5 * spot_base,
+        max_value=1.5 * spot_base,
+        value=spot_base,
         step=0.5,
         key=_k("american_k"),
     )
@@ -55,7 +56,7 @@ def render_tab_american():
 
     steps_tree = 50
     view_dyn = view_american(
-        float(common_spot_value),
+        float(spot_base),
         strike,
         option_type="call" if opt_char == "c" else "put",
         r=float(common_rate_value),
