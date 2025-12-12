@@ -1,7 +1,7 @@
 {
-  "location": "OptionsTab",
-  "error_type": "InputError",
-  "message": "Champ ticker introuvable dans l'onglet Options",
+  "location": "__startup__",
+  "error_type": "OSError",
+  "message": "",
   "file": "D:\\PythonDProjects\\PaperTradingApp\\scripts\\run_ui_crawler_options.py",
   "line": 0,
   "traceback": ""

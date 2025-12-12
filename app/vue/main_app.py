@@ -9,6 +9,7 @@ import importlib
 import pkgutil
 import sys
 
+import pandas as pd
 import streamlit as st
 import altair as alt
 alt.themes.enable("dark")
@@ -182,10 +183,41 @@ def _patch_streamlit_charts() -> None:
     st._charts_patched = True  # type: ignore[attr-defined]
 
 
+def _arrow_safe_df(df):
+    """Ensure DataFrame is Arrow/Streamlit friendly (e.g., UUID -> str)."""
+    if not isinstance(df, pd.DataFrame):
+        return df
+    df_safe = df.copy()
+    for col in df_safe.columns:
+        if df_safe[col].dtype == object:
+            df_safe[col] = df_safe[col].apply(
+                lambda x: x
+                if isinstance(x, (str, int, float, bool)) or x is None
+                else str(x)
+            )
+    return df_safe
+
+
+def _patch_streamlit_dataframe() -> None:
+    """Wrap st.dataframe to coerce non-Arrow-friendly objects to strings."""
+    if getattr(st, "_dataframe_patched", False):
+        return
+
+    _orig_df = st.dataframe
+
+    def _dataframe(data, *args, **kwargs):
+        data_safe = _arrow_safe_df(data) if isinstance(data, pd.DataFrame) else data
+        return _orig_df(data_safe, *args, **kwargs)
+
+    st.dataframe = _dataframe  # type: ignore[assignment]
+    st._dataframe_patched = True  # type: ignore[attr-defined]
+
+
 def main() -> None:
     _configure_page()
     _inject_global_styles()
     _patch_streamlit_charts()
+    _patch_streamlit_dataframe()
 
     tab_labels = ordered_tab_labels(ALL_TABS)
     if not tab_labels:

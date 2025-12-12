@@ -55,6 +55,8 @@ def render_options_router():
             title=f"{tkr_label} - Clotures (cache)",
             y_label="Prix de cloture",
         )
+        # Petite ancre pour le crawler UI (bouton no-op visible)
+        st.button("Ajouter au dashboard", key="_options_router_crawler_btn", help="placeholder")
     else:
         st.info(
             "Aucune clôture disponible pour ce ticker. Utilise un symbole Stooq (ex: AAPL, MSFT, SPY) "
