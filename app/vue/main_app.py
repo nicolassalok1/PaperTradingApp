@@ -17,30 +17,28 @@ alt.themes.enable("dark")
 import plotly.io as pio
 pio.templates.default = "plotly_dark"
 
-from app.vue.tabs.tab_portfolio_allocation import render_tab as render_portfolio_allocation
-from app.vue.tabs.tab_hedger_v2 import render_tab as render_hedger_v2
 from app.vue.tabs.tab_dashboard_v2 import render_tab as render_dashboard_v2
-from app.vue.tabs.tab_hedger_rl_live_v2 import render_tab as render_hedger_rl_live_v2
+from app.vue.tabs.tab_trading import render_tab as render_trading
+from app.vue.tabs.tab_portfolio_and_risk import render_tab as render_portfolio_and_risk
+from app.vue.tabs.tab_hedging_systems import render_tab as render_hedging_systems
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 TAB_GROUPS = {
-    "📊 Analyse": [
+    "📊 Overview": [
         "📊 Dashboard v2",
-        "🧮 Yield Curve",
-        "🧱 Risk Management",
-        "🧮 Calibration",
     ],
     "📈 Trading": [
         "📈 Options",
-        "🧮 Options Hedging",
-        "💹 Advanced Orders",
-        "Alpaca Spot",
-        "📐 Portfolio Allocation",
-        "🛡️ Hedger v2",
-        "🤖 Hedger RL Live v2",
+        "💹 Trading",
+        "📊 Portfolio & Risk",
+        "🛡️ Hedging Systems",
+    ],
+    "🧮 Models": [
+        "🧮 Yield Curve",
+        "🧮 Calibration",
     ],
 }
 
@@ -54,9 +52,19 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     "tab_portfolio_allocation": "📐 Portfolio Allocation",
     "tab_hedger_v2": "🛡️ Hedger v2",
     "tab_hedger_rl_live_v2": "🤖 Hedger RL Live v2",
+    "tab_trading": "💹 Trading",
+    "tab_portfolio_and_risk": "📊 Portfolio & Risk",
+    "tab_hedging_systems": "🛡️ Hedging Systems",
 }
 
-EXCLUDED_LABELS: set[str] = set()
+EXCLUDED_LABELS: set[str] = {
+    "💹 Advanced Orders",
+    "Alpaca Spot",
+    "📐 Portfolio Allocation",
+    "🧱 Risk Management",
+    "🛡️ Hedger v2",
+    "🤖 Hedger RL Live v2",
+}
 
 
 def _derive_label(module_name: str) -> str:
@@ -118,15 +126,15 @@ def sidebar_menu(all_tabs: Dict[str, Callable[[], None]], tab_labels: list[str])
 
 
 ALL_TABS = autodiscover_tabs()
-# Fallback registration if autodiscovery misses the new tab
-if "📐 Portfolio Allocation" not in ALL_TABS:
-    ALL_TABS["📐 Portfolio Allocation"] = render_portfolio_allocation
-if "🛡️ Hedger v2" not in ALL_TABS:
-    ALL_TABS["🛡️ Hedger v2"] = render_hedger_v2
+# Fallback registration if autodiscovery misses key tabs
 if "📊 Dashboard v2" not in ALL_TABS:
     ALL_TABS["📊 Dashboard v2"] = render_dashboard_v2
-if "🤖 Hedger RL Live v2" not in ALL_TABS:
-    ALL_TABS["🤖 Hedger RL Live v2"] = render_hedger_rl_live_v2
+if "💹 Trading" not in ALL_TABS:
+    ALL_TABS["💹 Trading"] = render_trading
+if "📊 Portfolio & Risk" not in ALL_TABS:
+    ALL_TABS["📊 Portfolio & Risk"] = render_portfolio_and_risk
+if "🛡️ Hedging Systems" not in ALL_TABS:
+    ALL_TABS["🛡️ Hedging Systems"] = render_hedging_systems
 
 
 def _configure_page() -> None:
