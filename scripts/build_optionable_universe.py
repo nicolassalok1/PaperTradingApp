@@ -44,17 +44,18 @@ def _delete_stooq_cache(sym: str) -> None:
             pass
 
 
-def build_optionable_universe(limit_assets: int, min_contracts: int, output: Path) -> int:
+def build_optionable_universe(limit_assets: int | None, min_contracts: int, output: Path) -> int:
     """
     Build a list of underlyings that have options available via Alpaca.
 
-    1) Pull a universe of active US equities from Alpaca.
+    1) Pull a universe of active US equities from Alpaca (unlimited by default).
     2) For each symbol, call download_options_alpaca().
-    3) Keep only symbols with a non-empty options DataFrame (and at least min_contracts rows).
+    3) Keep only symbols with a non-empty options DataFrame (optional min_contracts filter).
     4) Save the result to a CSV file for use in the UI.
     5) Remove downloaded options and spot cache files so only the summary CSV remains.
     """
-    symbols = fetch_alpaca_option_tickers(limit=limit_assets)
+    limit = limit_assets if limit_assets and limit_assets > 0 else None
+    symbols = fetch_alpaca_option_tickers(limit=limit)
     optionable: List[dict] = []
 
     for sym in symbols:
@@ -63,7 +64,7 @@ def build_optionable_universe(limit_assets: int, min_contracts: int, output: Pat
         _delete_stooq_cache(sym)
         if df is None or df.empty:
             continue
-        if len(df) < min_contracts:
+        if min_contracts and min_contracts > 0 and len(df) < min_contracts:
             continue
         optionable.append({"symbol": sym, "n_contracts": int(len(df))})
 
@@ -85,14 +86,14 @@ def main() -> None:
     parser.add_argument(
         "--limit-assets",
         type=int,
-        default=500,
-        help="Maximum number of Alpaca assets to scan (default: 500).",
+        default=0,
+        help="Maximum number of Alpaca assets to scan (0 or negative means no limit; default: unlimited).",
     )
     parser.add_argument(
         "--min-contracts",
         type=int,
-        default=10,
-        help="Minimum number of option contracts required to keep a ticker (default: 10).",
+        default=0,
+        help="Minimum number of option contracts required to keep a ticker (0 or negative means no minimum).",
     )
     parser.add_argument(
         "--output",

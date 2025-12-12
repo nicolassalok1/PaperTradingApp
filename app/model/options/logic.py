@@ -69,10 +69,11 @@ def _load_alpaca_credentials():
     return key, secret, base
 
 
-def fetch_alpaca_option_tickers(limit: int = 200) -> list[str]:
+def fetch_alpaca_option_tickers(limit: int | None = None) -> list[str]:
     """
     Fetch a universe of underlying tickers from Alpaca that are active/tradable.
     Used to populate UI selectors for options trading.
+    If limit is None or <= 0, the full set is returned.
     """
     key, secret, base = _load_alpaca_credentials()
     if not key or not secret or not base:
@@ -104,7 +105,7 @@ def fetch_alpaca_option_tickers(limit: int = 200) -> list[str]:
             symbols.append(sym)
 
     symbols = sorted(set(symbols))
-    if limit and len(symbols) > limit:
+    if limit and limit > 0 and len(symbols) > limit:
         symbols = symbols[:limit]
     return symbols
 

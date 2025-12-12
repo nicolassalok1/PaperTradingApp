@@ -84,7 +84,7 @@ foreach ($file in $pyFiles) {
 
 Write-Host "Construction de l'univers optionable Alpaca..."
 try {
-    python scripts/build_optionable_universe.py --limit-assets 500 --min-contracts 10
+    python scripts/build_optionable_universe.py
 } catch {
     Write-Warning "Generation de l'univers optionable echouee: $($_.Exception.Message)"
 }
