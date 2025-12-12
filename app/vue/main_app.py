@@ -58,6 +58,7 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     # Internal trading sub-tabs (kept inside 💹 Trading only)
     "tab_alpaca_spot": "Alpaca Spot",
     "tab_alpaca_orders": "Advanced Orders",
+    "tab_alpaca_options": "Alpaca Options",
 }
 
 
@@ -65,6 +66,7 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
 EXCLUDED_LABELS: set[str] = {
     "Alpaca Spot",
     "Advanced Orders",
+    "Alpaca Options",
 }
 
 

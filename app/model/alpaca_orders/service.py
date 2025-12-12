@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from alpaca.trading.client import TradingClient
-from alpaca.trading.enums import OrderClass, OrderSide, OrderType, TimeInForce
+from alpaca.trading.enums import OrderClass, OrderSide, OrderType, TimeInForce, AssetClass
 from alpaca.trading.requests import (
     LimitOrderRequest,
     MarketOrderRequest,
@@ -129,6 +129,24 @@ class AlpacaOrdersService:
             side=self._side(side),
             time_in_force=TimeInForce.GTC,
             limit_price=price_val,
+        )
+        order = self.trading_client.submit_order(req)
+        return self._to_dict(order)
+
+    def submit_option_market_order(self, symbol: str, qty: float, side: str) -> dict[str, Any]:
+        """
+        Market order on an options contract (OPRA symbol) using Alpaca options trading.
+        """
+        symbol_norm = self._normalize_symbol(symbol)
+        qty_val = float(qty or 0.0)
+        if not symbol_norm or qty_val <= 0:
+            raise ValueError("Option symbol and positive quantity are required")
+        req = MarketOrderRequest(
+            symbol=symbol_norm,
+            qty=qty_val,
+            side=self._side(side),
+            time_in_force=TimeInForce.DAY,
+            asset_class=AssetClass.OPTION,
         )
         order = self.trading_client.submit_order(req)
         return self._to_dict(order)

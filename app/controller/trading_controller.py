@@ -97,6 +97,34 @@ def create_bracket_order(
     )
 
 
+# --- Options trading helpers (Alpaca options via AlpacaOrdersService) ---
+
+def get_option_positions() -> List[Dict[str, Any]]:
+    positions = _orders_service().get_positions()
+    if not positions:
+        return []
+    return [
+        pos
+        for pos in positions
+        if str(pos.get("asset_class") or "").lower() == "option"
+    ]
+
+
+def get_open_option_orders() -> List[Dict[str, Any]]:
+    orders = _orders_service().get_open_orders()
+    if not orders:
+        return []
+    return [
+        order
+        for order in orders
+        if str(order.get("asset_class") or "").lower() == "option"
+    ]
+
+
+def create_option_market_order(option_symbol: str, qty: float, side: str):
+    return _orders_service().submit_option_market_order(option_symbol, qty, side)
+
+
 __all__ = [
     # Spot
     "get_spot_account",
@@ -113,5 +141,8 @@ __all__ = [
     "create_take_profit",
     "create_stop_limit",
     "create_bracket_order",
+    # Options
+    "get_option_positions",
+    "get_open_option_orders",
+    "create_option_market_order",
 ]
-
