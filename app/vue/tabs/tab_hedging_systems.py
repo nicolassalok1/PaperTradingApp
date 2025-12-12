@@ -39,19 +39,6 @@ def _render_positions() -> None:
         st.dataframe(pd.DataFrame(options), hide_index=True, use_container_width=True)
 
 
-def _render_manual_trading() -> None:
-    st.markdown("### Manual Trading (Market Orders)")
-    symbol = st.text_input("Symbol", value="AAPL").upper()
-    qty = st.number_input("Quantity", min_value=0.0, value=1.0, step=1.0)
-    side = st.radio("Side", options=["buy", "sell"], horizontal=True)
-    if st.button("Send manual market order", type="primary"):
-        try:
-            resp = ctrl.manual_order(symbol, qty, side)
-            st.success(f"Order sent: {resp}")
-        except Exception as exc:
-            st.error(f"Order failed: {exc}")
-
-
 def _render_dqn_panel() -> None:
     st.markdown("### DQN Hedging Panel")
     underlying = st.text_input("Underlying symbol", value="AAPL").upper()
@@ -81,32 +68,26 @@ def _render_dqn_panel() -> None:
 
 def render_tab() -> None:
     render_page_header(
-        "Hedging Systems — Alpaca",
-        "Monitor positions, trade manually, and get DQN hedge suggestions in a single view.",
+        "Hedging Systems - Alpaca",
+        "DQN-based Alpaca options hedging (no manual orders).",
         icon="???",
         badge="Hedging",
     )
 
-    # Top row: account snapshot vs manual trading
+    # Top row: account snapshot vs DQN hedging panel
     col_left, col_right = st.columns(2)
     with col_left:
         _render_account()
 
     with col_right:
-        _render_manual_trading()
+        _render_dqn_panel()
 
     st.divider()
 
-    # Middle row: positions collapsed, DQN panel visible
-    col_pos, col_dqn = st.columns(2)
-    with col_pos:
-        with st.expander("Current positions (equities & options)", expanded=False):
-            _render_positions()
-
-    with col_dqn:
-        _render_dqn_panel()
+    # Positions shown read-only in an expander
+    with st.expander("Current positions (equities & options)", expanded=False):
+        _render_positions()
 
 
 def render() -> None:
     render_tab()
-

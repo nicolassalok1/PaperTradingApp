@@ -28,7 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Top‑level grouping and ordering (user‑visible labels)
+# Top-level grouping and ordering (user-visible labels)
 TAB_GROUPS = {
     "📊 Overview": [
         "📊 Dashboard v2",
@@ -55,18 +55,16 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     "tab_hedging_systems": "🛡️ Hedging Systems",
     "tab_yieldcurve": "🧮 Yield Curve",
     "tab_calibration": "🧮 Calibration",
-    # Internal trading sub‑tabs (kept inside 💹 Trading only)
+    # Internal trading sub-tabs (kept inside 💹 Trading only)
     "tab_alpaca_spot": "Alpaca Spot",
     "tab_alpaca_orders": "Advanced Orders",
-    "tab_alpaca_options_trading": "Alpaca Options",
 }
 
 
-# Labels that should never appear as top‑level tabs
+# Labels that should never appear as top-level tabs
 EXCLUDED_LABELS: set[str] = {
     "Alpaca Spot",
     "Advanced Orders",
-    "Alpaca Options",
 }
 
 
@@ -117,7 +115,7 @@ def ordered_tab_labels(all_tabs: Dict[str, Callable[[], None]]) -> list[str]:
                 ordered.append(lbl)
                 seen.add(lbl)
 
-    # Add any remaining tabs (non‑grouped) in alpha order
+    # Add any remaining tabs (non-grouped) in alpha order
     for lbl in sorted(all_tabs.keys()):
         if lbl in EXCLUDED_LABELS:
             continue
