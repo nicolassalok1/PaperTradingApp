@@ -17,10 +17,9 @@ def render_tab_bermudan():
         return
     if not isinstance(close_series, pd.Series):
         close_series = pd.Series([S0], index=pd.Index([pd.Timestamp.today()]))
-    hist_tkr = ctx.get("ticker") or resolve_common_underlying() or ticker
+    hist_tkr = current_ticker(ctx) or ticker
     # --------------------------------
-    common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
-    spot_base = float(close_series.iloc[-1]) if hasattr(close_series, "iloc") and len(close_series) else float(S0 if S0 is not None else common_spot_value)
+    spot_base = current_spot(ctx)
     S0 = float(spot_base)
 
     _, opt_char = _choose_option_select("opt_choice_bermudan", option_char)
@@ -75,12 +74,7 @@ def render_tab_bermudan():
     ax_pay.axvline(
         float(strike), color="gray", linestyle="--", label=f"K = {float(strike):.2f}"
     )
-    ax_pay.axvline(
-        float(common_spot_value),
-        color="crimson",
-        linestyle="-.",
-        label=f"S_0 = {float(common_spot_value):.2f}",
-    )
+    ax_pay.axvline(float(spot_base), color="crimson", linestyle="-.", label=f"S_0 = {float(spot_base):.2f}")
     ax_pay.axhline(0, color="black", linewidth=0.8)
     ax_pay.set_xlabel("Spot")
     ax_pay.set_ylabel("Payoff / P&L")

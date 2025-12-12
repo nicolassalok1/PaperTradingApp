@@ -16,12 +16,14 @@ def render_tab_asian_geo():
     if not isinstance(close_series, pd.Series):
         close_series = pd.Series([S0], index=pd.Index([pd.Timestamp.today()]))
     # --------------------------------
-    hist_tkr = ticker
+    hist_tkr = current_ticker(ctx) or ticker
+    S0 = float(current_spot(ctx))
     st.subheader("Asian géométrique – vue Notebook")
     avg_close = float(close_series.mean()) if close_series is not None else S0
     col1, col2 = st.columns(2)
     with col1:
         option_type_ag = st.selectbox("Type", ["call", "put"], key=_k("asian_geo_type"))
+        st.caption(f"Spot actuel ({hist_tkr}) : {S0:.2f}")
         strike_ag = st.slider(
             "Strike",
             min_value=0.6 * S0,

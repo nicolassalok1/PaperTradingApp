@@ -31,6 +31,8 @@ def render_tab_rainbow():
     if not isinstance(close_a, pd.Series) or close_a.empty:
         close_a = pd.Series([S0_a], index=pd.Index([pd.Timestamp.today()]))
     # --------------------------------
+    ticker_a = current_ticker(ctx) or ticker_a
+    S0_a = float(current_spot(ctx))
 
     st.subheader("Rainbow (2 sous-jacents) – vue Notebook")
     col1, col2 = st.columns(2)
@@ -80,6 +82,7 @@ def render_tab_rainbow():
             close_b = pd.Series([S0_a], index=pd.Index([pd.Timestamp.today()]))
     S0_b = float(close_b.iloc[-1]) if close_b is not None and not close_b.empty else float(S0_a)
 
+    st.caption(f"Spot actuel ({ticker_a or 'A'}) : {S0_a:.2f}")
     strike_anchor = float(S0_a)
     strike_val = st.slider(
         "Strike commun",

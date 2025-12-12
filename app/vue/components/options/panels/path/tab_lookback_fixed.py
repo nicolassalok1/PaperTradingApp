@@ -16,11 +16,13 @@ def render_tab_lookback_fixed():
     if not isinstance(close_series, pd.Series):
         close_series = pd.Series([S0], index=pd.Index([pd.Timestamp.today()]))
     # --------------------------------
-    hist_tkr = ticker
+    hist_tkr = current_ticker(ctx) or ticker
+    S0 = float(current_spot(ctx))
     st.subheader("Lookback fixed – vue Notebook")
     col1, col2 = st.columns(2)
     with col1:
         option_type_lbf = st.selectbox("Type", ["call", "put"], key=_k("lbf_type"))
+        st.caption(f"Spot actuel ({hist_tkr}) : {S0:.2f}")
         min_lbf = st.slider(
             "Min path",
             min_value=0.8 * S0,

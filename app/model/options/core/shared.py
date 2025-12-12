@@ -7,6 +7,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from app.utils.paths import CACHE_CSV_DIR
+
 
 def heatmap_axis(center: float, span: float, n_points: int = 11) -> np.ndarray:
     """Return a numeric axis around a center value."""
@@ -97,6 +99,7 @@ def get_cached_iv_for(
     option_type: str | None = None,
     k_tol: float = 0.05,
     t_tol: float = 0.05,
+    ticker: str | None = None,
 ):
     """
     Lightweight IV fetcher.
@@ -121,9 +124,9 @@ def get_cached_iv_for(
                 option_type = args[2]
 
     if df_iv is None or getattr(df_iv, "empty", True):
-        return None
+        return _fallback_iv_from_ticker(ticker)
     if K_target is None or T_target is None:
-        return None
+        return _fallback_iv_from_ticker(ticker)
 
     df = df_iv.copy()
     df["dk"] = np.abs(df["K"] - K_target) / max(K_target, 1e-6)
@@ -131,11 +134,57 @@ def get_cached_iv_for(
 
     df_filt = df[(df["dk"] <= k_tol) & (df["dt"] <= t_tol)]
     if df_filt.empty:
-        return None
+        return _fallback_iv_from_ticker(ticker)
 
     df_filt["score"] = df_filt["dt"] + df_filt["dk"]
     row = df_filt.sort_values("score").iloc[0]
     return float(row.get("iv_market", np.nan))
+
+
+def _fallback_iv_from_ticker(ticker: str | None) -> float | None:
+    if not ticker:
+        return None
+    iv_proxy = _iv_from_stooq_cache(ticker)
+    if iv_proxy is not None and np.isfinite(iv_proxy) and iv_proxy > 0:
+        return float(iv_proxy)
+    return None
+
+
+def _iv_from_stooq_cache(ticker: str) -> float | None:
+    """
+    Derive a simple volatility proxy from stooq OHLC cache:
+    annualized std of log returns.
+    """
+    tk = (ticker or "").strip().lower()
+    if not tk:
+        return None
+    candidates = [
+        CACHE_CSV_DIR / f"stooq_{tk}.us_start_end_d.csv",
+        CACHE_CSV_DIR / f"stooq_{tk}.us_start_end_D.csv",
+    ]
+    path = next((p for p in candidates if p.exists()), None)
+    if path is None:
+        return None
+    try:
+        df = pd.read_csv(path)
+    except Exception:
+        return None
+    close_col = next((c for c in df.columns if str(c).lower() == "close"), None)
+    if close_col is None:
+        return None
+    try:
+        prices = pd.to_numeric(df[close_col], errors="coerce").dropna()
+        if len(prices) > 252:
+            prices = prices.tail(252)  # recent year
+        if len(prices) < 2:
+            return None
+        log_ret = np.log(prices).diff().dropna()
+        if len(log_ret) == 0:
+            return None
+        sigma = float(log_ret.std() * np.sqrt(252))
+        return sigma if np.isfinite(sigma) and sigma > 0 else None
+    except Exception:
+        return None
 
 
 def pick_default_T(

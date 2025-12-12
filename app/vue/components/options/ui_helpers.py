@@ -32,6 +32,18 @@ def render_method_explainer(title: str, body: str) -> None:
 
 
 def _get_cached_iv_for(*args, **kwargs):
+    # try to inject ticker from session state when available
+    try:
+        st = __import__("streamlit")
+        ticker = (
+            st.session_state.get("common_underlying")
+            or st.session_state.get("tkr_common")
+            or st.session_state.get("ticker")
+        )
+        if ticker and "ticker" not in kwargs:
+            kwargs["ticker"] = ticker
+    except Exception:
+        pass
     try:
         return ui_get_cached_iv_for(*args, **kwargs)
     except Exception:

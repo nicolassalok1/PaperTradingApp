@@ -50,6 +50,33 @@ def ensure_close_history(ctx: dict) -> bool:
     )
     return False
 
+
+def current_ticker(ctx: dict) -> str:
+    """Return the active ticker used for charts/labels."""
+    return (ctx.get("ticker") or resolve_common_underlying() or "").strip().upper()
+
+
+def current_spot(ctx: dict) -> float:
+    """
+    Derive a spot anchor from the latest close when available,
+    then fallback to S0/context defaults.
+    """
+    close_series = ctx.get("close_series")
+    spot = None
+    try:
+        if hasattr(close_series, "dropna") and len(close_series.dropna()) > 0:
+            spot = float(close_series.dropna().iloc[-1])
+    except Exception:
+        spot = None
+    if spot is None and ctx.get("S0") is not None:
+        try:
+            spot = float(ctx.get("S0"))
+        except Exception:
+            spot = None
+    if spot is None:
+        spot = float(st.session_state.get("common_spot_value", 100.0))
+    return float(spot)
+
 # View/payoff builders
 view_asset_or_nothing = oc.view_asset_or_nothing
 view_barrier = oc.view_barrier
@@ -271,6 +298,8 @@ __all__ = [
     "option_char",
     "_k",
     "ensure_close_history",
+    "current_ticker",
+    "current_spot",
     "view_asset_or_nothing",
     "view_barrier",
     "view_butterfly",

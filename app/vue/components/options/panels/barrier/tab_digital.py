@@ -16,16 +16,17 @@ def render_tab_digital():
     # --------------------------------
     # Legacy defaults to avoid NameError
     option_char = st.session_state.get("option_char", "c")
-    common_spot_value = float(st.session_state.get("common_spot_value", S0))
-    spot_anchor = float(S0 if S0 is not None else common_spot_value)
+    common_spot_value = float(current_spot(ctx))
+    spot_anchor = float(common_spot_value)
     common_maturity_value = float(st.session_state.get("common_maturity_value", 1.0))
     common_rate_value = float(st.session_state.get("common_rate_value", 0.01))
     common_sigma_value = float(st.session_state.get("common_sigma_value", 0.2))
     d_common = float(st.session_state.get("d_common", 0.0))  # dividend yield
 
-    hist_tkr = ticker
+    hist_tkr = current_ticker(ctx) or ticker
     opt_label_dig, opt_char_dig = _choose_option_select("opt_choice_digital", option_char)
     option_label, option_char = opt_label_dig, opt_char_dig
+    st.caption(f"Spot actuel ({hist_tkr}) : {spot_anchor:.2f}")
     strike = st.slider(
         "Strike",
         min_value=0.5 * spot_anchor,
@@ -54,7 +55,7 @@ def render_tab_digital():
     else:
         st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
     view_dyn = view_digital(
-        float(common_spot_value),
+        float(spot_anchor),
         strike,
         T=float(T_dig),
         r=float(common_rate_value),
@@ -70,12 +71,7 @@ def render_tab_digital():
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(s_grid, payoff_grid, label="Payoff brut")
     ax.plot(s_grid, pnl_grid, label="P&L net", color="darkorange")
-    ax.axvline(
-        float(common_spot_value),
-        color="crimson",
-        linestyle="-.",
-        label=f"S_0 = {float(common_spot_value):.2f}",
-    )
+    ax.axvline(float(spot_anchor), color="crimson", linestyle="-.", label=f"S_0 = {float(spot_anchor):.2f}")
     ax.axhline(0, color="black", linewidth=0.8)
     ax.set_xlabel("Spot")
     ax.set_ylabel("Payoff / P&L")

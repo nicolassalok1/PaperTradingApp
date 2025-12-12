@@ -16,11 +16,12 @@ def render_tab_forward_start():
     if not isinstance(close_series, pd.Series):
         close_series = pd.Series([S0], index=pd.Index([pd.Timestamp.today()]))
     # --------------------------------
-    hist_tkr = ticker
-    # FIX: runtime crash detected by crawler (option_char unbound)
-    option_char = option_char if "option_char" in locals() else "c"
-    fs_label, fs_char = _choose_option_select("opt_choice_forward_start", option_char)
-    option_label, option_char = fs_label, fs_char
+    hist_tkr = current_ticker(ctx) or ticker
+    S0 = float(current_spot(ctx))
+    opt_char_base = option_char if option_char else "c"
+    _, fs_char = _choose_option_select("opt_choice_forward_start", opt_char_base)
+    option_char = fs_char
+    st.caption(f"Spot actuel ({hist_tkr}) : {S0:.2f}")
     spot_start = st.slider(
         "Spot de départ (S_start)",
         min_value=0.5 * float(S0),

@@ -19,6 +19,8 @@ def render_panel_path():
     if not available:
         return
 
+    st.caption(f"Spot actuel ({current_ticker(ctx) or ctx.get('ticker') or 'Ticker'}) : {current_spot(ctx):.2f}")
+
     path_labels = [
         "Asian",
         "Asian géométrique",

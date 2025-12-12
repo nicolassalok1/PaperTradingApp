@@ -14,22 +14,21 @@ def render_tab_quanto():
     if not ensure_close_history(ctx):
         return
     # --------------------------------
-    hist_tkr = ticker
+    hist_tkr = current_ticker(ctx) or ticker
 
     # --- Contexte exotiques ---
-    common_spot_value = float(st.session_state.get("common_spot_value", S0 if S0 is not None else 100.0))
-    hist_tkr = resolve_common_underlying()
-    base_spot = float(S0 if S0 is not None else common_spot_value)
-    S0 = base_spot
+    spot_base = float(current_spot(ctx))
+    S0 = spot_base
     # -----------------------------
     opt_label_quanto, opt_char_quanto = _choose_option_select("opt_choice_quanto", option_char)
     option_label = opt_label_quanto
     option_char_selected = opt_char_quanto
+    st.caption(f"Spot actuel ({hist_tkr}) : {spot_base:.2f}")
     strike = st.slider(
         "Strike",
-        min_value=0.5 * base_spot,
-        max_value=1.5 * base_spot,
-        value=base_spot,
+        min_value=0.5 * spot_base,
+        max_value=1.5 * spot_base,
+        value=spot_base,
         step=0.5,
         key=_k("quanto_k"),
     )
@@ -61,7 +60,7 @@ def render_tab_quanto():
     else:
         st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
     view_dyn = view_quanto(
-        float(common_spot_value),
+        float(spot_base),
         strike,
         fx_rate=fx_rate,
         r=float(common_rate_value),
@@ -78,12 +77,7 @@ def render_tab_quanto():
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(s_grid, payoff_grid, label="Payoff brut")
     ax.plot(s_grid, pnl_grid, label="P&L net", color="darkorange")
-    ax.axvline(
-        float(common_spot_value),
-        color="crimson",
-        linestyle="-.",
-        label=f"S_0 = {float(common_spot_value):.2f}",
-    )
+    ax.axvline(float(spot_base), color="crimson", linestyle="-.", label=f"S_0 = {float(spot_base):.2f}")
     ax.axhline(0, color="black", linewidth=0.8)
     ax.set_xlabel("Spot")
     ax.set_ylabel("Payoff / P&L")

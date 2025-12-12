@@ -12,6 +12,7 @@ def render_panel_calendar():
         st.session_state["common_spot_value"] = ctx["S0"]
     if not available:
         return
+    st.caption(f"Spot actuel ({current_ticker(ctx) or ctx.get('ticker') or 'Ticker'}) : {current_spot(ctx):.2f}")
 
     calendar_labels = [
         "Calendar Spread",

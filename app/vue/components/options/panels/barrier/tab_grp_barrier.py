@@ -22,10 +22,11 @@ def render_tab_grp_barrier():
     common_sigma_value = float(st.session_state.get("common_sigma_value", 0.2))
 
     st.subheader("Barrières (vanilla / binaire) – vue Notebook")
-    s0_ref = float(common_spot_value)
+    s0_ref = float(current_spot(ctx))
     hist_tkr, close_series = load_shared_close_series(s0_ref)
+    st.caption(f"Spot actuel ({hist_tkr or current_ticker(ctx) or ticker}) : {s0_ref:.2f}")
 
-    strike_anchor_bar = float(S0 if S0 is not None else common_spot_value)
+    strike_anchor_bar = float(s0_ref)
     col1, col2, col3 = st.columns(3)
     with col1:
         strike_b = st.slider(

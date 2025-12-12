@@ -16,13 +16,14 @@ def render_tab_cliquet():
     if not isinstance(close_series, pd.Series):
         close_series = pd.Series([S0], index=pd.Index([pd.Timestamp.today()]))
     # --------------------------------
-    hist_tkr = ticker
-    # FIX: runtime crash detected by crawler (option_char unbound)
-    option_char = option_char if "option_char" in locals() else "c"
-    clq_label, clq_char = _choose_option_select("opt_choice_cliquet_tab", option_char)
-    option_label, option_char = clq_label, clq_char
+    hist_tkr = current_ticker(ctx) or ticker
+    S0 = float(current_spot(ctx))
+    opt_char_base = option_char if option_char else "c"
+    _, clq_char = _choose_option_select("opt_choice_cliquet_tab", opt_char_base)
+    option_char = clq_char
     st.subheader("Cliquet / Ratchet – vue Notebook")
     k_cliquet_anchor = float(S0 if S0 is not None else common_spot_value)
+    st.caption(f"Spot actuel ({hist_tkr}) : {k_cliquet_anchor:.2f}")
     strike_clq = st.slider(
         "Strike / niveau de référence",
         min_value=0.6 * k_cliquet_anchor,

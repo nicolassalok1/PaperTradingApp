@@ -13,6 +13,7 @@ def render_panel_exotics():
         st.session_state["common_spot_value"] = ctx["S0"]
     if not available:
         return
+    st.caption(f"Spot actuel ({current_ticker(ctx) or ctx.get('ticker') or 'Ticker'}) : {current_spot(ctx):.2f}")
 
     exotic_labels = [
         "Quanto",
