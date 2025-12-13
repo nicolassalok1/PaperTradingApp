@@ -570,5 +570,172 @@ class CalibrationController:
             "mask": mask.tolist(),
         }
 
+    def get_advanced_models(self) -> list[Dict[str, Any]]:
+        """
+        Advanced calibration models exposed to the UI (new API).
+        Kept separate from V1 to avoid changing existing behavior.
+        """
+        return [
+            {"key": "sabr", "label": "SABR (Hagan analytic)", "pricing": "analytic_iv", "calibration": "least_squares", "expensive": False},
+            {"key": "merton_jump_diffusion", "label": "Jump Diffusion (Merton) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
+            {"key": "bates", "label": "Bates (Heston + Jumps) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
+            {"key": "heston_fft", "label": "Heston via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
+            {"key": "heston_v1", "label": "Heston (legacy V1 engine)", "pricing": "cf_integral", "calibration": "least_squares", "expensive": False},
+            {"key": "rheston", "label": "rHeston (Markovian approx) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": True},
+            {"key": "rbergomi", "label": "rBergomi (MC + surrogate)", "pricing": "mc", "calibration": "mc_surrogate", "expensive": True},
+            {"key": "volterra", "label": "Volterra SDE (MC proxy)", "pricing": "mc", "calibration": "mc_proxy", "expensive": True},
+        ]
+
+    def _json_safe(self, obj: Any) -> Any:
+        import numpy as _np
+
+        if obj is None or isinstance(obj, (str, int, float, bool)):
+            return obj
+        if isinstance(obj, _np.generic):
+            try:
+                return obj.item()
+            except Exception:
+                return float(obj)
+        if isinstance(obj, _np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, dict):
+            return {str(k): self._json_safe(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [self._json_safe(v) for v in obj]
+        return str(obj)
+
+    def run_advanced_surface_calibration(self, payload: Dict | None) -> Dict[str, Any]:
+        """
+        New unified calibration runner used by the Advanced Calibration tab.
+        All numerics live in the model layer; the controller only orchestrates.
+        """
+        from app.model.calibration.base_calibrator import CalibratorSettings, SurfaceGrid
+        from app.model.volatility_models.sabr.calibrator import SABRAnalyticCalibrator
+        from app.model.volatility_models.jump_diffusion.calibrator import MertonJumpDiffusionCalibrator
+        from app.model.volatility_models.jump_diffusion.calibrator_bates import BatesCalibrator
+        from app.model.volatility_models.heston.calibrator_fft import HestonFFTCalibrator
+        from app.model.volatility_models.heston.calibrator_legacy import HestonLegacyLeastSquaresCalibrator
+        from app.model.volatility_models.rheston.calibrator_fft import RHestonFFTMarkovianCalibrator
+        from app.model.volatility_models.rbergomi.calibrator_mc_surrogate import RBergomiMCSurrogateCalibrator
+        from app.model.volatility_models.volterra.calibrator_mc import VolterraSDECalibrator
+
+        data = payload or {}
+        model_key = str(data.get("model") or "").strip() or "heston_fft"
+        constraints = data.get("constraints") if isinstance(data.get("constraints"), dict) else None
+
+        r_val = float(data.get("r") or 0.0)
+        q_val = float(data.get("q") or 0.0)
+        fit_to_observed_only = bool(data.get("fit_to_observed_only", True))
+        max_nfev = int(data.get("max_nfev") or 80)
+        n_starts = int(data.get("n_starts") or 1)
+        seed_raw = data.get("seed")
+        try:
+            seed = int(seed_raw) if seed_raw is not None else None
+        except Exception:
+            seed = None
+
+        settings = CalibratorSettings(
+            fit_to_observed_only=fit_to_observed_only,
+            max_nfev=max_nfev,
+            n_starts=n_starts,
+            seed=seed,
+        )
+
+        csv_bytes = data.get("csv_bytes")
+        df = data.get("df")
+        market_df = load_market_surface_csv_v2(df if df is not None else csv_bytes)
+        if market_df is None or getattr(market_df, "empty", True):
+            return {"success": False, "message": "Surface vide / illisible.", "details": {}}
+
+        # Grids
+        m_grid = self._to_ndarray(data.get("m_grid"))
+        t_grid = self._to_ndarray(data.get("t_grid"))
+        if m_grid.size == 0 or t_grid.size == 0:
+            m_grid, t_grid = default_grid()
+
+        iv_market, mask = make_fixed_grid(market_df, m_grid, t_grid)
+
+        # Spot estimate (prefer explicit S0, else median from csv)
+        S0_val = data.get("S0")
+        if S0_val is None:
+            try:
+                if "S0" in market_df.columns:
+                    s0s = pd.to_numeric(market_df["S0"], errors="coerce")
+                    s0s = s0s[s0s > 0]
+                    S0_val = float(s0s.median()) if not s0s.empty else None
+            except Exception:
+                S0_val = None
+        S0_val = float(S0_val or 100.0)
+
+        surface = SurfaceGrid(
+            S0=S0_val,
+            r=r_val,
+            q=q_val,
+            m_grid=np.asarray(m_grid, dtype=float),
+            t_grid=np.asarray(t_grid, dtype=float),
+            iv_market=np.asarray(iv_market, dtype=float),
+            mask=np.asarray(mask, dtype=bool),
+        )
+
+        calibrator_map = {
+            "sabr": SABRAnalyticCalibrator(),
+            "merton_jump_diffusion": MertonJumpDiffusionCalibrator(),
+            "bates": BatesCalibrator(),
+            "heston_fft": HestonFFTCalibrator(),
+            "heston_v1": HestonLegacyLeastSquaresCalibrator(),
+            "rheston": RHestonFFTMarkovianCalibrator(),
+            "rbergomi": RBergomiMCSurrogateCalibrator(),
+            "volterra": VolterraSDECalibrator(),
+        }
+        calibrator = calibrator_map.get(model_key)
+        if calibrator is None:
+            return {"success": False, "message": f"Modèle inconnu: {model_key}", "details": {}}
+
+        try:
+            result = calibrator.calibrate(surface, constraints=constraints, settings=settings)
+        except Exception as exc:
+            return {"success": False, "message": f"Erreur calibration: {exc}", "details": {}}
+
+        return self._json_safe(
+            {
+                "success": bool(result.success),
+                "message": str(result.message),
+                "model": str(result.model),
+                "method": str(result.method),
+                "params": result.params,
+                "metrics": result.metrics or {},
+                "S0": float(surface.S0),
+                "r": float(surface.r),
+                "q": float(surface.q),
+                "m_grid": surface.m_grid,
+                "t_grid": surface.t_grid,
+                "iv_market": surface.iv_market,
+                "iv_model": result.iv_model,
+                "iv_error": result.iv_error,
+                "mask": surface.mask,
+                "details": result.details or {},
+            }
+        )
+
+    def kalman_smooth(self, payload: Dict | None) -> Dict[str, Any]:
+        """
+        State-space estimation helper (no pricing): smooth parameter sequences.
+        """
+        from app.model.volatility_models.kalman.kalman_filter import smooth_parameters_random_walk
+
+        data = payload or {}
+        y = data.get("y")
+        if y is None:
+            return {"success": False, "message": "Missing 'y' sequence.", "details": {}}
+        try:
+            y_arr = np.asarray(y, dtype=float)
+        except Exception:
+            return {"success": False, "message": "Invalid 'y' (must be numeric).", "details": {}}
+
+        q_noise = float(data.get("q") or 1e-4)
+        r_noise = float(data.get("r") or 1e-2)
+        out = smooth_parameters_random_walk(y=y_arr, q=q_noise, r=r_noise)
+        return self._json_safe({"success": True, "message": "OK", "details": out})
+
 
 __all__ = ["CalibrationController"]
