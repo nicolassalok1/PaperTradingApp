@@ -46,7 +46,7 @@ from app.model.options.core.iv import (
     CACHE_OPTIONS_PUTS_FILE,
     CLOSING_CACHE_FILE,
     fetch_option_history_to_cache,
-    load_cboe_data,
+    load_market_data,
     load_cached_option_chain,
     load_cached_option_history,
     load_options_meta,
@@ -90,7 +90,7 @@ from app.model.options.service import (
     price_and_greeks,
     price_option_mc,
     price_option_mc_unified,
-    price_european_from_cboe,
+    price_european_from_market,
 )
 from app.model.options.logic import download_options_alpaca as _download_options_alpaca
 from app.model.options.engines.tree import build_crr_tree, plot_crr_tree
@@ -118,7 +118,7 @@ def refresh_underlying_cache(ticker: str):
     if not symbol:
         raise ValueError("Ticker manquant pour rafraichir le cache.")
 
-    calls_df, puts_df, S0_ref, rf_rate, div_yield = load_cboe_data(symbol)
+    calls_df, puts_df, S0_ref, rf_rate, div_yield = load_market_data(symbol)
     save_cached_option_chain(symbol, calls_df, puts_df, S0_ref, rf_rate, div_yield)
     fetch_option_history_to_cache(symbol)
     return {
@@ -164,11 +164,31 @@ def compute_price_mc(option_dict, mc_model: str = "bs", n_paths: int = 10000, n_
     )
 
 
-def download_alpaca_options_chain(ticker: str):
+def download_alpaca_options_chain(
+    ticker: str,
+    *,
+    feed: str = "indicative",
+    max_pages: int = 10,
+    max_contracts: int | None = 2000,
+    min_days_to_expiry: int | None = 1,
+    include_spot: bool = True,
+    cache_to_csv: bool = True,
+):
     """
     Thin wrapper to expose Alpaca options snapshots to the UI via the controller.
+
+    `max_pages` / `max_contracts` control how many contracts we attempt to pull beyond
+    the first page (Alpaca snapshots are paginated).
     """
-    return _download_options_alpaca(ticker)
+    return _download_options_alpaca(
+        ticker,
+        feed=feed,
+        max_pages=max_pages,
+        max_contracts=max_contracts,
+        min_days_to_expiry=min_days_to_expiry,
+        include_spot=include_spot,
+        cache_to_csv=cache_to_csv,
+    )
 
 
 __all__ = [
@@ -179,7 +199,7 @@ __all__ = [
     "load_iv_surface",
     "price_and_greeks",
     "compute_price_mc",
-    "price_european_from_cboe",
+    "price_european_from_market",
     "price_option_mc_unified",
     "download_alpaca_options_chain",
     # Black-Scholes / spreads
@@ -267,7 +287,7 @@ __all__ = [
     "CACHE_OPTIONS_PUTS_FILE",
     "CLOSING_CACHE_FILE",
     "fetch_option_history_to_cache",
-    "load_cboe_data",
+    "load_market_data",
     "load_cached_option_chain",
     "load_cached_option_history",
     "load_options_meta",

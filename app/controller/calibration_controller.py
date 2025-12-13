@@ -27,7 +27,7 @@ from app.model.calibration.market_surface import (
 )
 from app.model.calibration.heston_pricer import price_grid_from_params
 from app.model.calibration.implied_vol import implied_vol_grid
-from app.model.calibration.heston_nn import predict_params, WEIGHTS_PATH
+from app.model.calibration.heston_nn import WEIGHTS_PATH, predict_params, train_heston_surface_net
 from app.model.calibration.storage import (
     list_results as list_calibration_results,
     load_result as load_calibration_result,
@@ -92,11 +92,63 @@ class CalibrationController:
 
     def get_heston_nn_info(self) -> Dict[str, Any]:
         """Expose whether Heston NN weights are available on disk."""
+        info: Dict[str, Any] = {"weights_path": str(WEIGHTS_PATH), "weights_exists": False}
         try:
             exists = bool(WEIGHTS_PATH.exists())
         except Exception:
             exists = False
-        return {"weights_path": str(WEIGHTS_PATH), "weights_exists": exists}
+        info["weights_exists"] = exists
+        if exists:
+            try:
+                st = WEIGHTS_PATH.stat()
+                info["size_bytes"] = int(st.st_size)
+                info["mtime"] = float(st.st_mtime)
+            except Exception:
+                pass
+        return info
+
+    def train_heston_nn_weights(self, payload: Dict | None) -> Dict[str, Any]:
+        data = payload or {}
+        n_samples = int(data.get("n_samples") or 2000)
+        epochs = int(data.get("epochs") or 25)
+        batch_size = int(data.get("batch_size") or 64)
+        lr = float(data.get("lr") or 1e-3)
+        device = str(data.get("device") or "cpu")
+        seed = data.get("seed")
+        try:
+            seed_i = int(seed) if seed is not None else 42
+        except Exception:
+            seed_i = None
+        u_max = float(data.get("u_max") or 50.0)
+        n_integration = int(data.get("n_integration") or 800)
+        S0 = float(data.get("S0") or 100.0)
+        r = float(data.get("r") or 0.02)
+        q = float(data.get("q") or 0.0)
+
+        try:
+            res = train_heston_surface_net(
+                n_samples=n_samples,
+                epochs=epochs,
+                batch_size=batch_size,
+                lr=lr,
+                device=device,
+                seed=seed_i,
+                u_max=u_max,
+                n_integration=n_integration,
+                S0=S0,
+                r=r,
+                q=q,
+                weights_path=WEIGHTS_PATH,
+            )
+        except Exception as exc:
+            return {"success": False, "message": str(exc), "details": {}}
+
+        return {
+            "success": True,
+            "message": "Poids NN entraînés.",
+            "details": res,
+            "nn_info": self.get_heston_nn_info(),
+        }
 
     def get_heston_default_bounds(self) -> Dict[str, Any]:
         """Expose default calibration bounds for UI builder."""

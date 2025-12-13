@@ -10,6 +10,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Tuple
+from urllib.parse import quote
 
 import pandas as pd
 import requests
@@ -25,6 +26,16 @@ try:  # optional dependency
 except Exception:  # pragma: no cover
     AlpacaREST = None  # type: ignore
     TimeFrame = None  # type: ignore
+
+
+ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
+
+_YAHOO_HEADERS_BASE: dict[str, str] = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+_YAHOO_OPTIONS_SESSION: requests.Session | None = None
+_YAHOO_OPTIONS_CRUMB: str | None = None
 
 
 def _load_env_fallback() -> None:
@@ -62,11 +73,98 @@ def make_alpaca_client():
         return None
 
 
+def _alpaca_data_headers() -> dict[str, str] | None:
+    key, secret, _ = _alpaca_credentials()
+    if not key or not secret:
+        return None
+    return {
+        "APCA-API-KEY-ID": key,
+        "APCA-API-SECRET-KEY": secret,
+    }
+
+
+def _alpaca_latest_trade_price(symbol: str, *, feed: str | None = "iex") -> float | None:
+    """
+    Latest trade via Alpaca Stock Market Data API.
+
+    Uses IEX by default (works on free plans); can be overridden via feed.
+    """
+    headers = _alpaca_data_headers()
+    if not headers:
+        return None
+
+    url = f"{ALPACA_DATA_BASE_URL}/v2/stocks/{symbol}/trades/latest"
+    params: dict[str, str] = {}
+    if feed:
+        params["feed"] = str(feed)
+
+    try:
+        resp = requests.get(url, headers=headers, params=params, timeout=5)
+        if resp.status_code != 200:
+            return None
+        payload = resp.json() or {}
+        trade = payload.get("trade") if isinstance(payload, dict) else None
+        if not isinstance(trade, dict):
+            trade = {}
+        px = trade.get("p") or trade.get("price") or payload.get("price")
+        return float(px) if px is not None else None
+    except Exception:
+        return None
+
+
+def _alpaca_latest_quote_mid(symbol: str, *, feed: str | None = "iex") -> float | None:
+    """Fallback mid price from the latest quote via Alpaca Stock Market Data API."""
+    headers = _alpaca_data_headers()
+    if not headers:
+        return None
+
+    url = f"{ALPACA_DATA_BASE_URL}/v2/stocks/{symbol}/quotes/latest"
+    params: dict[str, str] = {}
+    if feed:
+        params["feed"] = str(feed)
+
+    try:
+        resp = requests.get(url, headers=headers, params=params, timeout=5)
+        if resp.status_code != 200:
+            return None
+        payload = resp.json() or {}
+        quote = payload.get("quote") if isinstance(payload, dict) else None
+        if not isinstance(quote, dict):
+            quote = {}
+        bid = quote.get("bp") or quote.get("bid_price") or quote.get("bidPrice")
+        ask = quote.get("ap") or quote.get("ask_price") or quote.get("askPrice")
+
+        bid_f = float(bid) if bid is not None else None
+        ask_f = float(ask) if ask is not None else None
+        if bid_f is not None and ask_f is not None:
+            return 0.5 * (bid_f + ask_f)
+        return ask_f if ask_f is not None else bid_f
+    except Exception:
+        return None
+
+
 def fetch_spot_price(symbol: str):
-    """Spot price: Alpaca latest trade -> Stooq last close."""
+    """
+    Spot price: Alpaca latest trade (data API) -> quote mid -> legacy SDK -> Stooq last close.
+
+    Notes:
+    - We prefer the data API because `alpaca_trade_api` is an optional dependency.
+    - Stooq can be rate-limited; we treat it as a best-effort fallback.
+    """
     sym = (symbol or "").strip().upper()
     if not sym:
         return None
+
+    feed = os.getenv("ALPACA_STOCK_DATA_FEED") or "iex"
+    px = _alpaca_latest_trade_price(sym, feed=feed)
+    if px is None and feed:
+        px = _alpaca_latest_trade_price(sym, feed=None)
+    if px is None:
+        px = _alpaca_latest_quote_mid(sym, feed=feed)
+        if px is None and feed:
+            px = _alpaca_latest_quote_mid(sym, feed=None)
+    if px is not None:
+        return float(px)
 
     client = make_alpaca_client()
     if client is not None:
@@ -83,16 +181,188 @@ def fetch_spot_price(symbol: str):
 
 def fetch_closing_prices(symbol: str, period: str = "2y", interval: str = "1d") -> pd.DataFrame:
     """
-    Historical prices via Stooq. period/interval kept for compatibility.
+    Historical closing prices.
+    Primary source: Stooq (free).
+    Fallback: Yahoo chart endpoint (when Stooq is rate-limited/unavailable).
     """
     sym = (symbol or "").strip().upper()
     if not sym:
         return pd.DataFrame()
     df = _fetch_stooq_history(sym, freq="d")
+    if df is not None and not df.empty:
+        df = df.rename(columns={"date": "Date", "close": sym})
+        return df[["Date", sym]]
+
+    df_y = _fetch_yahoo_ohlc(sym, period=period, interval=interval)
+    if df_y is None or df_y.empty:
+        return pd.DataFrame()
+    df_y = df_y.rename(columns={"Close": sym})
+    return df_y[["Date", sym]]
+
+
+def _period_to_days(period: str) -> int | None:
+    p = (period or "").strip().lower()
+    if not p:
+        return None
+    try:
+        if p.endswith("y"):
+            return int(float(p[:-1]) * 365)
+        if p.endswith("mo"):
+            return int(float(p[:-2]) * 30)
+        if p.endswith("w"):
+            return int(float(p[:-1]) * 7)
+        if p.endswith("d"):
+            return int(float(p[:-1]))
+    except Exception:
+        return None
+    return None
+
+
+def _filter_to_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
+    if df is None or df.empty or "Date" not in df.columns:
+        return pd.DataFrame()
+    days = _period_to_days(period)
+    if not days or days <= 0:
+        return df
+    try:
+        cutoff = pd.Timestamp.now(tz=None).normalize() - pd.Timedelta(days=int(days))
+        return df[df["Date"] >= cutoff]
+    except Exception:
+        return df
+
+
+def _standardize_ohlc(df: pd.DataFrame, *, ticker: str | None = None) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
-    df = df.rename(columns={"date": "Date", "close": sym})
-    return df[["Date", sym]]
+
+    cols = {str(c).strip().lower(): c for c in df.columns}
+
+    date_col = (
+        cols.get("date")
+        or cols.get("datetime")
+        or cols.get("timestamp")
+        or cols.get("time")
+        or next(iter(df.columns), None)
+    )
+    if date_col is None:
+        return pd.DataFrame()
+
+    def _pick(*names: str) -> str | None:
+        for n in names:
+            c = cols.get(n)
+            if c is not None:
+                return c
+        return None
+
+    open_col = _pick("open")
+    high_col = _pick("high")
+    low_col = _pick("low")
+    close_col = _pick("close")
+    vol_col = _pick("volume", "vol")
+
+    if close_col is None and ticker:
+        tkr = (ticker or "").strip().upper()
+        close_col = next(
+            (c for c in df.columns if str(c).strip().upper() == tkr),
+            None,
+        )
+
+    if close_col is None and len(df.columns) >= 2:
+        close_col = df.columns[1]
+
+    out = pd.DataFrame()
+    out["Date"] = pd.to_datetime(df[date_col], errors="coerce")
+    if open_col is not None:
+        out["Open"] = pd.to_numeric(df[open_col], errors="coerce")
+    if high_col is not None:
+        out["High"] = pd.to_numeric(df[high_col], errors="coerce")
+    if low_col is not None:
+        out["Low"] = pd.to_numeric(df[low_col], errors="coerce")
+    out["Close"] = pd.to_numeric(df[close_col], errors="coerce")
+    if vol_col is not None:
+        out["Volume"] = pd.to_numeric(df[vol_col], errors="coerce")
+
+    out = out.dropna(subset=["Date", "Close"]).sort_values("Date").reset_index(drop=True)
+    return out
+
+
+def _find_stooq_cache_path(symbol: str) -> Path | None:
+    mapped = map_to_stooq(symbol)
+    if not mapped:
+        return None
+    candidates = [
+        CACHE_CSV_DIR / f"stooq_{mapped}_start_end_D.csv",
+        CACHE_CSV_DIR / f"stooq_{mapped}_start_end_d.csv",
+    ]
+    return next((p for p in candidates if p.exists()), None)
+
+
+def _fetch_yahoo_ohlc(symbol: str, *, period: str = "2y", interval: str = "1d") -> pd.DataFrame:
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return pd.DataFrame()
+
+    rng = (period or "2y").strip().lower()
+    itv = (interval or "1d").strip().lower()
+
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{quote(sym)}"
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    try:
+        resp = requests.get(url, params={"range": rng, "interval": itv}, headers=headers, timeout=12)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as exc:
+        logging.info(f"[yahoo-chart] fetch failed for {sym} ({rng}/{itv}): {exc}")
+        return pd.DataFrame()
+
+    try:
+        result = (payload.get("chart") or {}).get("result") or []
+        root = result[0] if result and isinstance(result[0], dict) else {}
+        timestamps = root.get("timestamp") or []
+        indicators = (root.get("indicators") or {}).get("quote") or []
+        quote0 = indicators[0] if indicators and isinstance(indicators[0], dict) else {}
+        if not timestamps or not quote0:
+            return pd.DataFrame()
+
+        dt_index = pd.to_datetime(pd.Series(timestamps, dtype="int64"), unit="s", utc=True)
+        dates = dt_index.dt.tz_convert(None)
+
+        df = pd.DataFrame(
+            {
+                "Date": dates,
+                "Open": quote0.get("open", []),
+                "High": quote0.get("high", []),
+                "Low": quote0.get("low", []),
+                "Close": quote0.get("close", []),
+                "Volume": quote0.get("volume", []),
+            }
+        )
+        return _standardize_ohlc(df, ticker=sym)
+    except Exception:
+        return pd.DataFrame()
+
+
+def fetch_ohlc_history(symbol: str, *, period: str = "2y", interval: str = "1d") -> pd.DataFrame:
+    """
+    Fetch OHLC history for a symbol.
+    Primary source: Stooq (cached when available).
+    Fallback: Yahoo chart endpoint.
+    """
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return pd.DataFrame()
+
+    try:
+        df_stooq = _fetch_stooq_history(sym, freq="d")
+        df_std = _standardize_ohlc(df_stooq, ticker=sym)
+        df_std = _filter_to_period(df_std, period)
+        if df_std is not None and not df_std.empty:
+            return df_std
+    except Exception:
+        pass
+
+    df_y = _fetch_yahoo_ohlc(sym, period=period, interval=interval)
+    return _filter_to_period(df_y, period) if df_y is not None else pd.DataFrame()
 
 
 def _cache_path(ticker: str, period: str, interval: str) -> Path:
@@ -114,12 +384,63 @@ def load_or_fetch_closing_history(
         if not p.exists():
             continue
         try:
-            df = pd.read_csv(p, parse_dates=["Date"])
+            df_raw = pd.read_csv(p)
+            df = _standardize_ohlc(df_raw, ticker=tk)
+            df = _filter_to_period(df, period)
             if df is not None and not df.empty:
+                # If we loaded the legacy close-only cache, materialize the new OHLC filename.
+                if p == legacy_path:
+                    try:
+                        CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
+                        df.to_csv(path, index=False)
+                    except Exception:
+                        pass
+                    return df, path, True
+
+                # If we have a close-only cache, attempt an in-place OHLC upgrade.
+                needs_upgrade = not {"Open", "High", "Low"}.issubset(set(df.columns))
+                if needs_upgrade:
+                    df_full = pd.DataFrame()
+                    try:
+                        stooq_path = _find_stooq_cache_path(tk)
+                        if stooq_path is not None:
+                            df_full = _standardize_ohlc(pd.read_csv(stooq_path), ticker=tk)
+                        if df_full is None or df_full.empty:
+                            df_full = fetch_ohlc_history(tk, period=period, interval=interval)
+                        df_full = _filter_to_period(df_full, period)
+                    except Exception:
+                        df_full = pd.DataFrame()
+
+                    if df_full is not None and not df_full.empty:
+                        try:
+                            CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
+                            df_full.to_csv(path, index=False)
+                        except Exception:
+                            pass
+                        return df_full, path, False
+
                 return df, p, True
         except Exception:
             pass
-    df = fetch_closing_prices(tk, period=period, interval=interval)
+
+    # Best-effort: rebuild `ohlc_*` from an existing stooq_* cache (no network).
+    stooq_path = _find_stooq_cache_path(tk)
+    if stooq_path is not None:
+        try:
+            df_raw = pd.read_csv(stooq_path)
+            df = _standardize_ohlc(df_raw, ticker=tk)
+            df = _filter_to_period(df, period)
+            if df is not None and not df.empty:
+                try:
+                    CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
+                    df.to_csv(path, index=False)
+                except Exception:
+                    pass
+                return df, path, False
+        except Exception:
+            pass
+
+    df = fetch_ohlc_history(tk, period=period, interval=interval)
     if df is not None and not df.empty:
         try:
             CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
@@ -154,9 +475,49 @@ def fetch_options_details(
     )
 
 
+def _get_yahoo_options_session() -> requests.Session:
+    global _YAHOO_OPTIONS_SESSION
+    if _YAHOO_OPTIONS_SESSION is None:
+        _YAHOO_OPTIONS_SESSION = requests.Session()
+    return _YAHOO_OPTIONS_SESSION
+
+
+def _refresh_yahoo_crumb(session: requests.Session) -> str | None:
+    """
+    Yahoo Finance options endpoint requires a `crumb` tied to cookies.
+    Best-effort crumb retrieval using the public test endpoint.
+    """
+    try:
+        session.get("https://fc.yahoo.com", headers=_YAHOO_HEADERS_BASE, timeout=12)
+    except Exception:
+        pass
+
+    try:
+        resp = session.get(
+            "https://query1.finance.yahoo.com/v1/test/getcrumb",
+            headers={**_YAHOO_HEADERS_BASE, "Accept": "*/*"},
+            timeout=12,
+        )
+        resp.raise_for_status()
+        crumb = (resp.text or "").strip()
+        if not crumb or "<html" in crumb.lower():
+            return None
+        return crumb
+    except Exception as exc:
+        logging.warning(f"[yahoo-crumb] fetch failed: {exc}")
+        return None
+
+
+def _get_yahoo_crumb(session: requests.Session, *, force_refresh: bool = False) -> str | None:
+    global _YAHOO_OPTIONS_CRUMB
+    if force_refresh or not _YAHOO_OPTIONS_CRUMB:
+        _YAHOO_OPTIONS_CRUMB = _refresh_yahoo_crumb(session)
+    return _YAHOO_OPTIONS_CRUMB
+
+
 def _yahoo_options_url(symbol: str) -> str:
     sym = (symbol or "").strip().upper()
-    return f"https://query2.finance.yahoo.com/v7/finance/options/{sym}"
+    return f"https://query1.finance.yahoo.com/v7/finance/options/{sym}"
 
 
 def _fetch_yahoo_options_json(symbol: str, *, expiry_ts: int | None = None) -> dict:
@@ -169,16 +530,23 @@ def _fetch_yahoo_options_json(symbol: str, *, expiry_ts: int | None = None) -> d
         return {}
 
     url = _yahoo_options_url(sym)
-    params: dict[str, int] = {}
+    session = _get_yahoo_options_session()
+
+    params: dict[str, int | str] = {}
     if expiry_ts is not None:
         params["date"] = int(expiry_ts)
 
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
-    }
+    headers = {**_YAHOO_HEADERS_BASE, "Accept": "application/json"}
+    crumb = _get_yahoo_crumb(session)
+    if crumb:
+        params["crumb"] = crumb
     try:
-        resp = requests.get(url, params=params, headers=headers, timeout=12)
+        resp = session.get(url, params=params, headers=headers, timeout=12)
+        if resp.status_code == 401 and "Invalid Crumb" in (resp.text or ""):
+            crumb2 = _get_yahoo_crumb(session, force_refresh=True)
+            if crumb2:
+                params["crumb"] = crumb2
+                resp = session.get(url, params=params, headers=headers, timeout=12)
         resp.raise_for_status()
         payload = resp.json()
         return payload if isinstance(payload, dict) else {}
@@ -377,6 +745,7 @@ __all__ = [
     "make_alpaca_client",
     "fetch_spot_price",
     "fetch_closing_prices",
+    "fetch_ohlc_history",
     "fetch_options_details",
     "fetch_options_details_yahoo",
     "load_or_fetch_closing_history",

@@ -12,10 +12,27 @@ from app.vue.components.page_utils import render_page_header
 _CHAIN_STATE_KEY = "alpaca_options_chain_df"
 _CHAIN_TICKER_KEY = "alpaca_options_chain_ticker"
 _TICKERS_STATE_KEY = "alpaca_options_underlyings"
+_TICKERS_META_STATE_KEY = "alpaca_options_underlyings_meta"
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _resolve_repo_relative_path(path: Path) -> Path:
+    try:
+        if path.is_absolute():
+            return path
+    except Exception:
+        pass
+    return _REPO_ROOT / path
 
 _OPTIONABLE_TICKERS_CSV = Path(
     os.getenv("ALPACA_OPTIONABLE_TICKERS_PATH", "data/alpaca_optionable_tickers.csv")
 )
+_OPTIONABLE_TICKERS_CSV = _resolve_repo_relative_path(_OPTIONABLE_TICKERS_CSV)
+
+_PREFERRED_DEFAULTS: list[str] = ["SPY", "AAPL", "MSFT", "TSLA", "QQQ"]
+_DEFAULT_MAX_PAGES = 10
+_DEFAULT_MAX_CONTRACTS = 2000
 
 
 def _to_float(val) -> float:
@@ -155,42 +172,149 @@ def _render_option_market_order_form() -> None:
 
     # --- Load / cache the optionable underlyings from CSV (built offline) ---
     tickers = st.session_state.get(_TICKERS_STATE_KEY)
-    if tickers is None:
+    tickers_meta = st.session_state.get(_TICKERS_META_STATE_KEY)
+
+    if tickers is None or tickers_meta is None:
         tickers = []
+        tickers_meta = {"n_contracts_by_symbol": {}}
         try:
             if _OPTIONABLE_TICKERS_CSV.exists():
                 df_tickers = pd.read_csv(_OPTIONABLE_TICKERS_CSV)
                 if not df_tickers.empty:
-                    col = "symbol" if "symbol" in df_tickers.columns else df_tickers.columns[0]
-                    symbols = df_tickers[col].dropna().astype(str)
-                    tickers = sorted({s.strip().upper() for s in symbols if s.strip()})
+                    sym_col = "symbol" if "symbol" in df_tickers.columns else df_tickers.columns[0]
+                    df_tickers = df_tickers.copy()
+                    df_tickers[sym_col] = df_tickers[sym_col].astype(str).str.strip().str.upper()
+                    df_tickers = df_tickers[df_tickers[sym_col] != ""].copy()
+                    tickers = sorted(set(df_tickers[sym_col].tolist()))
+
+                    if "n_contracts" in df_tickers.columns:
+                        df_tickers["n_contracts"] = pd.to_numeric(df_tickers["n_contracts"], errors="coerce")
+                        counts = (
+                            df_tickers.dropna(subset=["n_contracts"])
+                            .groupby(sym_col)["n_contracts"]
+                            .max()
+                            .astype(int)
+                            .to_dict()
+                        )
+                        tickers_meta["n_contracts_by_symbol"] = counts
         except Exception as exc:
             st.warning(f"Unable to load optionable tickers list: {exc}")
             tickers = []
+            tickers_meta = {"n_contracts_by_symbol": {}}
+
         st.session_state[_TICKERS_STATE_KEY] = tickers
+        st.session_state[_TICKERS_META_STATE_KEY] = tickers_meta
+
+    if tickers:
+        st.caption(f"{len(tickers):,} optionable underlyings loaded from {_OPTIONABLE_TICKERS_CSV}")
+    else:
+        if _OPTIONABLE_TICKERS_CSV.exists():
+            st.warning(f"Optionable tickers CSV is empty: {_OPTIONABLE_TICKERS_CSV}")
+        else:
+            st.info(
+                "Optionable tickers CSV not found. Generate it with:\n"
+                "`python scripts/build_optionable_universe.py`"
+            )
 
     # --- Choose underlying & load the options chain ---
     default_ticker = st.session_state.get(_CHAIN_TICKER_KEY)
-    col_ticker, col_button = st.columns([3, 1])
+    col_ticker, col_reload, col_button = st.columns([3, 1, 1])
     with col_ticker:
         if tickers:
             if not default_ticker or default_ticker not in tickers:
-                default_ticker = tickers[0]
+                for sym in _PREFERRED_DEFAULTS:
+                    if sym in tickers:
+                        default_ticker = sym
+                        break
+                else:
+                    default_ticker = tickers[0]
+
+            counts_by_symbol = (tickers_meta or {}).get("n_contracts_by_symbol") or {}
+
+            def _format_ticker(sym: str) -> str:
+                try:
+                    n = counts_by_symbol.get(sym)
+                except Exception:
+                    n = None
+                if n is None:
+                    return sym
+                try:
+                    n_int = int(n)
+                except Exception:
+                    return sym
+                suffix = "+" if n_int >= 100 else ""
+                return f"{sym} ({n_int}{suffix})"
+
             ticker = st.selectbox(
                 "Underlying ticker",
                 options=tickers,
                 index=tickers.index(default_ticker),
+                format_func=_format_ticker,
             )
         else:
             default_ticker = default_ticker or "AAPL"
             ticker = st.text_input("Underlying ticker", default_ticker).upper().strip()
+    with col_reload:
+        if st.button("Reload list", type="secondary", use_container_width=True):
+            st.session_state.pop(_TICKERS_STATE_KEY, None)
+            st.session_state.pop(_TICKERS_META_STATE_KEY, None)
+            st.rerun()
     with col_button:
         load_clicked = st.button("Load options chain", use_container_width=True)
+
+    with st.expander("Advanced: fetch settings", expanded=False):
+        st.caption("Tip: Alpaca snapshots are paginated (often ~100 contracts/page). Increase pages/contracts if needed.")
+        feed = st.selectbox(
+            "Options feed",
+            options=["indicative", "opra"],
+            index=0,
+            help="`indicative` is usually available; `opra` may require OPRA agreement/subscription.",
+            key="alpaca_options_feed",
+        )
+        max_pages = st.slider(
+            "Max pages",
+            min_value=1,
+            max_value=50,
+            value=_DEFAULT_MAX_PAGES,
+            step=1,
+            key="alpaca_options_max_pages",
+        )
+        max_contracts = st.number_input(
+            "Max contracts",
+            min_value=100,
+            max_value=20000,
+            value=_DEFAULT_MAX_CONTRACTS,
+            step=100,
+            key="alpaca_options_max_contracts",
+        )
+        min_days_to_expiry = st.number_input(
+            "Min days to expiry",
+            min_value=0,
+            max_value=365,
+            value=1,
+            step=1,
+            help="Use 0 to include same-day expiry contracts.",
+            key="alpaca_options_min_days_to_expiry",
+        )
+        cache_to_csv = st.checkbox(
+            "Cache chain to CSV",
+            value=True,
+            help="Writes `cache/options_alpaca_{TICKER}.csv` for debugging/reuse.",
+            key="alpaca_options_cache_to_csv",
+        )
 
     if load_clicked and ticker:
         try:
             with st.spinner(f"Loading options for {ticker} from Alpaca..."):
-                df_chain = opt_ctrl.download_alpaca_options_chain(ticker)
+                df_chain = opt_ctrl.download_alpaca_options_chain(
+                    ticker,
+                    feed=str(feed or "indicative"),
+                    max_pages=int(max_pages),
+                    max_contracts=int(max_contracts) if max_contracts else None,
+                    min_days_to_expiry=int(min_days_to_expiry) if min_days_to_expiry is not None else 1,
+                    include_spot=True,
+                    cache_to_csv=bool(cache_to_csv),
+                )
         except Exception as exc:
             st.error(f"Unable to load options from Alpaca: {exc}")
             df_chain = None
@@ -208,6 +332,21 @@ def _render_option_market_order_form() -> None:
         st.info("Load an options chain above to select a contract, or use manual OPRA entry below.")
         _render_manual_opra_form()
         return
+
+    spot_val = None
+    try:
+        if "S0" in df_chain.columns:
+            s0 = pd.to_numeric(df_chain["S0"], errors="coerce").dropna()
+            if not s0.empty:
+                spot_val = float(s0.iloc[0])
+    except Exception:
+        spot_val = None
+
+    chain_ticker = st.session_state.get(_CHAIN_TICKER_KEY) or str(ticker or "").strip().upper()
+    col_m1, col_m2, col_m3 = st.columns(3)
+    col_m1.metric("Underlying", chain_ticker or "n/a")
+    col_m2.metric("Spot price", f"${spot_val:,.2f}" if spot_val is not None and spot_val == spot_val else "n/a")
+    col_m3.metric("Contracts loaded", f"{len(df_chain):,}")
 
     df = df_chain.copy()
     required_cols = {"opra", "K", "T", "type"}

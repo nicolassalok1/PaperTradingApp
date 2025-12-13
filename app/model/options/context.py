@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.model.market_data.market_data import fetch_closing_prices, fetch_spot_price
+from app.model.market_data.market_data import fetch_spot_price, load_or_fetch_closing_history
 
 
 def _extract_close_series(df: pd.DataFrame) -> pd.Series:
@@ -34,15 +34,25 @@ def build_option_context(ticker: str) -> dict:
             "close_available": False,
             "_k": lambda name: f"__EMPTY__{name}",
         }
+
+    close_series = pd.Series(dtype=float)
+    close_available = False
     try:
-        close_series = load_close_series_for_ticker(tk)
+        df_hist, _, _ = load_or_fetch_closing_history(tk, period="2y", interval="1d")
+        if df_hist is not None and not df_hist.empty:
+            close_series = _extract_close_series(df_hist)
+            close_available = close_series is not None and not close_series.empty
     except Exception:
         close_series = pd.Series(dtype=float)
-    close_available = close_series is not None and not close_series.empty
-    if close_series is None or len(close_series) == 0:
-        closes_df = fetch_closing_prices(tk, period="2y", interval="1d")
-        close_series = _extract_close_series(closes_df)
-        close_available = close_series is not None and not close_series.empty
+        close_available = False
+
+    if close_series is None or close_series.empty:
+        try:
+            close_series = load_close_series_for_ticker(tk)
+            close_available = close_series is not None and not close_series.empty
+        except Exception:
+            close_series = pd.Series(dtype=float)
+            close_available = False
 
     s0 = None
     if close_series is not None and not close_series.empty:

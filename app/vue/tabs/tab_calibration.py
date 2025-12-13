@@ -463,7 +463,12 @@ def _surface_diagnostics(df: pd.DataFrame) -> None:
         except Exception:
             pass
 
-    with st.expander("Nuage de points (moneyness × T, couleur=IV)", expanded=False):
+    show_scatter = st.checkbox(
+        "Afficher le nuage de points (moneyness x T, couleur=IV)",
+        value=False,
+        key="calib_diag_show_scatter",
+    )
+    if show_scatter:
         try:
             dfp = dfw.copy()
             if len(dfp) > 4000:
@@ -481,7 +486,10 @@ def _surface_diagnostics(df: pd.DataFrame) -> None:
                         size=5,
                         opacity=0.7,
                     ),
-                    text=[f"K={k:.2f}, T={tt:.3f}, IV={vv:.3f}" for k, tt, vv in zip(dfp["K"], dfp["T"], dfp["iv"])],
+                    text=[
+                        f"K={k:.2f}, T={tt:.3f}, IV={vv:.3f}"
+                        for k, tt, vv in zip(dfp["K"], dfp["T"], dfp["iv"])
+                    ],
                     hoverinfo="text",
                 )
             )
@@ -513,8 +521,9 @@ def render_tab() -> None:
         )
 
     nn_info = ctrl.get_heston_nn_info()
+    weights_exists = bool(nn_info.get("weights_exists"))
     with col_method:
-        if nn_info.get("weights_exists"):
+        if weights_exists:
             method = st.selectbox(
                 "Méthode",
                 options=["least_squares", "neural_net"],
@@ -529,6 +538,141 @@ def render_tab() -> None:
     if model_choice != "heston":
         st.info("Sélectionnez HESTON pour lancer la calibration.")
         return
+
+    with st.expander("Neural Net (entraîner les poids)", expanded=False):
+        st.caption(f"Chemin: {nn_info.get('weights_path')}")
+        if weights_exists:
+            size_bytes = nn_info.get("size_bytes")
+            try:
+                kb = int(size_bytes) // 1024 if size_bytes is not None else None
+            except Exception:
+                kb = None
+            suffix = f" ({kb} KB)" if kb else ""
+            st.success(f"Poids détectés{suffix}.")
+            allow_overwrite = st.checkbox(
+                "Ré-entraîner et écraser les poids",
+                value=False,
+                key="calib_nn_train_overwrite",
+            )
+        else:
+            st.warning("Poids absents: entraîne le NN pour activer la méthode Neural Net.")
+            allow_overwrite = True
+
+        preset = st.selectbox(
+            "Preset",
+            options=["Rapide", "Qualité"],
+            index=0,
+            key="calib_nn_train_preset",
+        )
+        if preset == "Qualité":
+            default_n_samples = 4000
+            default_epochs = 30
+            default_n_integration = 2000
+        else:
+            default_n_samples = 1500
+            default_epochs = 15
+            default_n_integration = 800
+
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            n_samples = int(
+                st.number_input(
+                    "n_samples",
+                    min_value=200,
+                    max_value=20000,
+                    value=int(default_n_samples),
+                    step=100,
+                    key="calib_nn_train_n_samples",
+                )
+            )
+            epochs = int(
+                st.number_input(
+                    "epochs",
+                    min_value=1,
+                    max_value=200,
+                    value=int(default_epochs),
+                    step=1,
+                    key="calib_nn_train_epochs",
+                )
+            )
+        with col_b:
+            batch_size = int(
+                st.number_input(
+                    "batch_size",
+                    min_value=8,
+                    max_value=512,
+                    value=64,
+                    step=8,
+                    key="calib_nn_train_batch_size",
+                )
+            )
+            lr = float(
+                st.number_input(
+                    "lr",
+                    min_value=1e-5,
+                    max_value=1e-2,
+                    value=1e-3,
+                    step=1e-4,
+                    format="%.5f",
+                    key="calib_nn_train_lr",
+                )
+            )
+        with col_c:
+            n_integration = int(
+                st.number_input(
+                    "n_integration (pricing)",
+                    min_value=200,
+                    max_value=4000,
+                    value=int(default_n_integration),
+                    step=200,
+                    key="calib_nn_train_n_integration",
+                )
+            )
+            u_max = float(
+                st.number_input(
+                    "u_max",
+                    min_value=10.0,
+                    max_value=150.0,
+                    value=50.0,
+                    step=5.0,
+                    key="calib_nn_train_u_max",
+                )
+            )
+            seed_nn = int(
+                st.number_input(
+                    "seed",
+                    min_value=0,
+                    max_value=10_000_000,
+                    value=42,
+                    step=1,
+                    key="calib_nn_train_seed",
+                )
+            )
+
+        train_label = "Ré-entraîner les poids NN" if weights_exists else "Entraîner les poids NN"
+        train_disabled = bool(weights_exists) and not bool(allow_overwrite)
+        if st.button(train_label, disabled=train_disabled, use_container_width=True, key="calib_nn_train_btn"):
+            with st.spinner("Entraînement du NN (Heston)..."):
+                res_train = ctrl.train_heston_nn_weights(
+                    {
+                        "n_samples": int(n_samples),
+                        "epochs": int(epochs),
+                        "batch_size": int(batch_size),
+                        "lr": float(lr),
+                        "device": "cpu",
+                        "seed": int(seed_nn),
+                        "u_max": float(u_max),
+                        "n_integration": int(n_integration),
+                    }
+                )
+            if res_train.get("success"):
+                details = res_train.get("details") or {}
+                st.success(
+                    f"Poids OK | loss={details.get('final_loss')} | elapsed={details.get('elapsed_s')}s"
+                )
+                st.rerun()
+            else:
+                st.error(res_train.get("message", "Entraînement échoué."))
 
     constraints: Dict[str, Any] | None = None
     with st.expander("Contraintes", expanded=False):
@@ -577,7 +721,7 @@ def render_tab() -> None:
             try:
                 preview_df = pd.read_csv(uploaded)
                 st.dataframe(preview_df.head(30), hide_index=True, use_container_width=True)
-                with st.expander("Diagnostics surface", expanded=False):
+                if st.checkbox("Diagnostics surface", value=False, key="calib_surface_diag_upload"):
                     _surface_diagnostics(preview_df)
             except Exception as exc:
                 st.warning(f"Impossible de lire le CSV: {exc}")
@@ -598,7 +742,7 @@ def render_tab() -> None:
             try:
                 preview_df = pd.read_csv(chosen)
                 st.dataframe(preview_df.head(30), hide_index=True, use_container_width=True)
-                with st.expander("Diagnostics surface", expanded=False):
+                if st.checkbox("Diagnostics surface", value=False, key="calib_surface_diag_cache"):
                     _surface_diagnostics(preview_df)
             except Exception as exc:
                 st.warning(f"Impossible de lire {chosen.name}: {exc}")
@@ -638,7 +782,7 @@ def render_tab() -> None:
             surface_ticker = surface_ticker or str(st.session_state.get(_CHAIN_TICKER_KEY) or "").strip().upper() or None
             preview_df = surface_df
             st.dataframe(surface_df.head(30), hide_index=True, use_container_width=True)
-            with st.expander("Diagnostics surface", expanded=False):
+            if st.checkbox("Diagnostics surface", value=False, key="calib_surface_diag_alpaca"):
                 _surface_diagnostics(surface_df)
         else:
             st.info("Chargez une chaîne d'options Alpaca pour calibrer.")
@@ -820,63 +964,59 @@ def render_tab() -> None:
     st.markdown("### Paramètres calibrés")
     st.json(params)
 
-    col_o1, col_o2 = st.columns([2, 1])
-    with col_o1:
-        if st.button("Envoyer IV modèle vers Options", use_container_width=True, type="secondary"):
+    if st.button("Envoyer IV modèle vers Options", use_container_width=True, type="secondary"):
+        try:
+            S0_res = float(result.get("S0") or S0)
+            m_grid_res = np.array(result.get("m_grid") or [])
+            t_grid_res = np.array(result.get("t_grid") or [])
+            iv_model_res = np.array(result.get("iv_model") or [])
+            df_model_surface = _grid_to_surface_df(
+                S0=S0_res, m_grid=m_grid_res, t_grid=t_grid_res, iv_grid=iv_model_res, opt_type="call"
+            )
+            st.session_state["calib_model_surface_df"] = df_model_surface
+            st.session_state["calib_model_surface_meta"] = {
+                "ticker": result.get("ticker"),
+                "method": result.get("method") or "neural_net",
+                "S0": S0_res,
+                "r": float(result.get("r") or r_val),
+                "q": float(result.get("q") or q),
+            }
+            st.session_state["opt_iv_surface_source"] = "Calibration"
+
+            tkr = str(result.get("ticker") or "").strip().upper()
+            if tkr:
+                st.session_state["tkr_common"] = tkr
+                st.session_state["common_underlying"] = tkr
+
+            # Best-effort: seed Options global params from calibration
             try:
-                S0_res = float(result.get("S0") or S0)
-                m_grid_res = np.array(result.get("m_grid") or [])
-                t_grid_res = np.array(result.get("t_grid") or [])
-                iv_model_res = np.array(result.get("iv_model") or [])
-                df_model_surface = _grid_to_surface_df(
-                    S0=S0_res, m_grid=m_grid_res, t_grid=t_grid_res, iv_grid=iv_model_res, opt_type="call"
-                )
-                st.session_state["calib_model_surface_df"] = df_model_surface
-                st.session_state["calib_model_surface_meta"] = {
-                    "ticker": result.get("ticker"),
-                    "method": result.get("method") or "neural_net",
-                    "S0": S0_res,
-                    "r": float(result.get("r") or r_val),
-                    "q": float(result.get("q") or q),
-                }
-                st.session_state["opt_iv_surface_source"] = "Calibration"
+                st.session_state["common_rate_value"] = float(result.get("r") or r_val)
+                st.session_state["d_common"] = float(result.get("q") or q)
+                if str(r_source).lower().startswith("man"):
+                    st.session_state["opt_use_yield_curve_rate"] = False
+            except Exception:
+                pass
 
-                tkr = str(result.get("ticker") or "").strip().upper()
-                if tkr:
-                    st.session_state["tkr_common"] = tkr
-                    st.session_state["common_underlying"] = tkr
+            # Set sigma from ATM (closest m=1, T=1y)
+            try:
+                if m_grid_res.size and t_grid_res.size and iv_model_res.size:
+                    j_atm = int(np.abs(m_grid_res - 1.0).argmin())
+                    i_t = int(np.abs(t_grid_res - 1.0).argmin())
+                    atm_iv = float(iv_model_res[i_t, j_atm])
+                    if np.isfinite(atm_iv) and atm_iv > 0:
+                        st.session_state["common_sigma_value"] = atm_iv
+                    try:
+                        st.session_state["opt_iv_surface_max_years"] = float(
+                            min(2.0, max(0.25, float(np.max(t_grid_res))))
+                        )
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
-                # Best-effort: seed Options global params from calibration
-                try:
-                    st.session_state["common_rate_value"] = float(result.get("r") or r_val)
-                    st.session_state["d_common"] = float(result.get("q") or q)
-                    if str(r_source).lower().startswith("man"):
-                        st.session_state["opt_use_yield_curve_rate"] = False
-                except Exception:
-                    pass
-
-                # Set sigma from ATM (closest m=1, T=1y)
-                try:
-                    if m_grid_res.size and t_grid_res.size and iv_model_res.size:
-                        j_atm = int(np.abs(m_grid_res - 1.0).argmin())
-                        i_t = int(np.abs(t_grid_res - 1.0).argmin())
-                        atm_iv = float(iv_model_res[i_t, j_atm])
-                        if np.isfinite(atm_iv) and atm_iv > 0:
-                            st.session_state["common_sigma_value"] = atm_iv
-                        try:
-                            st.session_state["opt_iv_surface_max_years"] = float(
-                                min(2.0, max(0.25, float(np.max(t_grid_res))))
-                            )
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-
-                st.success("Surface IV modèle envoyée. Ouvrez l’onglet Options → IV surface → Source=Calibration.")
-            except Exception as exc:
-                st.error(f"Impossible d'envoyer vers Options: {exc}")
-    with col_o2:
-        st.caption("Injecte la surface dans l’onglet Options (affichage + sigma global).")
+            st.success("Surface IV modèle envoyée. Ouvrez l’onglet Options → IV surface → Source=Calibration.")
+        except Exception as exc:
+            st.error(f"Impossible d'envoyer vers Options: {exc}")
 
     try:
         export_bytes = json.dumps(result, indent=2, ensure_ascii=False).encode("utf-8")
@@ -937,7 +1077,12 @@ def render_tab() -> None:
                         st.error(res_load.get("message", "Load failed."))
 
         if names:
-            with st.expander("Fichiers disponibles", expanded=False):
+            show_files = st.checkbox(
+                "Afficher les fichiers disponibles",
+                value=False,
+                key="calib_show_saved_files",
+            )
+            if show_files:
                 try:
                     st.dataframe(pd.DataFrame(items), hide_index=True, use_container_width=True)
                 except Exception:

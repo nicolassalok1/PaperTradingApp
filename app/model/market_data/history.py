@@ -30,8 +30,25 @@ def load_close_series_for_ticker(ticker: str, fallback_value=None):
         ticker, period="1y", interval="1d"
     )
     if df is not None and not df.empty:
-        close_col = df.columns[-1]
-        return df[close_col]
+        try:
+            import pandas as pd
+
+            date_col = "Date" if "Date" in df.columns else df.columns[0]
+            close_col = "Close" if "Close" in df.columns else df.columns[-1]
+            dates = pd.to_datetime(df[date_col], errors="coerce")
+            vals = pd.to_numeric(df[close_col], errors="coerce")
+            series = pd.Series(vals.values, index=dates, name="Close")
+            return series.dropna()
+        except Exception:
+            pass
+
+    if fallback_value is not None:
+        try:
+            import pandas as pd
+
+            return pd.Series([float(fallback_value)], index=pd.Index([pd.Timestamp.today()]), name="Close")
+        except Exception:
+            return None
     return None
 
 

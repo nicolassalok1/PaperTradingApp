@@ -31,9 +31,39 @@ def _ensure_global_defaults() -> None:
     st.session_state.setdefault("d_common", 0.00)
     st.session_state.setdefault("common_rate_value", 0.02)
     st.session_state.setdefault("opt_use_yield_curve_rate", True)
+ 
+
+def _ensure_iv_surface_defaults() -> None:
     st.session_state.setdefault("opt_iv_surface_max_years", 2.0)
     st.session_state.setdefault("opt_iv_surface_type", "Call")
     st.session_state.setdefault("opt_iv_surface_source", "Yahoo")
+
+    # Normalize legacy values safely before widgets are created.
+    try:
+        src_raw = str(st.session_state.get("opt_iv_surface_source") or "").strip()
+        src_low = src_raw.lower()
+        src_norm = "Calibration" if src_low.startswith("calib") else "Yahoo"
+        if st.session_state.get("opt_iv_surface_source") != src_norm:
+            st.session_state["opt_iv_surface_source"] = src_norm
+    except Exception:
+        st.session_state["opt_iv_surface_source"] = "Yahoo"
+
+    try:
+        typ_raw = str(st.session_state.get("opt_iv_surface_type") or "").strip()
+        typ_low = typ_raw.lower()
+        typ_norm = "Put" if typ_low.startswith("p") else "Call"
+        if st.session_state.get("opt_iv_surface_type") != typ_norm:
+            st.session_state["opt_iv_surface_type"] = typ_norm
+    except Exception:
+        st.session_state["opt_iv_surface_type"] = "Call"
+
+    try:
+        max_years = float(st.session_state.get("opt_iv_surface_max_years", 2.0))
+    except Exception:
+        max_years = 2.0
+    max_years = min(2.0, max(0.25, max_years))
+    if st.session_state.get("opt_iv_surface_max_years") != max_years:
+        st.session_state["opt_iv_surface_max_years"] = max_years
 
 
 def _render_global_params() -> None:
@@ -46,7 +76,6 @@ def _render_global_params() -> None:
         with col_r:
             st.toggle(
                 "r depuis Yield Curve",
-                value=bool(st.session_state.get("opt_use_yield_curve_rate", True)),
                 key="opt_use_yield_curve_rate",
             )
             st.caption(
@@ -57,7 +86,6 @@ def _render_global_params() -> None:
                 "Taux sans risque r",
                 min_value=-0.50,
                 max_value=1.00,
-                value=_to_float(st.session_state.get("common_rate_value"), 0.02),
                 step=0.001,
                 format="%.6f",
                 key="common_rate_value",
@@ -69,7 +97,6 @@ def _render_global_params() -> None:
                 "Dividend yield q",
                 min_value=-0.50,
                 max_value=1.00,
-                value=_to_float(st.session_state.get("d_common"), 0.0),
                 step=0.001,
                 format="%.6f",
                 key="d_common",
@@ -80,7 +107,6 @@ def _render_global_params() -> None:
                 "Volatilite sigma",
                 min_value=0.0001,
                 max_value=5.0,
-                value=_to_float(st.session_state.get("common_sigma_value"), 0.20),
                 step=0.01,
                 format="%.4f",
                 key="common_sigma_value",
@@ -120,7 +146,7 @@ def _pivot_surface(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _render_iv_surface_section(ticker: str) -> None:
-    _ensure_global_defaults()
+    _ensure_iv_surface_defaults()
 
     tkr = (ticker or "").strip().upper()
     if not tkr:
@@ -139,16 +165,12 @@ def _render_iv_surface_section(ticker: str) -> None:
             "Max maturite (annees)",
             min_value=0.25,
             max_value=2.0,
-            value=_to_float(st.session_state.get("opt_iv_surface_max_years"), 2.0),
             step=0.25,
             key="opt_iv_surface_max_years",
         )
 
     max_years = float(st.session_state.get("opt_iv_surface_max_years", 2.0))
     source_kind = str(st.session_state.get("opt_iv_surface_source") or "Yahoo").strip()
-    if source_kind not in {"Yahoo", "Calibration"}:
-        source_kind = "Yahoo"
-        st.session_state["opt_iv_surface_source"] = "Yahoo"
 
     def _render_surface(df_in: pd.DataFrame, title_suffix: str) -> None:
         df = df_in.copy()
@@ -270,16 +292,6 @@ def render_options_router():
         placeholder="ex: AAPL",
     )
     tkr_common_norm = (tkr_common or "").strip().upper()
-
-    prev_tkr = st.session_state.get("_prev_tkr_common")
-    if tkr_common_norm and tkr_common_norm != prev_tkr:
-        try:
-            clear_closing_history_cache(tkr_common_norm, period="2y", interval="1d")
-            clear_closing_history_cache(tkr_common_norm, period="1y", interval="1d")
-        except Exception:
-            pass
-
-    st.session_state["_prev_tkr_common"] = tkr_common_norm
     st.session_state["tkr_common"] = tkr_common_norm
     st.session_state["common_underlying"] = tkr_common_norm
 
@@ -288,7 +300,8 @@ def render_options_router():
         st.session_state["common_spot_value"] = ctx["S0"]
 
     close_series = ctx.get("close_series")
-    if close_series is not None and hasattr(close_series, "empty") and not close_series.empty:
+    close_available = bool(ctx.get("close_available"))
+    if close_available and close_series is not None and hasattr(close_series, "empty") and not close_series.empty:
         tkr_label = ctx.get("ticker") or tkr_common_norm or "Ticker"
         render_static_line_chart(
             close_series,
@@ -297,8 +310,8 @@ def render_options_router():
         )
     else:
         st.info(
-            "Aucune cloture disponible pour ce ticker. Utilise un symbole Stooq (ex: AAPL, MSFT, SPY) "
-            "ou recharge un ticker supporte pour afficher la courbe."
+            "Aucune cloture disponible pour ce ticker (cache OHLC introuvable). "
+            "Verifie le symbole puis reessaie."
         )
 
     _render_iv_surface_section(ctx.get("ticker") or tkr_common_norm)
