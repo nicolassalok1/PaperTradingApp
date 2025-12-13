@@ -10,7 +10,6 @@ from app.vue.components.options.panels.tab_barrier import render_panel_barrier
 from app.vue.components.options.panels.tab_spreads import render_panel_spreads
 from app.vue.components.options.panels.tab_calendar import render_panel_calendar
 from app.vue.components.options.panels.tab_exotics import render_panel_exotics
-from app.vue.components.options.panels.tab_basket import render_panel_basket
 from app.vue.components.options.controller_bridge import *
 
 
@@ -323,7 +322,6 @@ def render_options_router():
         "Spreads & Wings",
         "Calendriers",
         "Exotiques avanc'es",
-        "Basket",
     ]
 
     family_tabs = st.tabs(families)
@@ -341,7 +339,5 @@ def render_options_router():
                 render_panel_calendar()
             elif fam_label == "Exotiques avanc'es":
                 render_panel_exotics()
-            elif fam_label == "Basket":
-                render_panel_basket()
             else:
                 st.error("Famille inconnue.")

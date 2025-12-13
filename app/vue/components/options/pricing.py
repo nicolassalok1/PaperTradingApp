@@ -2,8 +2,6 @@ from app.controller import options_controller as oc
 
 black_scholes_price = oc.black_scholes_price
 price_asset_or_nothing = oc.price_asset_or_nothing
-price_basket_call = oc.price_basket_call
-price_basket_put = oc.price_basket_put
 price_butterfly = oc.price_butterfly
 price_chooser = oc.price_chooser
 price_call_spread = oc.price_call_spread
@@ -32,8 +30,6 @@ price_lookback_mc = oc.price_lookback_mc
 __all__ = [
     "black_scholes_price",
     "price_asset_or_nothing",
-    "price_basket_call",
-    "price_basket_put",
     "price_butterfly",
     "price_chooser",
     "price_call_spread",

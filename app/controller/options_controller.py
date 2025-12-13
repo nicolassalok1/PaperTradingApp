@@ -13,8 +13,6 @@ from app.model.market_data.realtime import get_data
 from app.model.options.engines.black_scholes import (
     black_scholes_price,
     price_asset_or_nothing,
-    price_basket_call,
-    price_basket_put,
     price_butterfly,
     price_calendar_spread,
     price_call_spread,
@@ -168,8 +166,8 @@ def download_alpaca_options_chain(
     ticker: str,
     *,
     feed: str = "indicative",
-    max_pages: int = 10,
-    max_contracts: int | None = 2000,
+    max_pages: int | None = None,
+    max_contracts: int | None = None,
     min_days_to_expiry: int | None = 1,
     include_spot: bool = True,
     cache_to_csv: bool = True,
@@ -177,8 +175,8 @@ def download_alpaca_options_chain(
     """
     Thin wrapper to expose Alpaca options snapshots to the UI via the controller.
 
-    `max_pages` / `max_contracts` control how many contracts we attempt to pull beyond
-    the first page (Alpaca snapshots are paginated).
+    Alpaca snapshots are paginated; by default we pull all pages.
+    Use `max_pages` / `max_contracts` only to cap the fetch.
     """
     return _download_options_alpaca(
         ticker,
@@ -205,8 +203,6 @@ __all__ = [
     # Black-Scholes / spreads
     "black_scholes_price",
     "price_asset_or_nothing",
-    "price_basket_call",
-    "price_basket_put",
     "price_butterfly",
     "price_calendar_spread",
     "price_call_spread",

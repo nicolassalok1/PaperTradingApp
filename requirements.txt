@@ -1,48 +1,22 @@
 ############################################################
-# Core & utilities
+# Streamlit Cloud (lean) requirements
+# - Keep this file minimal to reduce build time and avoid heavy deps.
+# - See `requirements_full.txt` for the full dev stack.
 ############################################################
-numpy==1.26.4
-pandas==2.1.4
-python-dotenv==1.0.1
-requests==2.31.0
-urllib3>=1.26.18,<2
-tqdm==4.66.2
-pyyaml==6.0
-ujson==5.9.0
 
-############################################################
-# Finance & data APIs (Alpaca SDK)
-############################################################
-alpaca-py==0.12.0                # NEW official SDK required for RL/Hedger/Portfolio Allocation
+streamlit>=1.51.0,<2
 
-############################################################
-# Visualization & Dashboard
-############################################################
-altair==5.3.0
-matplotlib==3.8.4
-plotly==5.22.0
-seaborn==0.13.2
-wordcloud==1.9.3
-streamlit==1.38.0
-websockets==11.0.3
-playwright==1.40.0
+numpy>=1.26,<3
+pandas>=2.1,<3
+requests>=2.31,<3
+python-dotenv>=1.0,<2
 
-############################################################
-# RL, Greeks, Optimization, Backtesting
-############################################################
-numba==0.59.1
-scipy==1.11.4
-scikit-learn==1.3.2
-statsmodels==0.14.1
+altair>=5.3,<6
+plotly>=5.22,<6
+matplotlib>=3.8,<4
+scipy>=1.11,<2
 
-############################################################
-# Deep Learning (Torch + TensorFlow for RL/Pipeline)
-############################################################
-tensorflow==2.15.0
-torch==2.2.2
-torchvision==0.17.2
+alpaca-py>=0.12,<1
 
-############################################################
-# AI assistant
-############################################################
-openai==1.13.3
+# Optional (the app degrades gracefully if missing)
+openai>=1.13,<2

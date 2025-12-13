@@ -18,7 +18,7 @@ from app.utils.paths import CACHE_CSV_DIR
 from app.utils.symbol_mapper import map_to_stooq
 
 
-DEFAULT_OUTPUT = Path("data/alpaca_optionable_tickers.csv")
+DEFAULT_OUTPUT = Path("data/quick_scan_alpaca_optionable_tickers.csv")
 logger = logging.getLogger(__name__)
 
 

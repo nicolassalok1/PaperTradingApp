@@ -559,8 +559,9 @@ def render_tab() -> None:
 
     nn_info = ctrl.get_heston_nn_info()
     weights_exists = bool(nn_info.get("weights_exists"))
+    torch_available = bool(nn_info.get("torch_available", True))
     with col_method:
-        if weights_exists:
+        if torch_available and weights_exists:
             method = st.selectbox(
                 "Méthode",
                 options=["least_squares", "neural_net"],
@@ -569,7 +570,10 @@ def render_tab() -> None:
             )
         else:
             st.caption("Méthode")
-            st.info("Poids NN absents → Least Squares")
+            if not torch_available:
+                st.info("PyTorch absent → Least Squares")
+            else:
+                st.info("Poids NN absents → Least Squares")
             method = "least_squares"
 
     if model_choice != "heston":
@@ -600,7 +604,6 @@ def render_tab() -> None:
                 st.warning("JSON invalide.")
 
     st.markdown("### Surface IV marché")
-    _download_surface_template()
     surface_sources = ["Ticker (Yahoo)", "Upload CSV", "Cache (cache/*.csv)", "Alpaca (live)"]
     if st.session_state.get("calib_surface_source") not in surface_sources:
         st.session_state["calib_surface_source"] = surface_sources[0]
@@ -781,138 +784,150 @@ def render_tab() -> None:
 
     with st.expander("Neural Net (entraîner les poids)", expanded=False):
         st.caption(f"Chemin: {nn_info.get('weights_path')}")
-        if weights_exists:
-            size_bytes = nn_info.get("size_bytes")
-            try:
-                kb = int(size_bytes) // 1024 if size_bytes is not None else None
-            except Exception:
-                kb = None
-            suffix = f" ({kb} KB)" if kb else ""
-            st.success(f"Poids détectés{suffix}.")
-            allow_overwrite = st.checkbox(
-                "Ré-entraîner et écraser les poids",
-                value=False,
-                key="calib_nn_train_overwrite",
-            )
+        if not torch_available:
+            err = str(nn_info.get("torch_error") or "").strip()
+            msg = "PyTorch non installé → entraînement NN désactivé (Streamlit Cloud lean)."
+            if err:
+                msg = f"{msg} ({err})"
+            st.info(msg)
         else:
-            st.warning("Poids absents: entraîne le NN pour activer la méthode Neural Net.")
-            allow_overwrite = True
-
-        preset = st.selectbox(
-            "Preset",
-            options=["Rapide", "Qualité"],
-            index=0,
-            key="calib_nn_train_preset",
-        )
-        if preset == "Qualité":
-            default_n_samples = 4000
-            default_epochs = 30
-            default_n_integration = 2000
-        else:
-            default_n_samples = 1500
-            default_epochs = 15
-            default_n_integration = 800
-
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            n_samples = int(
-                st.number_input(
-                    "n_samples",
-                    min_value=200,
-                    max_value=20000,
-                    value=int(default_n_samples),
-                    step=100,
-                    key="calib_nn_train_n_samples",
+            if weights_exists:
+                size_bytes = nn_info.get("size_bytes")
+                try:
+                    kb = int(size_bytes) // 1024 if size_bytes is not None else None
+                except Exception:
+                    kb = None
+                suffix = f" ({kb} KB)" if kb else ""
+                st.success(f"Poids détectés{suffix}.")
+                allow_overwrite = st.checkbox(
+                    "Ré-entraîner et écraser les poids",
+                    value=False,
+                    key="calib_nn_train_overwrite",
                 )
-            )
-            epochs = int(
-                st.number_input(
-                    "epochs",
-                    min_value=1,
-                    max_value=200,
-                    value=int(default_epochs),
-                    step=1,
-                    key="calib_nn_train_epochs",
-                )
-            )
-        with col_b:
-            batch_size = int(
-                st.number_input(
-                    "batch_size",
-                    min_value=8,
-                    max_value=512,
-                    value=64,
-                    step=8,
-                    key="calib_nn_train_batch_size",
-                )
-            )
-            lr = float(
-                st.number_input(
-                    "lr",
-                    min_value=1e-5,
-                    max_value=1e-2,
-                    value=1e-3,
-                    step=1e-4,
-                    format="%.5f",
-                    key="calib_nn_train_lr",
-                )
-            )
-        with col_c:
-            n_integration = int(
-                st.number_input(
-                    "n_integration (pricing)",
-                    min_value=200,
-                    max_value=4000,
-                    value=int(default_n_integration),
-                    step=200,
-                    key="calib_nn_train_n_integration",
-                )
-            )
-            u_max = float(
-                st.number_input(
-                    "u_max",
-                    min_value=10.0,
-                    max_value=150.0,
-                    value=50.0,
-                    step=5.0,
-                    key="calib_nn_train_u_max",
-                )
-            )
-            seed_nn = int(
-                st.number_input(
-                    "seed",
-                    min_value=0,
-                    max_value=10_000_000,
-                    value=42,
-                    step=1,
-                    key="calib_nn_train_seed",
-                )
-            )
-
-        train_label = "Ré-entraîner les poids NN" if weights_exists else "Entraîner les poids NN"
-        train_disabled = bool(weights_exists) and not bool(allow_overwrite)
-        if st.button(train_label, disabled=train_disabled, use_container_width=True, key="calib_nn_train_btn"):
-            with st.spinner("Entraînement du NN (Heston)..."):
-                res_train = ctrl.train_heston_nn_weights(
-                    {
-                        "n_samples": int(n_samples),
-                        "epochs": int(epochs),
-                        "batch_size": int(batch_size),
-                        "lr": float(lr),
-                        "device": "cpu",
-                        "seed": int(seed_nn),
-                        "u_max": float(u_max),
-                        "n_integration": int(n_integration),
-                    }
-                )
-            if res_train.get("success"):
-                details = res_train.get("details") or {}
-                st.success(
-                    f"Poids OK | loss={details.get('final_loss')} | elapsed={details.get('elapsed_s')}s"
-                )
-                st.rerun()
             else:
-                st.error(res_train.get("message", "Entraînement échoué."))
+                st.warning("Poids absents: entraîne le NN pour activer la méthode Neural Net.")
+                allow_overwrite = True
+
+            preset = st.selectbox(
+                "Preset",
+                options=["Rapide", "Qualité"],
+                index=0,
+                key="calib_nn_train_preset",
+            )
+            if preset == "Qualité":
+                default_n_samples = 4000
+                default_epochs = 30
+                default_n_integration = 2000
+            else:
+                default_n_samples = 1500
+                default_epochs = 15
+                default_n_integration = 800
+
+            col_a, col_b, col_c = st.columns(3)
+            with col_a:
+                n_samples = int(
+                    st.number_input(
+                        "n_samples",
+                        min_value=200,
+                        max_value=20000,
+                        value=int(default_n_samples),
+                        step=100,
+                        key="calib_nn_train_n_samples",
+                    )
+                )
+                epochs = int(
+                    st.number_input(
+                        "epochs",
+                        min_value=1,
+                        max_value=200,
+                        value=int(default_epochs),
+                        step=1,
+                        key="calib_nn_train_epochs",
+                    )
+                )
+            with col_b:
+                batch_size = int(
+                    st.number_input(
+                        "batch_size",
+                        min_value=8,
+                        max_value=512,
+                        value=64,
+                        step=8,
+                        key="calib_nn_train_batch_size",
+                    )
+                )
+                lr = float(
+                    st.number_input(
+                        "lr",
+                        min_value=1e-5,
+                        max_value=1e-2,
+                        value=1e-3,
+                        step=1e-4,
+                        format="%.5f",
+                        key="calib_nn_train_lr",
+                    )
+                )
+            with col_c:
+                n_integration = int(
+                    st.number_input(
+                        "n_integration (pricing)",
+                        min_value=200,
+                        max_value=4000,
+                        value=int(default_n_integration),
+                        step=200,
+                        key="calib_nn_train_n_integration",
+                    )
+                )
+                u_max = float(
+                    st.number_input(
+                        "u_max",
+                        min_value=10.0,
+                        max_value=150.0,
+                        value=50.0,
+                        step=5.0,
+                        key="calib_nn_train_u_max",
+                    )
+                )
+                seed_nn = int(
+                    st.number_input(
+                        "seed",
+                        min_value=0,
+                        max_value=10_000_000,
+                        value=42,
+                        step=1,
+                        key="calib_nn_train_seed",
+                    )
+                )
+
+            train_label = "Ré-entraîner les poids NN" if weights_exists else "Entraîner les poids NN"
+            train_disabled = bool(weights_exists) and not bool(allow_overwrite)
+            if st.button(
+                train_label,
+                disabled=train_disabled,
+                use_container_width=True,
+                key="calib_nn_train_btn",
+            ):
+                with st.spinner("Entraînement du NN (Heston)..."):
+                    res_train = ctrl.train_heston_nn_weights(
+                        {
+                            "n_samples": int(n_samples),
+                            "epochs": int(epochs),
+                            "batch_size": int(batch_size),
+                            "lr": float(lr),
+                            "device": "cpu",
+                            "seed": int(seed_nn),
+                            "u_max": float(u_max),
+                            "n_integration": int(n_integration),
+                        }
+                    )
+                if res_train.get("success"):
+                    details = res_train.get("details") or {}
+                    st.success(
+                        f"Poids OK | loss={details.get('final_loss')} | elapsed={details.get('elapsed_s')}s"
+                    )
+                    st.rerun()
+                else:
+                    st.error(res_train.get("message", "Entraînement échoué."))
 
     # Defaults for underlying inputs
     s0_default = _median_s0(calib_df if isinstance(calib_df, pd.DataFrame) else preview_df) or float(

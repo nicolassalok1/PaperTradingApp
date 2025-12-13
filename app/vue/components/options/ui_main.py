@@ -34,7 +34,6 @@ CATEGORY_SUB_TABS = {
     ],
     "Calendriers": ["Calendar spread", "Diagonal spread"],
     "Exotiques": ["Digital", "Asset-or-nothing", "Chooser", "Quanto", "Rainbow"],
-    "Basket": ["Call", "Put"],
 }
 
 CATEGORY_TO_FOLDER = {
@@ -44,7 +43,6 @@ CATEGORY_TO_FOLDER = {
     "Spreads & Wings": "spreads",
     "Calendriers": "calendars",
     "Exotiques": "exotic",
-    "Basket": "basket",
 }
 
 SUBTAB_TO_MODULE = {
@@ -84,10 +82,6 @@ SUBTAB_TO_MODULE = {
         "Chooser": "chooser",
         "Quanto": "quanto",
         "Rainbow": "rainbow",
-    },
-    "Basket": {
-        "Call": "call",
-        "Put": "put",
     },
 }
 

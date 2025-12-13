@@ -6,8 +6,18 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
 
 import numpy as np
-import torch
-import torch.nn as nn
+
+try:  # optional dependency (Streamlit Cloud lean deploy)
+    import torch  # type: ignore
+    import torch.nn as nn  # type: ignore
+
+    TORCH_AVAILABLE = True
+    TORCH_IMPORT_ERROR = ""
+except Exception as exc:  # pragma: no cover
+    torch = None  # type: ignore
+    nn = None  # type: ignore
+    TORCH_AVAILABLE = False
+    TORCH_IMPORT_ERROR = str(exc)
 
 # Expected weights path:
 #     app/model/calibration/weights/heston_surface_net.pt
@@ -18,29 +28,43 @@ IV_STD = 0.1
 EPS = 1e-6
 
 
-class HestonSurfaceNet(nn.Module):
-    """
-    Simple CNN regressor mapping IV surface -> Heston params.
-    """
+if TORCH_AVAILABLE:
 
-    def __init__(self, m_size: int, t_size: int):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Conv2d(1, 8, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(8, 16, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(16 * m_size * t_size, 64),
-            nn.ReLU(),
-            nn.Linear(64, 5),
-        )
+    class HestonSurfaceNet(nn.Module):
+        """
+        Simple CNN regressor mapping IV surface -> Heston params.
+        """
 
-    def forward(self, x):
-        return self.net(x)
+        def __init__(self, m_size: int, t_size: int):
+            super().__init__()
+            self.net = nn.Sequential(
+                nn.Conv2d(1, 8, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(8, 16, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.Flatten(),
+                nn.Linear(16 * m_size * t_size, 64),
+                nn.ReLU(),
+                nn.Linear(64, 5),
+            )
+
+        def forward(self, x):
+            return self.net(x)
+
+else:  # pragma: no cover
+
+    class HestonSurfaceNet:  # type: ignore[no-redef]
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(
+                "PyTorch is required for the Heston Neural Net features. "
+                "Install torch (or use Least Squares)."
+                + (f" Import error: {TORCH_IMPORT_ERROR}" if TORCH_IMPORT_ERROR else "")
+            )
 
 
 def postprocess_tensor(raw: torch.Tensor) -> torch.Tensor:
+    if not TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch is not available.")
     kappa = torch.nn.functional.softplus(raw[..., 0]) + EPS
     theta = torch.nn.functional.softplus(raw[..., 1]) + EPS
     sigma = torch.nn.functional.softplus(raw[..., 2]) + EPS
@@ -90,6 +114,8 @@ def _fill_nan_surface(iv_grid: np.ndarray) -> np.ndarray:
 
 
 def load_model(weights_path: str | Path, m_size: int, t_size: int, device: str = "cpu"):
+    if not TORCH_AVAILABLE:
+        return None
     path = Path(weights_path)
     if not path.exists():
         return None
@@ -103,6 +129,12 @@ def load_model(weights_path: str | Path, m_size: int, t_size: int, device: str =
 def predict_params(
     iv_grid: np.ndarray, m_grid: np.ndarray, t_grid: np.ndarray, weights_path: str | Path, device: str = "cpu"
 ) -> Dict:
+    if not TORCH_AVAILABLE:
+        return {
+            "success": False,
+            "message": "PyTorch non installé → méthode Neural Net indisponible.",
+            "params": {},
+        }
     if iv_grid is None or np.asarray(iv_grid).size == 0:
         return {"success": False, "message": "Surface IV vide.", "params": {}}
 
@@ -226,6 +258,11 @@ def train_heston_surface_net(
     weights_path: str | Path = WEIGHTS_PATH,
     progress: Callable[[float], None] | None = None,
 ) -> Dict[str, Any]:
+    if not TORCH_AVAILABLE:
+        return {
+            "success": False,
+            "message": "PyTorch non installé → entraînement NN indisponible.",
+        }
     from torch.utils.data import DataLoader, TensorDataset
 
     from app.model.calibration.market_surface import default_grid
@@ -311,6 +348,8 @@ def train_heston_surface_net(
 __all__ = [
     "HestonSurfaceNet",
     "WEIGHTS_PATH",
+    "TORCH_AVAILABLE",
+    "TORCH_IMPORT_ERROR",
     "load_model",
     "postprocess_tensor",
     "predict_params",

@@ -27,7 +27,13 @@ from app.model.calibration.market_surface import (
 )
 from app.model.calibration.heston_pricer import price_grid_from_params
 from app.model.calibration.implied_vol import implied_vol_grid
-from app.model.calibration.heston_nn import WEIGHTS_PATH, predict_params, train_heston_surface_net
+from app.model.calibration.heston_nn import (
+    TORCH_AVAILABLE,
+    TORCH_IMPORT_ERROR,
+    WEIGHTS_PATH,
+    predict_params,
+    train_heston_surface_net,
+)
 from app.model.calibration.storage import (
     list_results as list_calibration_results,
     load_result as load_calibration_result,
@@ -92,7 +98,12 @@ class CalibrationController:
 
     def get_heston_nn_info(self) -> Dict[str, Any]:
         """Expose whether Heston NN weights are available on disk."""
-        info: Dict[str, Any] = {"weights_path": str(WEIGHTS_PATH), "weights_exists": False}
+        info: Dict[str, Any] = {
+            "weights_path": str(WEIGHTS_PATH),
+            "weights_exists": False,
+            "torch_available": bool(TORCH_AVAILABLE),
+            "torch_error": str(TORCH_IMPORT_ERROR or ""),
+        }
         try:
             exists = bool(WEIGHTS_PATH.exists())
         except Exception:
@@ -108,6 +119,12 @@ class CalibrationController:
         return info
 
     def train_heston_nn_weights(self, payload: Dict | None) -> Dict[str, Any]:
+        if not TORCH_AVAILABLE:
+            msg = "PyTorch non installé → entraînement NN indisponible."
+            if TORCH_IMPORT_ERROR:
+                msg = f"{msg} ({TORCH_IMPORT_ERROR})"
+            return {"success": False, "message": msg, "details": {}}
+
         data = payload or {}
         n_samples = int(data.get("n_samples") or 2000)
         epochs = int(data.get("epochs") or 25)
@@ -142,6 +159,14 @@ class CalibrationController:
             )
         except Exception as exc:
             return {"success": False, "message": str(exc), "details": {}}
+
+        if isinstance(res, dict) and not bool(res.get("success", True)):
+            return {
+                "success": False,
+                "message": str(res.get("message") or "Entraînement NN échoué."),
+                "details": res,
+                "nn_info": self.get_heston_nn_info(),
+            }
 
         return {
             "success": True,

@@ -35,8 +35,6 @@ _OPTIONABLE_TICKERS_CSV = Path(
 _OPTIONABLE_TICKERS_CSV = _resolve_repo_relative_path(_OPTIONABLE_TICKERS_CSV)
 
 _PREFERRED_DEFAULTS: list[str] = ["SPY", "AAPL", "MSFT", "TSLA", "QQQ"]
-_DEFAULT_MAX_PAGES = 10
-_DEFAULT_MAX_CONTRACTS = 2000
 _CLOCK_TTL_SEC = 60.0
 
 
@@ -365,29 +363,13 @@ def _render_option_market_order_form() -> None:
         load_clicked = st.button("Load options chain", use_container_width=True)
 
     with st.expander("Advanced: fetch settings", expanded=False):
-        st.caption("Tip: Alpaca snapshots are paginated (often ~100 contracts/page). Increase pages/contracts if needed.")
+        st.caption("Tip: Alpaca snapshots are paginated; this fetch pulls all pages by default.")
         feed = st.selectbox(
             "Options feed",
             options=["indicative", "opra"],
             index=0,
             help="`indicative` is usually available; `opra` may require OPRA agreement/subscription.",
             key="alpaca_options_feed",
-        )
-        max_pages = st.slider(
-            "Max pages",
-            min_value=1,
-            max_value=50,
-            value=_DEFAULT_MAX_PAGES,
-            step=1,
-            key="alpaca_options_max_pages",
-        )
-        max_contracts = st.number_input(
-            "Max contracts",
-            min_value=100,
-            max_value=20000,
-            value=_DEFAULT_MAX_CONTRACTS,
-            step=100,
-            key="alpaca_options_max_contracts",
         )
         min_days_to_expiry = st.number_input(
             "Min days to expiry",
@@ -411,8 +393,6 @@ def _render_option_market_order_form() -> None:
                 df_chain = opt_ctrl.download_alpaca_options_chain(
                     ticker,
                     feed=str(feed or "indicative"),
-                    max_pages=int(max_pages),
-                    max_contracts=int(max_contracts) if max_contracts else None,
                     min_days_to_expiry=int(min_days_to_expiry) if min_days_to_expiry is not None else 1,
                     include_spot=True,
                     cache_to_csv=bool(cache_to_csv),

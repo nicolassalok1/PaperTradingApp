@@ -491,7 +491,13 @@ def split_data_nn(data: pd.DataFrame, split_ratio: float = 0.7):
 
 
 def build_model_nn(input_dim: int):
-    import tensorflow as tf
+    try:
+        import tensorflow as tf  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        raise RuntimeError(
+            "TensorFlow n'est pas installé (feature NN désactivée). "
+            "Installe tensorflow si nécessaire."
+        ) from exc
 
     inp = tf.keras.layers.Input(shape=(input_dim,))
     x = tf.keras.layers.Dense(32, activation="relu")(inp)

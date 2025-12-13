@@ -1266,8 +1266,8 @@ def download_options_alpaca(
     symbol: str,
     *,
     feed: str = "indicative",
-    max_pages: int = 10,
-    max_contracts: int | None = 2000,
+    max_pages: int | None = None,
+    max_contracts: int | None = None,
     min_days_to_expiry: int | None = 1,
     include_spot: bool = True,
     cache_to_csv: bool = True,
@@ -1283,7 +1283,8 @@ def download_options_alpaca(
     Notes:
     - With the free/indicative feed, snapshots typically do NOT include greeks/IV.
       In that case, iv will be NaN.
-    - Results are paginated; this helper can pull multiple pages via max_pages.
+    - Results are paginated; by default this helper pulls all pages.
+      Use `max_pages` / `max_contracts` only to cap the fetch.
     """
     sym = _normalize_symbol(symbol)
     if not sym:
@@ -1324,11 +1325,11 @@ def download_options_alpaca(
     records: list[dict] = []
 
     try:
-        max_pages = int(max_pages)
+        max_pages_int = int(max_pages) if max_pages is not None else None
     except Exception:
-        max_pages = 1
-    if max_pages <= 0:
-        max_pages = 1
+        max_pages_int = None
+    if max_pages_int is not None and max_pages_int <= 0:
+        max_pages_int = None
 
     try:
         max_contracts_int = int(max_contracts) if max_contracts is not None else None
@@ -1366,7 +1367,12 @@ def download_options_alpaca(
     requester = session.get if session is not None else requests.get
 
     page_token: str | None = None
-    for _page in range(max_pages):
+    seen_page_tokens: set[str] = set()
+    page_count = 0
+    while True:
+        page_count += 1
+        if max_pages_int is not None and page_count > max_pages_int:
+            break
         params: dict = {}
         if feed:
             params["feed"] = str(feed)
@@ -1495,9 +1501,15 @@ def download_options_alpaca(
         if max_contracts_int is not None and len(records) >= max_contracts_int:
             break
 
-        page_token = payload.get("next_page_token")
-        if not page_token:
+        next_token = payload.get("next_page_token")
+        if not next_token:
             break
+        next_token = str(next_token)
+        if next_token == page_token or next_token in seen_page_tokens:
+            logging.warning(f"[alpaca-options] repeated next_page_token for {sym}; stopping pagination")
+            break
+        seen_page_tokens.add(next_token)
+        page_token = next_token
 
     df = pd.DataFrame(records, columns=["symbol", "opra", "K", "T", "S0", "iv", "type"])
     if cache_to_csv:
