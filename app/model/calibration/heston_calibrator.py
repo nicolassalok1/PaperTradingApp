@@ -181,6 +181,8 @@ def calibrate_heston_least_squares(
     u_max: float = 50.0,
     n_integration: int = 2000,
     max_nfev: int = 50,
+    n_starts: int = 1,
+    seed: int | None = 42,
 ) -> Dict[str, Any]:
     if least_squares is None:
         return {"success": False, "message": "SciPy indisponible: least_squares manquant.", "params": {}}
@@ -192,7 +194,6 @@ def calibrate_heston_least_squares(
     if err:
         return {"success": False, "message": err, "params": {}}
 
-    x0 = initial_guess_from_surface(iv_market, m_grid, t_grid, lb=lb, ub=ub)
     K, T, px_mkt, scale = _build_fit_points(
         S0, m_grid, t_grid, iv_market, mask, fit_to_observed_only=fit_to_observed_only, r=r, q=q
     )
@@ -222,28 +223,108 @@ def calibrate_heston_least_squares(
             res = np.concatenate([res, np.array([feller_gap], dtype=float)])
         return res
 
-    try:
-        opt = least_squares(
-            residuals,
-            x0=x0,
-            bounds=(lb, ub),
-            max_nfev=int(max_nfev),
-            method="trf",
-        )
-    except Exception as exc:
-        return {"success": False, "message": f"Optimisation échouée: {exc}", "params": {}}
+    def _run_one(x0: np.ndarray) -> Dict[str, Any]:
+        try:
+            opt = least_squares(
+                residuals,
+                x0=np.asarray(x0, dtype=float),
+                bounds=(lb, ub),
+                max_nfev=int(max_nfev),
+                method="trf",
+            )
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
-    x = np.asarray(opt.x, dtype=float)
-    params = {k: float(v) for k, v in zip(PARAM_ORDER, x)}
+        x = np.asarray(opt.x, dtype=float)
+        params = {k: float(v) for k, v in zip(PARAM_ORDER, x)}
+        return {
+            "ok": True,
+            "converged": bool(getattr(opt, "success", False)),
+            "message": str(getattr(opt, "message", "")),
+            "params": params,
+            "x": x.tolist(),
+            "nfev": int(getattr(opt, "nfev", 0) or 0),
+            "cost": float(getattr(opt, "cost", np.nan)),
+            "optimality": float(getattr(opt, "optimality", np.nan)),
+        }
 
+    def _sample_x0(rng: np.random.Generator) -> np.ndarray:
+        x = np.empty(len(PARAM_ORDER), dtype=float)
+        for i, name in enumerate(PARAM_ORDER):
+            lo = float(lb[i])
+            hi = float(ub[i])
+            if not np.isfinite(lo) or not np.isfinite(hi):
+                x[i] = 0.0
+                continue
+            if abs(hi - lo) < 1e-12:
+                x[i] = lo
+                continue
+            if name == "rho":
+                x[i] = float(rng.uniform(lo, hi))
+                continue
+            lo_pos = max(lo, 1e-12)
+            hi_pos = max(hi, lo_pos * 1.000001)
+            # log-uniform for wide ranges, else uniform
+            if hi_pos / lo_pos > 50.0:
+                x[i] = float(np.exp(rng.uniform(np.log(lo_pos), np.log(hi_pos))))
+            else:
+                x[i] = float(rng.uniform(lo, hi))
+        return np.minimum(np.maximum(x, lb), ub)
+
+    n_starts_eff = int(n_starts or 1)
+    if n_starts_eff < 1:
+        n_starts_eff = 1
+
+    rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
+
+    candidates: list[np.ndarray] = []
+    # 1) heuristic guess from surface
+    candidates.append(initial_guess_from_surface(iv_market, m_grid, t_grid, lb=lb, ub=ub))
+    # 2) mid-point of bounds
+    candidates.append(np.minimum(np.maximum(0.5 * (lb + ub), lb), ub))
+    # 3+) random guesses
+    while len(candidates) < n_starts_eff:
+        candidates.append(_sample_x0(rng))
+
+    runs: list[Dict[str, Any]] = []
+    best_idx: int | None = None
+    best_cost: float = float("inf")
+
+    for i, x0 in enumerate(candidates):
+        out = _run_one(x0)
+        out["idx"] = int(i)
+        out["x0"] = [float(v) for v in np.asarray(x0, dtype=float)]
+        runs.append(out)
+        if not out.get("ok"):
+            continue
+        cost = out.get("cost")
+        try:
+            cost_f = float(cost)
+        except Exception:
+            continue
+        if not np.isfinite(cost_f):
+            continue
+        if cost_f < best_cost:
+            best_cost = cost_f
+            best_idx = int(i)
+
+    if best_idx is None:
+        first_err = next((r.get("error") for r in runs if r.get("error")), "Optimisation échouée.")
+        return {"success": False, "message": f"Optimisation échouée: {first_err}", "params": {}, "runs": runs}
+
+    best = runs[best_idx]
     return {
         "success": True,
-        "converged": bool(opt.success),
-        "message": str(opt.message),
-        "params": params,
-        "nfev": int(getattr(opt, "nfev", 0) or 0),
-        "cost": float(getattr(opt, "cost", np.nan)),
-        "optimality": float(getattr(opt, "optimality", np.nan)),
+        "converged": bool(best.get("converged", False)),
+        "message": str(best.get("message", "")),
+        "params": best.get("params") or {},
+        "nfev": int(best.get("nfev", 0) or 0),
+        "cost": float(best.get("cost", np.nan)),
+        "optimality": float(best.get("optimality", np.nan)),
+        "n_starts": int(n_starts_eff),
+        "seed": int(seed) if seed is not None else None,
+        "best_run": int(best_idx),
+        "runs": runs,
     }
 
 

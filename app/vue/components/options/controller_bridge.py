@@ -25,6 +25,7 @@ _render_option_text = opt_ui._render_option_text
 render_method_explainer = opt_ui.render_method_explainer
 _get_cached_iv_for = oc._get_cached_iv_for
 _render_heatmaps_for_current_option = opt_ui._render_heatmaps_for_current_option
+# Legacy globals (kept for backward compatibility with older UI modules).
 common_spot_value = opt_ui.common_spot_value
 common_maturity_value = opt_ui.common_maturity_value
 common_rate_value = opt_ui.common_rate_value
@@ -76,6 +77,59 @@ def current_spot(ctx: dict) -> float:
     if spot is None:
         spot = float(st.session_state.get("common_spot_value", 100.0))
     return float(spot)
+
+
+def get_common_maturity_value(default: float = 1.0) -> float:
+    try:
+        return float(st.session_state.get("common_maturity_value", default))
+    except Exception:
+        return float(default)
+
+
+def get_common_rate_value(default: float = 0.01) -> float:
+    try:
+        return float(st.session_state.get("common_rate_value", default))
+    except Exception:
+        return float(default)
+
+
+def get_common_sigma_value(default: float = 0.2) -> float:
+    try:
+        return float(st.session_state.get("common_sigma_value", default))
+    except Exception:
+        return float(default)
+
+
+def get_common_div_yield(default: float = 0.0) -> float:
+    try:
+        return float(st.session_state.get("d_common", default))
+    except Exception:
+        return float(default)
+
+
+def get_rate_for_ttm(T: float, default: float = 0.01) -> float:
+    """
+    Resolve the risk-free rate for a given maturity:
+    - If Options is configured to use Yield Curve, query yc.get_risk_free_rate(T).
+    - Otherwise, fall back to the global manual rate (common_rate_value).
+    """
+    try:
+        use_yc = bool(st.session_state.get("opt_use_yield_curve_rate", True))
+    except Exception:
+        use_yc = False
+
+    if use_yc:
+        currency = (st.session_state.get("yc_currency") or "USD").strip().upper()
+        try:
+            from app.controller import yieldcurve_controller as yc  # local import (UI helper)
+
+            return float(
+                yc.get_risk_free_rate(T_ref=float(T), currency=currency, ensure_cache=True)
+            )
+        except Exception:
+            pass
+
+    return float(get_common_rate_value(default))
 
 # View/payoff builders
 view_asset_or_nothing = oc.view_asset_or_nothing
@@ -300,6 +354,11 @@ __all__ = [
     "ensure_close_history",
     "current_ticker",
     "current_spot",
+    "get_common_maturity_value",
+    "get_common_rate_value",
+    "get_common_sigma_value",
+    "get_common_div_yield",
+    "get_rate_for_ttm",
     "view_asset_or_nothing",
     "view_barrier",
     "view_butterfly",

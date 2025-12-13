@@ -60,7 +60,7 @@ def render_tab_lookback_fixed():
             "T (années)",
             min_value=0.05,
             max_value=2.0,
-            value=float(common_maturity_value),
+            value=float(get_common_maturity_value()),
             step=0.05,
             key=_k("lbf_T"),
         )

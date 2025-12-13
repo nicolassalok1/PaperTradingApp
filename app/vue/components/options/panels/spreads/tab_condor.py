@@ -57,7 +57,7 @@ def render_tab_condor():
         "T (années)",
         min_value=0.05,
         max_value=2.0,
-        value=float(common_maturity_value),
+        value=float(get_common_maturity_value()),
         step=0.05,
         key=_k("condor_T"),
     )
@@ -70,25 +70,25 @@ def render_tab_condor():
     sigma_k1_condor = (
         float(ivs_condor[0])
         if ivs_condor[0] is not None and np.isfinite(ivs_condor[0]) and ivs_condor[0] > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_k2_condor = (
         float(ivs_condor[1])
         if ivs_condor[1] is not None and np.isfinite(ivs_condor[1]) and ivs_condor[1] > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_k3_condor = (
         float(ivs_condor[2])
         if ivs_condor[2] is not None and np.isfinite(ivs_condor[2]) and ivs_condor[2] > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_k4_condor = (
         float(ivs_condor[3])
         if ivs_condor[3] is not None and np.isfinite(ivs_condor[3]) and ivs_condor[3] > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     iv_vals_condor = [v for v in ivs_condor if v is not None and np.isfinite(v) and v > 0]
-    sigma_condor = float(np.mean(iv_vals_condor)) if iv_vals_condor else float(common_sigma_value)
+    sigma_condor = float(np.mean(iv_vals_condor)) if iv_vals_condor else float(get_common_sigma_value())
     if iv_vals_condor:
         iv_txt = " | ".join(
             (
@@ -113,9 +113,9 @@ def render_tab_condor():
         k2,
         k3,
         k4,
-        r=float(common_rate_value),
-        q=float(d_common),
-        sigma=float(common_sigma_value),
+        r=float(get_rate_for_ttm(T_condor)),
+        q=float(get_common_div_yield()),
+        sigma=float(get_common_sigma_value()),
         sigma_k1=float(sigma_k1_condor),
         sigma_k2=float(sigma_k2_condor),
         sigma_k3=float(sigma_k3_condor),

@@ -42,7 +42,7 @@ def render_tab_forward_start():
         "T (années)",
         min_value=0.05,
         max_value=2.0,
-        value=float(common_maturity_value),
+        value=float(get_common_maturity_value()),
         step=0.05,
         key=_k("forward_start_T"),
     )
@@ -67,9 +67,9 @@ def render_tab_forward_start():
         S0,
         spot_start,
         m=m_factor,
-        r=float(common_rate_value),
-        q=float(d_common),
-        sigma=float(common_sigma_value),
+        r=float(get_rate_for_ttm(T_fs)),
+        q=float(get_common_div_yield()),
+        sigma=float(get_common_sigma_value()),
         T=float(T_fs),
         option_type=opt_type,
     )

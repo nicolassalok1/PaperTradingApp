@@ -28,6 +28,11 @@ from app.model.calibration.market_surface import (
 from app.model.calibration.heston_pricer import price_grid_from_params
 from app.model.calibration.implied_vol import implied_vol_grid
 from app.model.calibration.heston_nn import predict_params, WEIGHTS_PATH
+from app.model.calibration.storage import (
+    list_results as list_calibration_results,
+    load_result as load_calibration_result,
+    save_result as save_calibration_result,
+)
 from app.model.calibration.types import (
     CalibrationModelName,
     CalibrationRequest,
@@ -96,6 +101,25 @@ class CalibrationController:
     def get_heston_default_bounds(self) -> Dict[str, Any]:
         """Expose default calibration bounds for UI builder."""
         return {k: [float(v[0]), float(v[1])] for k, v in (HESTON_DEFAULT_BOUNDS or {}).items()}
+
+    def list_saved_calibrations(self, limit: int = 200) -> Dict[str, Any]:
+        try:
+            items = list_calibration_results(limit=int(limit))
+        except Exception as exc:
+            return {"success": False, "message": str(exc), "items": []}
+        return {"success": True, "items": items}
+
+    def save_calibration_result(self, result: Dict[str, Any], name: str | None = None, overwrite: bool = False) -> Dict[str, Any]:
+        try:
+            return save_calibration_result(result=result, name=name, overwrite=bool(overwrite))
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    def load_calibration_result(self, name_or_path: str) -> Dict[str, Any]:
+        try:
+            return load_calibration_result(name_or_path=name_or_path)
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
 
     def download_alpaca_options_chain(self, ticker: str) -> Dict[str, Any]:
         """Download an Alpaca options snapshot chain for an underlying ticker."""
@@ -186,6 +210,7 @@ class CalibrationController:
         surface_path = data.get("surface_path")
         df_in = data.get("df")
         constraints = data.get("constraints") if isinstance(data.get("constraints"), dict) else None
+        ticker = str(data.get("ticker") or "").strip().upper() or None
 
         if not isinstance(df_in, pd.DataFrame) and csv_bytes is None and surface_path is None:
             return {"success": False, "message": "CSV surface requis.", "details": {}}
@@ -261,6 +286,7 @@ class CalibrationController:
             "success": True,
             "message": pred.get("message", "OK"),
             "params": params,
+            "ticker": ticker,
             "S0": S0_val,
             "r": r,
             "q": q,
@@ -296,6 +322,7 @@ class CalibrationController:
         surface_path = data.get("surface_path")
         df_in = data.get("df")
         constraints = data.get("constraints") if isinstance(data.get("constraints"), dict) else None
+        ticker = str(data.get("ticker") or "").strip().upper() or None
 
         if not isinstance(df_in, pd.DataFrame) and csv_bytes is None and surface_path is None:
             return {"success": False, "message": "CSV surface requis.", "details": {}}
@@ -338,6 +365,12 @@ class CalibrationController:
         u_max = float(data.get("u_max") or 50.0)
         n_integration = int(data.get("n_integration") or 2000)
         max_nfev = int(data.get("max_nfev") or 50)
+        n_starts = int(data.get("n_starts") or 1)
+        seed = data.get("seed")
+        try:
+            seed = int(seed) if seed is not None else None
+        except Exception:
+            seed = None
 
         iv_market, mask, m_grid, t_grid = build_fixed_grid(market_df)
 
@@ -354,6 +387,8 @@ class CalibrationController:
             u_max=u_max,
             n_integration=n_integration,
             max_nfev=max_nfev,
+            n_starts=n_starts,
+            seed=seed,
         )
         if not calib.get("success"):
             return {"success": False, "message": calib.get("message", "Calibration échouée."), "details": calib}
@@ -381,13 +416,17 @@ class CalibrationController:
         nfev = calib.get("nfev")
         if nfev:
             msg = f"{msg} (nfev={nfev})"
+        if calib.get("n_starts") and int(calib.get("n_starts") or 0) > 1:
+            msg = f"{msg} | starts={int(calib.get('n_starts') or 0)}"
 
         return {
             "success": True,
             "message": msg,
             "method": "least_squares",
+            "converged": bool(calib.get("converged", False)),
             "params": params,
             "metrics": metrics,
+            "ticker": ticker,
             "S0": S0_val,
             "r": r,
             "q": q,

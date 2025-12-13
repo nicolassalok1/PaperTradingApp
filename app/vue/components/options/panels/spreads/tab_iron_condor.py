@@ -57,7 +57,7 @@ def render_tab_iron_condor():
         "T (années)",
         min_value=0.05,
         max_value=2.0,
-        value=float(common_maturity_value),
+        value=float(get_common_maturity_value()),
         step=0.05,
         key=_k("iron_condor_T"),
     )
@@ -70,22 +70,22 @@ def render_tab_iron_condor():
     sigma_put_long_ic = (
         float(ivs_ic[0])
         if ivs_ic[0] is not None and np.isfinite(ivs_ic[0]) and ivs_ic[0] > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_put_short_ic = (
         float(ivs_ic[1])
         if ivs_ic[1] is not None and np.isfinite(ivs_ic[1]) and ivs_ic[1] > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_call_short_ic = (
         float(ivs_ic[2])
         if ivs_ic[2] is not None and np.isfinite(ivs_ic[2]) and ivs_ic[2] > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_call_long_ic = (
         float(ivs_ic[3])
         if ivs_ic[3] is not None and np.isfinite(ivs_ic[3]) and ivs_ic[3] > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     iv_vals_ic = [v for v in ivs_ic if v is not None and np.isfinite(v) and v > 0]
     if iv_vals_ic:
@@ -112,9 +112,9 @@ def render_tab_iron_condor():
         k_put_short,
         k_call_short,
         k_call_long,
-        r=float(common_rate_value),
-        q=float(d_common),
-        sigma=float(common_sigma_value),
+        r=float(get_rate_for_ttm(T_iron_condor)),
+        q=float(get_common_div_yield()),
+        sigma=float(get_common_sigma_value()),
         sigma_put_long=float(sigma_put_long_ic),
         sigma_put_short=float(sigma_put_short_ic),
         sigma_call_short=float(sigma_call_short_ic),

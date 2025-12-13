@@ -21,6 +21,12 @@ _OPTIONABLE_TICKERS_CSV = Path(
     os.getenv("ALPACA_OPTIONABLE_TICKERS_PATH", "data/alpaca_optionable_tickers.csv")
 )
 
+_SURF_K_ALIASES = {"k", "strike", "strike_price", "strikeprice"}
+_SURF_T_ALIASES = {"t", "ttm", "tau", "time_to_maturity", "maturity"}
+_SURF_S0_ALIASES = {"s0", "spot", "underlying", "underlyingprice"}
+_SURF_IV_ALIASES = {"iv", "implied_vol", "impliedvol", "implied_volatility", "impliedvolatility", "sigma"}
+_SURF_TYPE_ALIASES = {"type", "option_type", "cp", "right"}
+
 
 def _plot_heatmap(z: np.ndarray, x: np.ndarray, y: np.ndarray, title: str) -> None:
     fig = go.Figure(
@@ -34,6 +40,33 @@ def _plot_heatmap(z: np.ndarray, x: np.ndarray, y: np.ndarray, title: str) -> No
     )
     fig.update_layout(title=title, xaxis_title="Moneyness", yaxis_title="Time to maturity (y)")
     st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True, "scrollZoom": False})
+
+
+def _grid_to_surface_df(
+    *,
+    S0: float,
+    m_grid: np.ndarray,
+    t_grid: np.ndarray,
+    iv_grid: np.ndarray,
+    opt_type: str = "call",
+) -> pd.DataFrame:
+    m = np.asarray(m_grid, dtype=float).reshape(1, -1)
+    t = np.asarray(t_grid, dtype=float).reshape(-1, 1)
+    iv = np.asarray(iv_grid, dtype=float)
+    if iv.ndim != 2 or iv.shape != (t.shape[0], m.shape[1]):
+        return pd.DataFrame(columns=["K", "T", "S0", "iv", "type"])
+
+    rows = []
+    for i_t in range(iv.shape[0]):
+        for j_m in range(iv.shape[1]):
+            v = float(iv[i_t, j_m])
+            if not np.isfinite(v) or v <= 0:
+                continue
+            T = float(t_grid[i_t])
+            K = float(float(S0) * float(m_grid[j_m]))
+            rows.append({"K": K, "T": T, "S0": float(S0), "iv": v, "type": str(opt_type)})
+
+    return pd.DataFrame(rows, columns=["K", "T", "S0", "iv", "type"])
 
 
 def _discover_cached_surfaces(cache_dir: Path) -> list[Path]:
@@ -102,6 +135,175 @@ def _parse_constraints(raw: str) -> Dict[str, Any] | None:
     except Exception:
         return None
     return val if isinstance(val, dict) else None
+
+
+def _find_surface_col(df: pd.DataFrame, aliases: set[str]):
+    cols = {str(c).strip().lower(): c for c in df.columns}
+    for alias in aliases:
+        if alias in cols:
+            return cols[alias]
+    return None
+
+
+def _canonicalize_surface_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["K", "T", "S0", "iv", "type"])
+
+    k_col = _find_surface_col(df, _SURF_K_ALIASES)
+    t_col = _find_surface_col(df, _SURF_T_ALIASES)
+    s0_col = _find_surface_col(df, _SURF_S0_ALIASES)
+    iv_col = _find_surface_col(df, _SURF_IV_ALIASES)
+    typ_col = _find_surface_col(df, _SURF_TYPE_ALIASES)
+
+    if not (k_col and t_col and s0_col and iv_col):
+        return pd.DataFrame(columns=["K", "T", "S0", "iv", "type"])
+
+    out = pd.DataFrame(
+        {
+            "K": pd.to_numeric(df[k_col], errors="coerce"),
+            "T": pd.to_numeric(df[t_col], errors="coerce"),
+            "S0": pd.to_numeric(df[s0_col], errors="coerce"),
+            "iv": pd.to_numeric(df[iv_col], errors="coerce"),
+        }
+    )
+    if typ_col is not None:
+        typ = df[typ_col].astype(str).str.lower().str.strip()
+        typ = typ.replace({"c": "call", "p": "put", "calll": "call"})
+        out["type"] = typ
+    else:
+        out["type"] = "call"
+
+    out = out.dropna(subset=["K", "T", "S0", "iv"])
+    out = out[(out["K"] > 0) & (out["T"] > 0) & (out["S0"] > 0) & (out["iv"] > 0)]
+    out = out.reset_index(drop=True)
+    return out[["K", "T", "S0", "iv", "type"]]
+
+
+def _render_surface_filters(df_canon: pd.DataFrame) -> pd.DataFrame:
+    if df_canon is None or df_canon.empty:
+        st.info("Aucune surface pour filtrage.")
+        return df_canon
+
+    dfw = df_canon.copy()
+    dfw["moneyness"] = dfw["K"] / dfw["S0"]
+    dfw = dfw.dropna(subset=["moneyness"])
+    if dfw.empty:
+        st.warning("Impossible de calculer la moneyness (K/S0).")
+        return df_canon
+
+    m_min = float(dfw["moneyness"].min())
+    m_max = float(dfw["moneyness"].max())
+    t_min = float(dfw["T"].min())
+    t_max = float(dfw["T"].max())
+    iv_min = float(dfw["iv"].min())
+    iv_max = float(dfw["iv"].max())
+
+    if m_min == m_max:
+        m_max = m_min + 1e-6
+    if t_min == t_max:
+        t_max = t_min + 1e-6
+    if iv_min == iv_max:
+        iv_max = iv_min + 1e-6
+
+    st.caption(f"Avant filtre: {len(dfw):,} lignes")
+
+    def _clamp_range(key: str, lo: float, hi: float) -> None:
+        prev = st.session_state.get(key)
+        if isinstance(prev, (list, tuple)) and len(prev) == 2:
+            try:
+                a = float(prev[0])
+                b = float(prev[1])
+            except Exception:
+                return
+            a = max(lo, min(hi, a))
+            b = max(lo, min(hi, b))
+            if a > b:
+                a, b = b, a
+            st.session_state[key] = (float(a), float(b))
+
+    _clamp_range("calib_filter_moneyness", m_min, m_max)
+    _clamp_range("calib_filter_ttm", t_min, t_max)
+    _clamp_range("calib_filter_iv", iv_min, iv_max)
+
+    col_a, col_b = st.columns([1, 1])
+    with col_a:
+        calls_only = st.checkbox("CALL only", value=True, key="calib_filter_calls_only")
+        max_rows = int(st.number_input("Max rows (sample, 0=off)", min_value=0, max_value=200000, value=0, step=1000))
+        quantile_on = st.checkbox("Filtrer IV par quantiles", value=False, key="calib_filter_iv_quantile_on")
+    with col_b:
+        m_rng = st.slider(
+            "Moneyness (K/S0)",
+            min_value=float(m_min),
+            max_value=float(m_max),
+            value=st.session_state.get("calib_filter_moneyness", (float(m_min), float(m_max))),
+            step=0.01,
+            key="calib_filter_moneyness",
+        )
+        t_rng = st.slider(
+            "TTM T (années)",
+            min_value=float(t_min),
+            max_value=float(t_max),
+            value=st.session_state.get("calib_filter_ttm", (float(t_min), float(t_max))),
+            step=0.01,
+            key="calib_filter_ttm",
+        )
+        iv_rng = st.slider(
+            "IV",
+            min_value=float(iv_min),
+            max_value=float(iv_max),
+            value=st.session_state.get("calib_filter_iv", (float(iv_min), float(iv_max))),
+            step=0.01,
+            key="calib_filter_iv",
+        )
+
+    q_low, q_high = 0.01, 0.99
+    if quantile_on:
+        q_low, q_high = st.slider(
+            "Quantiles IV (low/high)",
+            min_value=0.0,
+            max_value=1.0,
+            value=(0.01, 0.99),
+            step=0.01,
+            key="calib_filter_iv_quantiles",
+        )
+
+    df_f = dfw.copy()
+    if calls_only and "type" in df_f.columns:
+        df_f = df_f[df_f["type"].astype(str).str.lower().str.startswith("c")]
+    df_f = df_f[
+        (df_f["moneyness"] >= float(m_rng[0]))
+        & (df_f["moneyness"] <= float(m_rng[1]))
+        & (df_f["T"] >= float(t_rng[0]))
+        & (df_f["T"] <= float(t_rng[1]))
+        & (df_f["iv"] >= float(iv_rng[0]))
+        & (df_f["iv"] <= float(iv_rng[1]))
+    ]
+
+    if quantile_on and not df_f.empty:
+        try:
+            lo = float(df_f["iv"].quantile(float(q_low)))
+            hi = float(df_f["iv"].quantile(float(q_high)))
+            df_f = df_f[(df_f["iv"] >= lo) & (df_f["iv"] <= hi)]
+        except Exception:
+            pass
+
+    if max_rows > 0 and len(df_f) > max_rows:
+        df_f = df_f.sample(max_rows, random_state=42).reset_index(drop=True)
+
+    st.caption(f"Après filtre: {len(df_f):,} lignes")
+    st.dataframe(df_f.head(30), hide_index=True, use_container_width=True)
+    try:
+        st.download_button(
+            "Télécharger la surface filtrée (CSV)",
+            data=df_f[["K", "T", "S0", "iv", "type"]].to_csv(index=False).encode("utf-8"),
+            file_name="surface_filtered.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+    except Exception:
+        pass
+
+    return df_f[["K", "T", "S0", "iv", "type"]]
 
 
 def _render_constraints_builder(default_bounds: Dict[str, Any]) -> Dict[str, Any]:
@@ -181,8 +383,8 @@ def _render_constraints_builder(default_bounds: Dict[str, Any]) -> Dict[str, Any
     if swapped:
         st.warning("Bornes inversées corrigées: " + ", ".join(swapped))
 
-    with st.expander("JSON généré", expanded=False):
-        st.code(json.dumps(constraints, indent=2, ensure_ascii=False), language="json")
+    st.markdown("**JSON généré**")
+    st.code(json.dumps(constraints, indent=2, ensure_ascii=False), language="json")
 
     return constraints
 
@@ -364,6 +566,7 @@ def render_tab() -> None:
     surface_path = None
     surface_df = None
     preview_df = None
+    surface_ticker = None
 
     if source == "Upload CSV":
         uploaded = st.file_uploader(
@@ -425,12 +628,14 @@ def render_tab() -> None:
             if not res.get("success"):
                 st.error(res.get("message", "Erreur Alpaca."))
             else:
+                surface_ticker = str(res.get("ticker") or ticker).strip().upper()
                 st.session_state[_CHAIN_TICKER_KEY] = res.get("ticker") or ticker
                 st.session_state[_CHAIN_STATE_KEY] = res.get("df")
                 st.success(res.get("message", "OK"))
 
         surface_df = _get_chain_from_state()
         if surface_df is not None:
+            surface_ticker = surface_ticker or str(st.session_state.get(_CHAIN_TICKER_KEY) or "").strip().upper() or None
             preview_df = surface_df
             st.dataframe(surface_df.head(30), hide_index=True, use_container_width=True)
             with st.expander("Diagnostics surface", expanded=False):
@@ -438,8 +643,19 @@ def render_tab() -> None:
         else:
             st.info("Chargez une chaîne d'options Alpaca pour calibrer.")
 
+    calib_df = None
+    if isinstance(preview_df, pd.DataFrame) and not preview_df.empty:
+        canon = _canonicalize_surface_df(preview_df)
+        if canon.empty:
+            st.warning("Surface non reconnue (colonnes attendues: K, T, S0, iv).")
+        else:
+            with st.expander("Filtrage surface", expanded=False):
+                calib_df = _render_surface_filters(canon)
+
     # Defaults for underlying inputs
-    s0_default = _median_s0(preview_df) or float(st.session_state.get("common_spot_value", 100.0))
+    s0_default = _median_s0(calib_df if isinstance(calib_df, pd.DataFrame) else preview_df) or float(
+        st.session_state.get("common_spot_value", 100.0)
+    )
 
     st.markdown("### Paramètres du sous-jacent")
     col1, col2, col3 = st.columns(3)
@@ -487,6 +703,8 @@ def render_tab() -> None:
                 value=True,
                 key="calib_fit_mask_only",
             )
+            n_starts = int(st.number_input("Multi-start (n)", min_value=1, max_value=25, value=3, step=1))
+            seed = int(st.number_input("Seed (random)", min_value=0, max_value=10_000_000, value=42, step=1))
             max_nfev = int(
                 st.number_input("max_nfev", min_value=10, max_value=500, value=50, step=10)
             )
@@ -502,7 +720,7 @@ def render_tab() -> None:
             u_max = float(st.number_input("u_max", min_value=10.0, max_value=150.0, value=50.0, step=5.0))
 
     # Build payload + run
-    can_run = any([csv_bytes is not None, surface_path is not None, isinstance(surface_df, pd.DataFrame)])
+    can_run = any([csv_bytes is not None, surface_path is not None, isinstance(calib_df, pd.DataFrame)])
     if st.button("Calibrer", type="primary", disabled=not can_run, use_container_width=True):
         payload: Dict[str, Any] = {
             "model": model_choice,
@@ -511,9 +729,16 @@ def render_tab() -> None:
             "r": float(r_val),
             "q": float(q),
         }
-        if isinstance(surface_df, pd.DataFrame):
-            payload["df"] = surface_df
-            payload["source"] = "alpaca"
+        if isinstance(calib_df, pd.DataFrame):
+            payload["df"] = calib_df
+            if source == "Upload CSV":
+                payload["source"] = "upload"
+            elif source.startswith("Cache"):
+                payload["source"] = "cache"
+            else:
+                payload["source"] = "alpaca"
+            if surface_ticker:
+                payload["ticker"] = surface_ticker
         elif surface_path is not None:
             payload["surface_path"] = surface_path
             payload["source"] = "cache"
@@ -528,6 +753,8 @@ def render_tab() -> None:
                     "u_max": float(u_max),
                     "n_integration": int(n_integration),
                     "max_nfev": int(max_nfev),
+                    "n_starts": int(n_starts),
+                    "seed": int(seed),
                 }
             )
             with st.spinner("Calibration Heston (Least Squares)..."):
@@ -551,6 +778,37 @@ def render_tab() -> None:
 
     st.success(result.get("message", "OK"))
 
+    if str(result.get("method") or "").lower() == "least_squares" and not bool(result.get("converged", True)):
+        st.warning("Optimisation non convergée: paramètres retournés = meilleur candidat trouvé.")
+
+    details = result.get("details") or {}
+    runs = details.get("runs") if isinstance(details, dict) else None
+    if isinstance(runs, list) and runs:
+        with st.expander("Détails optimisation (multi-start)", expanded=False):
+            best_run = details.get("best_run") if isinstance(details, dict) else None
+            if best_run is not None:
+                st.caption(f"Best run: {best_run}")
+            try:
+                rows = []
+                for r in runs:
+                    if not isinstance(r, dict):
+                        continue
+                    rows.append(
+                        {
+                            "idx": r.get("idx"),
+                            "ok": r.get("ok"),
+                            "converged": r.get("converged"),
+                            "cost": r.get("cost"),
+                            "nfev": r.get("nfev"),
+                            "optimality": r.get("optimality"),
+                            "message": r.get("message") or r.get("error"),
+                        }
+                    )
+                df_runs = pd.DataFrame(rows).sort_values("cost", ascending=True, na_position="last")
+                st.dataframe(df_runs, hide_index=True, use_container_width=True)
+            except Exception as exc:
+                st.warning(f"Impossible d'afficher les runs: {exc}")
+
     metrics = result.get("metrics") or {}
     if isinstance(metrics, dict) and metrics:
         col_a, col_b, col_c = st.columns(3)
@@ -561,6 +819,64 @@ def render_tab() -> None:
     params = result.get("params") or {}
     st.markdown("### Paramètres calibrés")
     st.json(params)
+
+    col_o1, col_o2 = st.columns([2, 1])
+    with col_o1:
+        if st.button("Envoyer IV modèle vers Options", use_container_width=True, type="secondary"):
+            try:
+                S0_res = float(result.get("S0") or S0)
+                m_grid_res = np.array(result.get("m_grid") or [])
+                t_grid_res = np.array(result.get("t_grid") or [])
+                iv_model_res = np.array(result.get("iv_model") or [])
+                df_model_surface = _grid_to_surface_df(
+                    S0=S0_res, m_grid=m_grid_res, t_grid=t_grid_res, iv_grid=iv_model_res, opt_type="call"
+                )
+                st.session_state["calib_model_surface_df"] = df_model_surface
+                st.session_state["calib_model_surface_meta"] = {
+                    "ticker": result.get("ticker"),
+                    "method": result.get("method") or "neural_net",
+                    "S0": S0_res,
+                    "r": float(result.get("r") or r_val),
+                    "q": float(result.get("q") or q),
+                }
+                st.session_state["opt_iv_surface_source"] = "Calibration"
+
+                tkr = str(result.get("ticker") or "").strip().upper()
+                if tkr:
+                    st.session_state["tkr_common"] = tkr
+                    st.session_state["common_underlying"] = tkr
+
+                # Best-effort: seed Options global params from calibration
+                try:
+                    st.session_state["common_rate_value"] = float(result.get("r") or r_val)
+                    st.session_state["d_common"] = float(result.get("q") or q)
+                    if str(r_source).lower().startswith("man"):
+                        st.session_state["opt_use_yield_curve_rate"] = False
+                except Exception:
+                    pass
+
+                # Set sigma from ATM (closest m=1, T=1y)
+                try:
+                    if m_grid_res.size and t_grid_res.size and iv_model_res.size:
+                        j_atm = int(np.abs(m_grid_res - 1.0).argmin())
+                        i_t = int(np.abs(t_grid_res - 1.0).argmin())
+                        atm_iv = float(iv_model_res[i_t, j_atm])
+                        if np.isfinite(atm_iv) and atm_iv > 0:
+                            st.session_state["common_sigma_value"] = atm_iv
+                        try:
+                            st.session_state["opt_iv_surface_max_years"] = float(
+                                min(2.0, max(0.25, float(np.max(t_grid_res))))
+                            )
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+                st.success("Surface IV modèle envoyée. Ouvrez l’onglet Options → IV surface → Source=Calibration.")
+            except Exception as exc:
+                st.error(f"Impossible d'envoyer vers Options: {exc}")
+    with col_o2:
+        st.caption("Injecte la surface dans l’onglet Options (affichage + sigma global).")
 
     try:
         export_bytes = json.dumps(result, indent=2, ensure_ascii=False).encode("utf-8")
@@ -573,6 +889,59 @@ def render_tab() -> None:
         )
     except Exception:
         pass
+
+    with st.expander("Historique (save / load)", expanded=False):
+        col_a, col_b = st.columns([3, 1])
+        default_name = ""
+        try:
+            tkr = str(result.get("ticker") or result.get("symbol") or "").strip().upper()
+            meth = str(result.get("method") or "").strip().lower() or "heston"
+            default_name = f"{tkr}_{meth}".strip("_") if tkr else f"{meth}"
+        except Exception:
+            default_name = ""
+
+        with col_a:
+            save_name = st.text_input("Nom (optionnel)", value=default_name, key="calib_save_name")
+        with col_b:
+            overwrite = st.checkbox("Overwrite", value=False, key="calib_save_overwrite")
+
+        col_s1, col_s2 = st.columns([1, 1])
+        with col_s1:
+            if st.button("Save current result", type="secondary", use_container_width=True):
+                res_save = ctrl.save_calibration_result(
+                    result=result, name=str(save_name or "").strip() or None, overwrite=bool(overwrite)
+                )
+                if res_save.get("success"):
+                    st.success(f"Sauvegardé: {res_save.get('name')}")
+                else:
+                    st.error(res_save.get("message", "Save failed."))
+        with col_s2:
+            listing = ctrl.list_saved_calibrations(limit=200)
+            items = listing.get("items") if isinstance(listing, dict) else []
+            names = [it.get("name") for it in (items or []) if isinstance(it, dict) and it.get("name")]
+            if not names:
+                st.info("Aucun résultat sauvegardé.")
+            else:
+                sel = st.selectbox("Charger", options=names, index=0, key="calib_load_select")
+                if st.button("Load", use_container_width=True):
+                    res_load = ctrl.load_calibration_result(str(sel))
+                    if res_load.get("success"):
+                        data = res_load.get("data")
+                        if isinstance(data, dict):
+                            st.session_state["last_calibration_result"] = data
+                            st.success(f"Chargé: {res_load.get('name')}")
+                            st.rerun()
+                        else:
+                            st.error("Contenu invalide.")
+                    else:
+                        st.error(res_load.get("message", "Load failed."))
+
+        if names:
+            with st.expander("Fichiers disponibles", expanded=False):
+                try:
+                    st.dataframe(pd.DataFrame(items), hide_index=True, use_container_width=True)
+                except Exception:
+                    st.write(names)
 
     m_grid = np.array(result.get("m_grid") or [])
     t_grid = np.array(result.get("t_grid") or [])

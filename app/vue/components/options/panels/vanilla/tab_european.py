@@ -36,7 +36,7 @@ def render_tab_european():
         "T (années)",
         min_value=0.05,
         max_value=2.0,
-        value=float(common_maturity_value),
+        value=float(get_common_maturity_value()),
         step=0.05,
         key=_k("european_T"),
     )
@@ -46,7 +46,7 @@ def render_tab_european():
     sigma_eur = (
         float(iv_eur)
         if iv_eur is not None and np.isfinite(iv_eur) and iv_eur > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     if iv_eur is not None and np.isfinite(iv_eur) and iv_eur > 0:
         st.caption(f"IV récupérée (cache) ≈ {iv_eur:.4f}")
@@ -57,8 +57,8 @@ def render_tab_european():
         float(spot_base),
         strike,
         option_type="call" if opt_char == "c" else "put",
-        r=float(common_rate_value),
-        q=float(d_common),
+        r=float(get_rate_for_ttm(T_eur)),
+        q=float(get_common_div_yield()),
         sigma=float(sigma_eur),
         T=float(T_eur),
     )

@@ -37,7 +37,7 @@ def render_tab_chooser():
         "T (années)",
         min_value=0.05,
         max_value=2.0,
-        value=float(common_maturity_value),
+        value=float(get_common_maturity_value()),
         step=0.05,
         key=_k("chooser_T"),
     )
@@ -47,7 +47,7 @@ def render_tab_chooser():
     sigma_chooser = (
         float(iv_chooser)
         if iv_chooser is not None and np.isfinite(iv_chooser) and iv_chooser > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     if iv_chooser is not None and np.isfinite(iv_chooser) and iv_chooser > 0:
         st.caption(f"IV récupérée (cache) ≈ {iv_chooser:.4f}")
@@ -56,8 +56,8 @@ def render_tab_chooser():
     view_dyn = view_chooser(
         float(spot_base),
         strike,
-        r=float(common_rate_value),
-        q=float(d_common),
+        r=float(get_rate_for_ttm(T_chooser)),
+        q=float(get_common_div_yield()),
         sigma=float(sigma_chooser),
         T=float(T_chooser),
     )

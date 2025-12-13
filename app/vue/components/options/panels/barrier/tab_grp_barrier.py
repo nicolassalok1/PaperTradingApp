@@ -59,7 +59,6 @@ def render_tab_grp_barrier():
             key=_k("barrier_all_payout"),
         )
     with col3:
-        r_b = float(common_rate_value)
         T_b = st.slider(
             "T (années)",
             min_value=0.05,
@@ -68,6 +67,7 @@ def render_tab_grp_barrier():
             step=0.05,
             key=_k("barrier_all_T"),
         )
+        r_b = float(get_rate_for_ttm(T_b))
     iv_bar = _get_cached_iv_for(strike_b, T_b, call_put_b)
     sigma_b = (
         float(iv_bar)
@@ -90,7 +90,7 @@ def render_tab_grp_barrier():
             payout=payout_b,
             binary=binary_b,
             r=r_b,
-            q=0.0,
+            q=float(get_common_div_yield()),
             sigma=sigma_b,
             T=T_b,
         )

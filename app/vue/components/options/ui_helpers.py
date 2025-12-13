@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import streamlit as st
 
 from app.controller.options_controller import _get_cached_iv_for as ui_get_cached_iv_for
@@ -45,6 +46,14 @@ def _get_cached_iv_for(*args, **kwargs):
     except Exception:
         pass
     try:
+        # Prefer the currently loaded IV surface (CBOE) when available.
+        df_iv = None
+        try:
+            df_iv = st.session_state.get("opt_iv_surface_df")
+        except Exception:
+            df_iv = None
+        if isinstance(df_iv, pd.DataFrame) and not df_iv.empty:
+            return ui_get_cached_iv_for(df_iv, *args, **kwargs)
         return ui_get_cached_iv_for(*args, **kwargs)
     except Exception:
         return None

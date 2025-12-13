@@ -42,20 +42,20 @@ def render_tab_asian():
         )
     with col2:
         # r est récupéré du cache commun (common_rate)
-        r_as = float(common_rate_value)
         T_as = st.slider(
             "T (années)",
             min_value=0.05,
             max_value=2.0,
-            value=common_maturity_value,
+            value=float(get_common_maturity_value()),
             step=0.05,
             key=_k("asian_T"),
         )
+        r_as = float(get_rate_for_ttm(T_as))
     iv_as = _get_cached_iv_for(strike_as, T_as, option_type_as)
     sigma_as = (
         float(iv_as)
         if iv_as is not None and np.isfinite(iv_as) and iv_as > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     if iv_as is not None and np.isfinite(iv_as) and iv_as > 0:
         st.caption(f"IV récupérée (cache) ≈ {iv_as:.4f}")
@@ -68,7 +68,7 @@ def render_tab_asian():
         avg_as,
         option_type=option_type_as,
         r=r_as,
-        q=0.0,
+        q=float(get_common_div_yield()),
         sigma=sigma_as,
         T=T_as,
     )

@@ -58,7 +58,7 @@ def render_tab_digital():
         float(spot_anchor),
         strike,
         T=float(T_dig),
-        r=float(common_rate_value),
+        r=float(get_rate_for_ttm(T_dig)),
         q=float(d_common),
         sigma=float(sigma_dig),
         option_type=opt_type,

@@ -4,12 +4,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from app.vue.components.options.controller_bridge import (
-    common_rate_value,
-    common_sigma_value,
     current_spot,
     current_ticker,
-    d_common,
     ensure_close_history,
+    get_common_div_yield,
+    get_common_maturity_value,
+    get_common_sigma_value,
+    get_rate_for_ttm,
     get_option_context,
     load_close_series_for_ticker,
     render_figures_grid,
@@ -52,7 +53,12 @@ def render_tab_rainbow():
         st.session_state["tkr_rainbow_b"] = ticker_b
         opt_type = st.selectbox("Type", ["call", "put"], key=_k("rainbow_type"))
         T_val = st.slider(
-            "T (années)", min_value=0.05, max_value=2.0, value=0.5, step=0.05, key=_k("rainbow_T")
+            "T (années)",
+            min_value=0.05,
+            max_value=2.0,
+            value=float(get_common_maturity_value()),
+            step=0.05,
+            key=_k("rainbow_T"),
         )
         span_val = st.slider(
             "Span payoff (%)",
@@ -67,10 +73,20 @@ def render_tab_rainbow():
             "Corrélation ρ", min_value=-0.9, max_value=0.9, value=0.2, step=0.05, key=_k("rainbow_rho")
         )
         sigma_a = st.slider(
-            "Sigma A", min_value=0.05, max_value=1.0, value=float(common_sigma_value), step=0.01, key=_k("rainbow_sigma_a")
+            "Sigma A",
+            min_value=0.05,
+            max_value=1.0,
+            value=float(get_common_sigma_value()),
+            step=0.01,
+            key=_k("rainbow_sigma_a"),
         )
         sigma_b = st.slider(
-            "Sigma B", min_value=0.05, max_value=1.0, value=float(common_sigma_value), step=0.01, key=_k("rainbow_sigma_b")
+            "Sigma B",
+            min_value=0.05,
+            max_value=1.0,
+            value=float(get_common_sigma_value()),
+            step=0.01,
+            key=_k("rainbow_sigma_b"),
         )
         n_paths = st.number_input(
             "N paths (MC)", min_value=2000, max_value=50000, value=15000, step=1000, key=_k("rainbow_npaths")
@@ -105,8 +121,8 @@ def render_tab_rainbow():
             T=T_val,
             sigma=sigma_a,
             sigma_b=sigma_b,
-            r=float(common_rate_value),
-            q=float(d_common),
+            r=float(get_rate_for_ttm(T_val)),
+            q=float(get_common_div_yield()),
             rho=rho_val,
             n_paths=int(n_paths),
         )

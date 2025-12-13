@@ -47,7 +47,7 @@ def render_tab_iron_bfly():
         "T (années)",
         min_value=0.05,
         max_value=2.0,
-        value=float(common_maturity_value),
+        value=float(get_common_maturity_value()),
         step=0.05,
         key=_k("iron_bfly_T"),
     )
@@ -59,23 +59,23 @@ def render_tab_iron_bfly():
     sigma_put_long_ib = (
         float(ivs_ib[0])
         if ivs_ib[0] is not None and np.isfinite(ivs_ib[0]) and ivs_ib[0] > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_call_center_ib = (
         float(ivs_ib[1])
         if ivs_ib[1] is not None and np.isfinite(ivs_ib[1]) and ivs_ib[1] > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_call_long_ib = (
         float(ivs_ib[2])
         if ivs_ib[2] is not None and np.isfinite(ivs_ib[2]) and ivs_ib[2] > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_put_center_ib = (
         sigma_call_center_ib  # même strike central, on réutilise la même IV pour le put central
     )
     iv_vals_ib = [v for v in ivs_ib if v is not None and np.isfinite(v) and v > 0]
-    sigma_iron_bfly = float(np.mean(iv_vals_ib)) if iv_vals_ib else float(common_sigma_value)
+    sigma_iron_bfly = float(np.mean(iv_vals_ib)) if iv_vals_ib else float(get_common_sigma_value())
     if iv_vals_ib:
         iv_txt = " | ".join(
             (
@@ -100,9 +100,9 @@ def render_tab_iron_bfly():
         k_put_long,
         k_center,
         k_call_long,
-        r=float(common_rate_value),
-        q=float(d_common),
-        sigma=float(common_sigma_value),
+        r=float(get_rate_for_ttm(T_iron_bfly)),
+        q=float(get_common_div_yield()),
+        sigma=float(get_common_sigma_value()),
         sigma_put_long=float(sigma_put_long_ib),
         sigma_put_center=float(sigma_put_center_ib),
         sigma_call_center=float(sigma_call_center_ib),
@@ -114,9 +114,9 @@ def render_tab_iron_bfly():
         k_put_long,
         k_center,
         k_call_long,
-        r=float(common_rate_value),
-        q=float(d_common),
-        sigma=float(common_sigma_value),
+        r=float(get_rate_for_ttm(T_iron_bfly)),
+        q=float(get_common_div_yield()),
+        sigma=float(get_common_sigma_value()),
         sigma_put_long=float(sigma_put_long_ib),
         sigma_put_center=float(sigma_put_center_ib),
         sigma_call_center=float(sigma_call_center_ib),

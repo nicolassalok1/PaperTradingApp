@@ -24,7 +24,7 @@ def price_american_crr(
     a = math.exp(r_eff * dt)
     p = (a - d) / (u - d)
     q_prob = 1.0 - p
-    discount = math.exp(-r_eff * dt)
+    discount = math.exp(-float(r) * dt)
 
     asset = np.array([float(S0) * (u**j) * (d ** (steps - j)) for j in range(steps + 1)])
     payoff = np.maximum(asset - float(K), 0.0) if call_flag else np.maximum(float(K) - asset, 0.0)
@@ -66,7 +66,7 @@ def price_bermuda_crr(
     a = math.exp(r_eff * dt)
     p = (a - d) / (u - d)
     q_prob = 1.0 - p
-    discount = math.exp(-r_eff * dt)
+    discount = math.exp(-float(r) * dt)
 
     asset = np.array([float(S0) * (u**j) * (d ** (steps - j)) for j in range(steps + 1)])
     payoff = np.maximum(asset - float(K), 0.0) if call_flag else np.maximum(float(K) - asset, 0.0)

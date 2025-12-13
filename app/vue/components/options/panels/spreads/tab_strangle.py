@@ -42,7 +42,7 @@ def render_tab_strangle():
         "T (années)",
         min_value=0.05,
         max_value=2.0,
-        value=float(common_maturity_value),
+        value=float(get_common_maturity_value()),
         step=0.05,
         key=_k("strangle_T"),
     )
@@ -51,12 +51,12 @@ def render_tab_strangle():
     sigma_put_strangle = (
         float(iv_put)
         if iv_put is not None and np.isfinite(iv_put) and iv_put > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_call_strangle = (
         float(iv_call)
         if iv_call is not None and np.isfinite(iv_call) and iv_call > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     if any(v is not None and np.isfinite(v) and v > 0 for v in (iv_put, iv_call)):
         iv_put_txt = (
@@ -76,9 +76,9 @@ def render_tab_strangle():
         float(spot_base),
         k_put,
         k_call,
-        r=float(common_rate_value),
-        q=float(d_common),
-        sigma=float(common_sigma_value),
+        r=float(get_rate_for_ttm(T_strangle)),
+        q=float(get_common_div_yield()),
+        sigma=float(get_common_sigma_value()),
         sigma_call=float(sigma_call_strangle),
         sigma_put=float(sigma_put_strangle),
         T=float(T_strangle),

@@ -45,7 +45,7 @@ def render_tab_quanto():
         "T (années)",
         min_value=0.05,
         max_value=2.0,
-        value=float(common_maturity_value),
+        value=float(get_common_maturity_value()),
         step=0.05,
         key=_k("quanto_T"),
     )
@@ -53,7 +53,7 @@ def render_tab_quanto():
     sigma_quanto = (
         float(iv_quanto)
         if iv_quanto is not None and np.isfinite(iv_quanto) and iv_quanto > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     if iv_quanto is not None and np.isfinite(iv_quanto) and iv_quanto > 0:
         st.caption(f"IV récupérée (cache) ≈ {iv_quanto:.4f}")
@@ -63,8 +63,8 @@ def render_tab_quanto():
         float(spot_base),
         strike,
         fx_rate=fx_rate,
-        r=float(common_rate_value),
-        q=float(d_common),
+        r=float(get_rate_for_ttm(T_quanto)),
+        q=float(get_common_div_yield()),
         sigma=float(sigma_quanto),
         T=float(T_quanto),
         option_type=opt_type,

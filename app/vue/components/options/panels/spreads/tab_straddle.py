@@ -48,7 +48,7 @@ def render_tab_straddle():
         "T (années)",
         min_value=0.05,
         max_value=2.0,
-        value=float(common_maturity_value),
+        value=float(get_common_maturity_value()),
         step=0.05,
         key=_k("straddle_T"),
     )
@@ -57,12 +57,12 @@ def render_tab_straddle():
     sigma_call_straddle = (
         float(iv_straddle)
         if iv_straddle is not None and np.isfinite(iv_straddle) and iv_straddle > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_put_straddle = (
         float(iv_straddle_put)
         if iv_straddle_put is not None and np.isfinite(iv_straddle_put) and iv_straddle_put > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     if any(v is not None and np.isfinite(v) and v > 0 for v in (iv_straddle, iv_straddle_put)):
         iv_call_txt = (
@@ -83,9 +83,9 @@ def render_tab_straddle():
     view_dyn = view_straddle(
         float(spot_base),
         strike_slider,
-        r=float(common_rate_value),
-        q=float(d_common),
-        sigma=float(common_sigma_value),
+        r=float(get_rate_for_ttm(T_straddle)),
+        q=float(get_common_div_yield()),
+        sigma=float(get_common_sigma_value()),
         sigma_call=float(sigma_call_straddle),
         sigma_put=float(sigma_put_straddle),
         T=float(T_straddle),

@@ -45,7 +45,7 @@ def render_tab_put_spread():
         "T (années)",
         min_value=0.05,
         max_value=2.0,
-        value=float(common_maturity_value),
+        value=float(get_common_maturity_value()),
         step=0.05,
         key=_k("put_spread_T"),
     )
@@ -54,12 +54,12 @@ def render_tab_put_spread():
     sigma_long_ps = (
         float(iv_long_p)
         if iv_long_p is not None and np.isfinite(iv_long_p) and iv_long_p > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     sigma_short_ps = (
         float(iv_short_p)
         if iv_short_p is not None and np.isfinite(iv_short_p) and iv_short_p > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     if any(v is not None and np.isfinite(v) and v > 0 for v in (iv_long_p, iv_short_p)):
         iv_long_txt = (
@@ -81,9 +81,9 @@ def render_tab_put_spread():
         float(common_spot_value),
         k_long,
         k_short,
-        r=float(common_rate_value),
-        q=float(d_common),
-        sigma=float(common_sigma_value),
+        r=float(get_rate_for_ttm(T_put_spread)),
+        q=float(get_common_div_yield()),
+        sigma=float(get_common_sigma_value()),
         sigma_long=float(sigma_long_ps),
         sigma_short=float(sigma_short_ps),
         T=float(T_put_spread),

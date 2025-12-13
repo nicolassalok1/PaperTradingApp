@@ -73,13 +73,13 @@ def render_tab_calendar():
     sigma_cal = (
         float(iv_cal)
         if iv_cal is not None and np.isfinite(iv_cal) and iv_cal > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     if iv_cal is not None and np.isfinite(iv_cal) and iv_cal > 0:
         st.caption(f"IV récupérée (cache) ≈ {iv_cal:.4f}")
     else:
         st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
-    r_cal = float(common_rate_value)
+    r_cal = float(get_rate_for_ttm(t_long))
 
     view_dyn = view_calendar_spread(
         s0_ref,
@@ -88,7 +88,7 @@ def render_tab_calendar():
         T_long=t_long,
         option_type=option_type_cal,
         r=r_cal,
-        q=0.0,
+        q=float(get_common_div_yield()),
         sigma=sigma_cal,
         span=span_cal,
     )

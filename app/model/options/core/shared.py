@@ -103,7 +103,7 @@ def get_cached_iv_for(
 ):
     """
     Lightweight IV fetcher.
-    - If a DataFrame is provided (explicitly or as first arg), use it to fetch ['K', 'T', 'iv_market'].
+    - If a DataFrame is provided (explicitly or as first arg), use it to fetch ['K', 'T', 'iv_market'] (or 'iv').
     - Otherwise, gracefully return None (no cache available yet).
     Returns a float or None.
     """
@@ -115,6 +115,8 @@ def get_cached_iv_for(
                 K_target = args[1]
             if len(args) > 2:
                 T_target = args[2]
+            if len(args) > 3 and option_type is None:
+                option_type = args[3]
         elif K_target is None:
             if len(args) >= 1:
                 K_target = args[0]
@@ -129,16 +131,52 @@ def get_cached_iv_for(
         return _fallback_iv_from_ticker(ticker)
 
     df = df_iv.copy()
-    df["dk"] = np.abs(df["K"] - K_target) / max(K_target, 1e-6)
-    df["dt"] = np.abs(df["T"] - T_target)
+    cols = {str(c).lower(): c for c in df.columns}
+    k_col = cols.get("k") or cols.get("strike") or "K"
+    t_col = cols.get("t") or cols.get("maturity") or cols.get("tau") or "T"
+    iv_col = cols.get("iv_market") or cols.get("iv") or cols.get("sigma") or cols.get("vol")
+    type_col = cols.get("type")
+
+    if iv_col is None or k_col not in df.columns or t_col not in df.columns:
+        return _fallback_iv_from_ticker(ticker)
+
+    df = df.dropna(subset=[k_col, t_col, iv_col]).copy()
+    if df.empty:
+        return _fallback_iv_from_ticker(ticker)
+
+    if option_type and type_col and type_col in df.columns:
+        cp = "c" if str(option_type).lower().startswith("c") else "p"
+        df = df[df[type_col].astype(str).str.lower().str.startswith(cp)]
+        if df.empty:
+            return _fallback_iv_from_ticker(ticker)
+
+    try:
+        k_val = pd.to_numeric(df[k_col], errors="coerce")
+        t_val = pd.to_numeric(df[t_col], errors="coerce")
+        iv_val = pd.to_numeric(df[iv_col], errors="coerce")
+        df = df.assign(**{k_col: k_val, t_col: t_val, iv_col: iv_val}).dropna(
+            subset=[k_col, t_col, iv_col]
+        )
+    except Exception:
+        pass
+
+    if df.empty:
+        return _fallback_iv_from_ticker(ticker)
+
+    df["dk"] = np.abs(df[k_col] - K_target) / max(float(K_target), 1e-6)
+    df["dt"] = np.abs(df[t_col] - T_target)
 
     df_filt = df[(df["dk"] <= k_tol) & (df["dt"] <= t_tol)]
     if df_filt.empty:
         return _fallback_iv_from_ticker(ticker)
 
+    df_filt = df_filt.copy()
     df_filt["score"] = df_filt["dt"] + df_filt["dk"]
     row = df_filt.sort_values("score").iloc[0]
-    return float(row.get("iv_market", np.nan))
+    try:
+        return float(row.get(iv_col, np.nan))
+    except Exception:
+        return _fallback_iv_from_ticker(ticker)
 
 
 def _fallback_iv_from_ticker(ticker: str | None) -> float | None:

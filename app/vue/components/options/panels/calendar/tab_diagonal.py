@@ -76,12 +76,12 @@ def render_tab_diagonal():
             step=0.05,
             key=_k("diag_span"),
         )
-    r_diag = float(common_rate_value)
+    r_diag = float(get_rate_for_ttm(t_far))
     iv_diag = _get_cached_iv_for(k_far, t_far, option_type_diag)
     sigma_diag = (
         float(iv_diag)
         if iv_diag is not None and np.isfinite(iv_diag) and iv_diag > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     if iv_diag is not None and np.isfinite(iv_diag) and iv_diag > 0:
         st.caption(f"IV récupérée (cache) ≈ {iv_diag:.4f}")
@@ -96,7 +96,7 @@ def render_tab_diagonal():
         T_far=t_far,
         option_type=option_type_diag,
         r=r_diag,
-        q=0.0,
+        q=float(get_common_div_yield()),
         sigma=sigma_diag,
         span=span_diag,
     )

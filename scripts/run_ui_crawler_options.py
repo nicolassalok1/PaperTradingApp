@@ -36,6 +36,7 @@ OPTION_FAMILIES = [
     "Spreads & Wings",
     "Calendriers",
     "Exotiques avanc‚es",
+    "Basket",
 ]
 
 

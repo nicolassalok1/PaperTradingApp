@@ -36,7 +36,7 @@ def render_tab_american():
         "T (années)",
         min_value=0.05,
         max_value=2.0,
-        value=float(common_maturity_value),
+        value=float(get_common_maturity_value()),
         step=0.05,
         key=_k("american_T"),
     )
@@ -46,7 +46,7 @@ def render_tab_american():
     sigma_am = (
         float(iv_am)
         if iv_am is not None and np.isfinite(iv_am) and iv_am > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     if iv_am is not None and np.isfinite(iv_am) and iv_am > 0:
         st.caption(f"IV récupérée (cache) ≈ {iv_am:.4f}")
@@ -58,8 +58,8 @@ def render_tab_american():
         float(spot_base),
         strike,
         option_type="call" if opt_char == "c" else "put",
-        r=float(common_rate_value),
-        q=float(d_common),
+        r=float(get_rate_for_ttm(T_am)),
+        q=float(get_common_div_yield()),
         sigma=float(sigma_am),
         T=float(T_am),
         steps=steps_tree,
@@ -94,7 +94,9 @@ def render_tab_american():
             return np.maximum(arr - self.K, 0.0) if self.is_call else np.maximum(self.K - arr, 0.0)
 
     option_obj = _CrrOption(S0, strike, T_am, opt_char == "c")
-    spot_tree, value_tree = build_crr_tree(option_obj, r=float(common_rate_value), sigma=float(sigma_am), n_steps=steps_tree)
+    spot_tree, value_tree = build_crr_tree(
+        option_obj, r=float(get_rate_for_ttm(T_am)), sigma=float(sigma_am), n_steps=steps_tree
+    )
     fig_tree = plot_crr_tree(spot_tree, value_tree)
 
     close_fig = build_close_with_strike_fig(close_series, hist_tkr, strike)

@@ -41,20 +41,20 @@ def render_tab_asian_geo():
             key=_k("asian_geo_avg"),
         )
     with col2:
-        r_ag = float(common_rate_value)
         T_ag = st.slider(
             "T (années)",
             min_value=0.05,
             max_value=2.0,
-            value=common_maturity_value,
+            value=float(get_common_maturity_value()),
             step=0.05,
             key=_k("asian_geo_T"),
         )
+        r_ag = float(get_rate_for_ttm(T_ag))
     iv_ag = _get_cached_iv_for(strike_ag, T_ag, option_type_ag)
     sigma_ag = (
         float(iv_ag)
         if iv_ag is not None and np.isfinite(iv_ag) and iv_ag > 0
-        else float(common_sigma_value)
+        else float(get_common_sigma_value())
     )
     if iv_ag is not None and np.isfinite(iv_ag) and iv_ag > 0:
         st.caption(f"IV récupérée (cache) ≈ {iv_ag:.4f}")
@@ -67,7 +67,7 @@ def render_tab_asian_geo():
         avg_ag,
         option_type=option_type_ag,
         r=r_ag,
-        q=0.0,
+        q=float(get_common_div_yield()),
         sigma=sigma_ag,
         T=T_ag,
     )

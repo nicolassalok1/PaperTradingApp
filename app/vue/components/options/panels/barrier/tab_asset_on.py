@@ -57,7 +57,7 @@ def render_tab_asset_on():
         float(spot_anchor),
         strike,
         T=float(T_aon),
-        r=float(common_rate_value),
+        r=float(get_rate_for_ttm(T_aon)),
         q=float(d_common),
         sigma=float(sigma_aon),
         option_type=opt_type,
