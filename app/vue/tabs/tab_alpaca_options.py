@@ -383,7 +383,7 @@ def _render_option_market_order_form() -> None:
         cache_to_csv = st.checkbox(
             "Cache chain to CSV",
             value=True,
-            help="Writes `cache/options_alpaca_{TICKER}.csv` for debugging/reuse.",
+            help="Writes `cache/AlpacaOptionChains/options_alpaca_{TICKER}.csv` for debugging/reuse.",
             key="alpaca_options_cache_to_csv",
         )
 

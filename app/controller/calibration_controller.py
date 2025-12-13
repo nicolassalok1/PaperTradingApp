@@ -45,6 +45,7 @@ from app.model.calibration.types import (
     CalibrationResult,
     MarketSurfaceSource,
 )
+from app.model.options.data.iv_surface import fetch_iv_surface as _fetch_iv_surface
 from app.model.options.logic import download_options_alpaca as _download_options_alpaca
 
 
@@ -178,6 +179,13 @@ class CalibrationController:
     def get_heston_default_bounds(self) -> Dict[str, Any]:
         """Expose default calibration bounds for UI builder."""
         return {k: [float(v[0]), float(v[1])] for k, v in (HESTON_DEFAULT_BOUNDS or {}).items()}
+
+    def fetch_yahoo_iv_surface(self, ticker: str, max_maturity_years: float = 2.0) -> pd.DataFrame:
+        """
+        Fetch/build an IV surface derived from the Yahoo option chain.
+        Kept in the controller to avoid the view importing model modules directly.
+        """
+        return _fetch_iv_surface(ticker, max_maturity_years=float(max_maturity_years))
 
     def list_saved_calibrations(self, limit: int = 200) -> Dict[str, Any]:
         try:

@@ -6,7 +6,7 @@ from typing import Optional
 import pandas as pd
 import requests
 
-from app.utils.paths import CACHE_CSV_DIR
+from app.utils.paths import CACHE_CSV_DIR, CACHE_OHLC_DIR
 from app.utils.symbol_mapper import map_to_stooq
 
 STOOQ_BASE = "https://stooq.pl/q/d/l/"
@@ -69,14 +69,24 @@ def fetch_historical_prices(
         .replace(" ", "_")
         .replace("/", "-")
     )
-    cache_path = CACHE_CSV_DIR / f"stooq_{cache_key}.csv"
-    if cache and cache_path.exists():
-        try:
-            cached = pd.read_csv(cache_path, parse_dates=["date"])
-            if not cached.empty:
-                return cached
-        except Exception:
-            pass
+    cache_path = CACHE_OHLC_DIR / f"stooq_{cache_key}.csv"
+    legacy_cache_path = CACHE_CSV_DIR / f"stooq_{cache_key}.csv"
+    if cache:
+        for p in (cache_path, legacy_cache_path):
+            if not p.exists():
+                continue
+            try:
+                cached = pd.read_csv(p, parse_dates=["date"])
+                if cached is not None and not cached.empty:
+                    if p == legacy_cache_path and not cache_path.exists():
+                        try:
+                            CACHE_OHLC_DIR.mkdir(parents=True, exist_ok=True)
+                            cached.to_csv(cache_path, index=False)
+                        except Exception:
+                            pass
+                    return cached
+            except Exception:
+                continue
 
     params = _stooq_params(symbol, start, end, freq)
     try:
@@ -86,7 +96,7 @@ def fetch_historical_prices(
 
     if cache and df is not None and not df.empty:
         try:
-            CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
+            CACHE_OHLC_DIR.mkdir(parents=True, exist_ok=True)
             df.to_csv(cache_path, index=False)
         except Exception:
             pass

@@ -6,7 +6,7 @@ from typing import List
 import pandas as pd
 
 from app.model.market_data.market_data import fetch_options_details_yahoo, fetch_spot_price
-from app.utils.paths import CACHE_CSV_DIR
+from app.utils.paths import CACHE_CSV_DIR, CACHE_YAHOO_OPTION_CHAINS_DIR
 
 
 def _build_iv_surface_from_yahoo(ticker: str, max_maturity_years: float = 2.0) -> pd.DataFrame:
@@ -73,7 +73,7 @@ def _build_iv_surface_from_yahoo(ticker: str, max_maturity_years: float = 2.0) -
     _append_rows(puts_df, "put")
 
     surface = pd.DataFrame(records, columns=["K", "T", "S0", "iv", "type"])
-    path = CACHE_CSV_DIR / f"iv_surface_yahoo_{sym}.csv"
+    path = CACHE_YAHOO_OPTION_CHAINS_DIR / f"iv_surface_yahoo_{sym}.csv"
     # Avoid overwriting a previously valid cache with an empty fetch.
     if surface is not None and not surface.empty:
         try:

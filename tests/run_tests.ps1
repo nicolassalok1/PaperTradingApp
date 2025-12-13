@@ -18,13 +18,11 @@ if (-not (Get-Variable -Name "__test_transcript_active" -Scope Global -ErrorActi
 }
 
 # Liste des tests a executer (desormais dans scripts/)
-$tests = @(
-    "test_options_model_integrity.py",
-    "test_options_pricing_core.py",
-    "test_portfolio_valuation.py",
-    "test_yieldcurve_builder.py",
-    "test_optionable_universe.py"
-) | ForEach-Object { Join-Path $repoRoot "scripts/$_" }
+# Auto-decouverte pour eviter les references a des fichiers supprimes.
+$scriptsDir = Join-Path $repoRoot "scripts"
+$tests = Get-ChildItem -Path $scriptsDir -Filter "test_*.py" -File |
+    Where-Object { $_.Name -ne "test_all.py" } |
+    Select-Object -ExpandProperty FullName
 
 $failed = 0
 

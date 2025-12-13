@@ -10,7 +10,6 @@ import streamlit as st
 
 from app.controller.calibration_controller import CalibrationController
 from app.controller import yieldcurve_controller as yc
-from app.model.options.data.iv_surface import fetch_iv_surface as _fetch_iv_surface
 from app.vue.components.page_utils import render_page_header
 
 TAB_LABEL = "🧮 Calibration"
@@ -87,7 +86,15 @@ def _discover_cached_surfaces(cache_dir: Path) -> list[Path]:
 
     if not cache_dir.exists():
         return []
-    files = [p for p in cache_dir.glob("*.csv") if p.is_file() and _is_surface_csv(p)]
+    search_dirs = [
+        cache_dir,
+        cache_dir / "YahooOptionChains",
+    ]
+    files: list[Path] = []
+    for d in search_dirs:
+        if not d.exists():
+            continue
+        files.extend([p for p in d.glob("*.csv") if p.is_file() and _is_surface_csv(p)])
     return sorted(files, key=lambda p: p.name.lower())
 
 
@@ -591,7 +598,12 @@ def render_tab() -> None:
                 st.warning("JSON invalide.")
 
     st.markdown("### Surface IV marché")
-    surface_sources = ["Ticker (Yahoo)", "Upload CSV", "Cache (cache/*.csv)", "Alpaca (live)"]
+    surface_sources = [
+        "Ticker (Yahoo)",
+        "Upload CSV",
+        "Cache (cache/*.csv, cache/YahooOptionChains/*.csv)",
+        "Alpaca (live)",
+    ]
     if st.session_state.get("calib_surface_source") not in surface_sources:
         st.session_state["calib_surface_source"] = surface_sources[0]
     source = st.radio("Source", options=surface_sources, horizontal=True, key="calib_surface_source")
@@ -642,7 +654,7 @@ def render_tab() -> None:
         if load_clicked and ticker:
             try:
                 with st.spinner(f"Chargement surface (Yahoo) pour {ticker}..."):
-                    surface_df = _fetch_iv_surface(ticker, max_maturity_years=float(max_years))
+                    surface_df = ctrl.fetch_yahoo_iv_surface(ticker, max_maturity_years=float(max_years))
                 st.session_state[_YAHOO_SURFACE_STATE_KEY] = surface_df
                 st.session_state[_YAHOO_SURFACE_TICKER_KEY] = ticker
                 st.session_state[_YAHOO_SURFACE_MAX_YEARS_KEY] = float(max_years)
@@ -695,11 +707,13 @@ def render_tab() -> None:
             except Exception as exc:
                 st.warning(f"Impossible de lire le CSV: {exc}")
 
-    elif source == "Cache (cache/*.csv)":
+    elif source == "Cache (cache/*.csv, cache/YahooOptionChains/*.csv)":
         cache_dir = Path("cache")
         cached = _discover_cached_surfaces(cache_dir)
         if not cached:
-            st.info("Aucune surface détectée dans `cache/`. Dépose un CSV ou utilise l'upload.")
+            st.info(
+                "Aucune surface détectée dans `cache/` ou `cache/YahooOptionChains/`. Dépose un CSV ou utilise l'upload."
+            )
         else:
             chosen = st.selectbox(
                 "Surface disponible",

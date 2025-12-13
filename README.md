@@ -25,6 +25,11 @@ Model rules:
 - MAY call external APIs (Alpaca, Stooq, FRED…)
 - MUST NOT contain Streamlit or UI logic.
 
+Cache layout (repo root `cache/`):
+- `cache/OHLC/` (historical OHLC & Stooq caches)
+- `cache/YahooOptionChains/` (Yahoo-derived option chain/surfaces)
+- `cache/AlpacaOptionChains/` (Alpaca option snapshots)
+
 ---
 
 ### CONTROLLER (`app/controller`)

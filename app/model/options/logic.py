@@ -31,7 +31,7 @@ from app.model.options.exotic.american.pricing import (
     crr_pricing,
 )
 from app.model.options.exotic.lookback.lookback_call import lookback_call_option
-from app.utils.paths import CACHE_CSV_DIR
+from app.utils.paths import CACHE_ALPACA_OPTION_CHAINS_DIR, CACHE_CSV_DIR, CACHE_OHLC_DIR
 from app.utils.secrets import get_secret
 
 CLOSING_CACHE_FILE = CACHE_CSV_DIR / "closing_cache.csv"
@@ -1053,7 +1053,7 @@ def load_close_series_for_ticker(ticker: str, fallback_value: float | None = Non
     if series is not None and not series.empty:
         return series
 
-    # 2) Download (already cached to cache/ohlc_*)
+    # 2) Download (already cached to cache/OHLC/ohlc_*)
     try:
         if _fetch_md_prices is not None:
             df_dl = _fetch_md_prices(ticker_norm, period="2y", interval="1d")
@@ -1105,7 +1105,7 @@ def _closing_cache_path_for_ticker(ticker: str, period: str = "1y", interval: st
     ticker_norm = (ticker or "").strip().upper()
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", ticker_norm) or "TICKER"
     suffix = f"{period}_{interval}".replace("/", "-")
-    return CACHE_CSV_DIR / f"ohlc_{safe}_{suffix}.csv"
+    return CACHE_OHLC_DIR / f"ohlc_{safe}_{suffix}.csv"
 
 
 def load_or_fetch_closing_history(
@@ -1130,16 +1130,24 @@ def load_or_fetch_closing_history(
     if not ticker_norm:
         return None, None, False
     cache_path = _closing_cache_path_for_ticker(ticker_norm, period=period, interval=interval)
+    legacy_cache_path = CACHE_CSV_DIR / cache_path.name
 
     df_hist = None
     from_cache = False
-    if cache_path.exists():
+    for p in (cache_path, legacy_cache_path):
+        if not p.exists():
+            continue
         try:
-            df_hist = pd.read_csv(cache_path)
+            df_hist = pd.read_csv(p)
             from_cache = True
-            _log(
-                f"[closing] cache hit for {ticker_norm} ({period}/{interval}) rows={df_hist.shape[0]}"
-            )
+            _log(f"[closing] cache hit for {ticker_norm} ({period}/{interval}) rows={df_hist.shape[0]}")
+            if p == legacy_cache_path and df_hist is not None and not df_hist.empty and not cache_path.exists():
+                try:
+                    cache_path.parent.mkdir(parents=True, exist_ok=True)
+                    df_hist.to_csv(cache_path, index=False)
+                except Exception:
+                    pass
+            break
         except Exception:
             df_hist = None
             from_cache = False
@@ -1267,6 +1275,37 @@ def download_options_alpaca(
     sym = _normalize_symbol(symbol)
     if not sym:
         return pd.DataFrame()
+
+    out_path = CACHE_ALPACA_OPTION_CHAINS_DIR / f"options_alpaca_{sym}.csv"
+    legacy_out_path = CACHE_CSV_DIR / out_path.name
+    if cache_to_csv:
+        try:
+            ttl = float(os.getenv("ALPACA_OPTION_CHAIN_CACHE_TTL_SEC", "60"))
+        except Exception:
+            ttl = 60.0
+
+        def _fresh(p: Path) -> bool:
+            try:
+                age = time.time() - float(p.stat().st_mtime)
+                return age <= float(ttl) if ttl and ttl > 0 else False
+            except Exception:
+                return False
+
+        for p in (out_path, legacy_out_path):
+            if not p.exists() or not _fresh(p):
+                continue
+            try:
+                df_cached = pd.read_csv(p)
+                if df_cached is not None and not df_cached.empty:
+                    if p == legacy_out_path and not out_path.exists():
+                        try:
+                            out_path.parent.mkdir(parents=True, exist_ok=True)
+                            df_cached.to_csv(out_path, index=False)
+                        except Exception:
+                            pass
+                    return df_cached
+            except Exception:
+                pass
 
     key, secret, _ = _load_alpaca_credentials()
     headers = {
@@ -1492,9 +1531,19 @@ def download_options_alpaca(
     df = pd.DataFrame(records, columns=["symbol", "opra", "K", "T", "S0", "iv", "type"])
     if cache_to_csv:
         try:
-            CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
-            out_path = CACHE_CSV_DIR / f"options_alpaca_{sym}.csv"
-            df.to_csv(out_path, index=False)
+            if df is not None and not df.empty:
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                df.to_csv(out_path, index=False)
         except Exception:
             pass
+        if (df is None or df.empty) and (out_path.exists() or legacy_out_path.exists()):
+            for p in (out_path, legacy_out_path):
+                if not p.exists():
+                    continue
+                try:
+                    df_cached = pd.read_csv(p)
+                    if df_cached is not None and not df_cached.empty:
+                        return df_cached
+                except Exception:
+                    continue
     return df

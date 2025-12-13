@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from app.utils.paths import CACHE_CSV_DIR
+from app.utils.paths import CACHE_CSV_DIR, CACHE_OHLC_DIR
 
 
 def heatmap_axis(center: float, span: float, n_points: int = 11) -> np.ndarray:
@@ -197,8 +197,10 @@ def _iv_from_stooq_cache(ticker: str) -> float | None:
     if not tk:
         return None
     candidates = [
-        CACHE_CSV_DIR / f"stooq_{tk}.us_start_end_d.csv",
-        CACHE_CSV_DIR / f"stooq_{tk}.us_start_end_D.csv",
+        CACHE_OHLC_DIR / f"stooq_{tk}.us_start_end_d.csv",
+        CACHE_OHLC_DIR / f"stooq_{tk}.us_start_end_D.csv",
+        CACHE_CSV_DIR / f"stooq_{tk}.us_start_end_d.csv",  # legacy
+        CACHE_CSV_DIR / f"stooq_{tk}.us_start_end_D.csv",  # legacy
     ]
     path = next((p for p in candidates if p.exists()), None)
     if path is None:

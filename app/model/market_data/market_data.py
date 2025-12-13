@@ -8,6 +8,8 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import os
+import json
+import re
 from pathlib import Path
 from typing import Tuple
 from urllib.parse import quote
@@ -17,7 +19,7 @@ import requests
 
 from app.model.market_data.service import fetch_historical_prices as _fetch_stooq_history
 from app.model.market_data.service import fetch_spot_price as _fetch_stooq_spot
-from app.utils.paths import CACHE_CSV_DIR
+from app.utils.paths import CACHE_CSV_DIR, CACHE_OHLC_DIR, CACHE_YAHOO_OPTION_CHAINS_DIR
 from app.utils.secrets import get_secret
 from app.utils.symbol_mapper import map_to_stooq
 
@@ -277,8 +279,10 @@ def _find_stooq_cache_path(symbol: str) -> Path | None:
     if not mapped:
         return None
     candidates = [
-        CACHE_CSV_DIR / f"stooq_{mapped}_start_end_D.csv",
-        CACHE_CSV_DIR / f"stooq_{mapped}_start_end_d.csv",
+        CACHE_OHLC_DIR / f"stooq_{mapped}_start_end_D.csv",
+        CACHE_OHLC_DIR / f"stooq_{mapped}_start_end_d.csv",
+        CACHE_CSV_DIR / f"stooq_{mapped}_start_end_D.csv",  # legacy
+        CACHE_CSV_DIR / f"stooq_{mapped}_start_end_d.csv",  # legacy
     ]
     return next((p for p in candidates if p.exists()), None)
 
@@ -353,7 +357,7 @@ def fetch_ohlc_history(symbol: str, *, period: str = "2y", interval: str = "1d")
 
 def _cache_path(ticker: str, period: str, interval: str) -> Path:
     safe = f"{ticker}_{period}_{interval}".replace("/", "_").replace(" ", "_")
-    return CACHE_CSV_DIR / f"ohlc_{safe}.csv"
+    return CACHE_OHLC_DIR / f"ohlc_{safe}.csv"
 
 
 def load_or_fetch_closing_history(
@@ -364,9 +368,10 @@ def load_or_fetch_closing_history(
         return None, None, False
     path = _cache_path(tk, period, interval)
     # Support legacy filename if present
-    legacy_path = CACHE_CSV_DIR / f"closing_{tk}_{period}_{interval}.csv"
+    legacy_ohlc_path = CACHE_CSV_DIR / path.name
+    legacy_close_path = CACHE_CSV_DIR / f"closing_{tk}_{period}_{interval}.csv"
     from_cache = False
-    for p in (path, legacy_path):
+    for p in (path, legacy_ohlc_path, legacy_close_path):
         if not p.exists():
             continue
         try:
@@ -375,9 +380,18 @@ def load_or_fetch_closing_history(
             df = _filter_to_period(df, period)
             if df is not None and not df.empty:
                 # If we loaded the legacy close-only cache, materialize the new OHLC filename.
-                if p == legacy_path:
+                if p == legacy_close_path:
                     try:
-                        CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
+                        CACHE_OHLC_DIR.mkdir(parents=True, exist_ok=True)
+                        df.to_csv(path, index=False)
+                    except Exception:
+                        pass
+                    return df, path, True
+
+                # If we loaded a legacy `ohlc_*.csv` from cache/ root, migrate it.
+                if p == legacy_ohlc_path and not path.exists():
+                    try:
+                        CACHE_OHLC_DIR.mkdir(parents=True, exist_ok=True)
                         df.to_csv(path, index=False)
                     except Exception:
                         pass
@@ -399,7 +413,7 @@ def load_or_fetch_closing_history(
 
                     if df_full is not None and not df_full.empty:
                         try:
-                            CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
+                            CACHE_OHLC_DIR.mkdir(parents=True, exist_ok=True)
                             df_full.to_csv(path, index=False)
                         except Exception:
                             pass
@@ -418,7 +432,7 @@ def load_or_fetch_closing_history(
             df = _filter_to_period(df, period)
             if df is not None and not df.empty:
                 try:
-                    CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
+                    CACHE_OHLC_DIR.mkdir(parents=True, exist_ok=True)
                     df.to_csv(path, index=False)
                 except Exception:
                     pass
@@ -429,7 +443,7 @@ def load_or_fetch_closing_history(
     df = fetch_ohlc_history(tk, period=period, interval=interval)
     if df is not None and not df.empty:
         try:
-            CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
+            CACHE_OHLC_DIR.mkdir(parents=True, exist_ok=True)
             df.to_csv(path, index=False)
         except Exception:
             pass
@@ -442,6 +456,117 @@ def clear_closing_history_cache(ticker: str, *, period: str = "2y", interval: st
     path = _cache_path(tk, period, interval)
     try:
         path.unlink(missing_ok=True)
+    except Exception:
+        pass
+    try:
+        (CACHE_CSV_DIR / path.name).unlink(missing_ok=True)
+    except Exception:
+        pass
+    try:
+        (CACHE_CSV_DIR / f"closing_{tk}_{period}_{interval}.csv").unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _file_age_seconds(path: Path) -> float | None:
+    try:
+        ts = path.stat().st_mtime
+        return (dt.datetime.now() - dt.datetime.fromtimestamp(ts)).total_seconds()
+    except Exception:
+        return None
+
+
+def _safe_key_fragment(val: object) -> str:
+    raw = str(val).strip()
+    raw = raw.replace(".", "p")
+    raw = re.sub(r"[^A-Za-z0-9_-]+", "_", raw)
+    return raw or "x"
+
+
+def _yahoo_chain_cache_paths(
+    symbol: str,
+    *,
+    max_maturity_years: float | None,
+    max_expiries: int,
+) -> tuple[Path, Path]:
+    sym = (symbol or "").strip().upper()
+    y = _safe_key_fragment("None" if max_maturity_years is None else float(max_maturity_years))
+    e = _safe_key_fragment(int(max_expiries))
+    stem = f"yahoo_chain_{sym}_Y{y}_E{e}"
+    return (
+        CACHE_YAHOO_OPTION_CHAINS_DIR / f"{stem}.csv",
+        CACHE_YAHOO_OPTION_CHAINS_DIR / f"{stem}.json",
+    )
+
+
+def _load_yahoo_chain_cache(
+    csv_path: Path,
+    meta_path: Path,
+    *,
+    ttl_sec: float | None,
+) -> tuple[pd.DataFrame, float, float, float] | None:
+    if not csv_path.exists() or not meta_path.exists():
+        return None
+    if ttl_sec is not None and ttl_sec > 0:
+        age = _file_age_seconds(csv_path)
+        if age is None or age > float(ttl_sec):
+            return None
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception:
+        return None
+    try:
+        meta_raw = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        meta_raw = {}
+    meta = meta_raw if isinstance(meta_raw, dict) else {}
+    spot = meta.get("spot")
+    rf = meta.get("rf", 0.0)
+    div = meta.get("div", 0.0)
+    try:
+        spot_f = float(spot) if spot is not None else float("nan")
+    except Exception:
+        spot_f = float("nan")
+    try:
+        rf_f = float(rf)
+    except Exception:
+        rf_f = 0.0
+    try:
+        div_f = float(div)
+    except Exception:
+        div_f = 0.0
+    return df, spot_f, rf_f, div_f
+
+
+def _save_yahoo_chain_cache(
+    csv_path: Path,
+    meta_path: Path,
+    *,
+    chain_df: pd.DataFrame,
+    spot: float,
+    rf: float,
+    div: float,
+    max_maturity_years: float | None,
+    max_expiries: int,
+) -> None:
+    if chain_df is None or chain_df.empty:
+        return
+    try:
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        chain_df.to_csv(csv_path, index=False)
+    except Exception:
+        return
+    meta = {
+        "schema": 1,
+        "spot": float(spot) if spot is not None else float("nan"),
+        "rf": float(rf) if rf is not None else 0.0,
+        "div": float(div) if div is not None else 0.0,
+        "max_maturity_years": max_maturity_years,
+        "max_expiries": int(max_expiries),
+        "saved_at": dt.datetime.utcnow().isoformat(),
+    }
+    try:
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     except Exception:
         pass
 
@@ -603,6 +728,8 @@ def fetch_options_details_yahoo(
     *,
     max_maturity_years: float | None = 2.0,
     max_expiries: int = 12,
+    use_cache: bool = True,
+    cache_ttl_sec: float | None = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, float, float, float]:
     """
     Download Yahoo option chain across multiple expiries and return:
@@ -615,6 +742,30 @@ def fetch_options_details_yahoo(
     sym = (symbol or "").strip().upper()
     if not sym:
         return pd.DataFrame(), pd.DataFrame(), float("nan"), 0.0, 0.0
+
+    if cache_ttl_sec is None:
+        try:
+            cache_ttl_sec = float(os.getenv("YAHOO_OPTION_CHAIN_CACHE_TTL_SEC", "900"))
+        except Exception:
+            cache_ttl_sec = 900.0
+
+    csv_cache_path, meta_cache_path = _yahoo_chain_cache_paths(
+        sym,
+        max_maturity_years=max_maturity_years,
+        max_expiries=int(max_expiries),
+    )
+    if use_cache:
+        cached = _load_yahoo_chain_cache(
+            csv_cache_path,
+            meta_cache_path,
+            ttl_sec=cache_ttl_sec,
+        )
+        if cached is not None:
+            chain_df, spot_cached, rf_cached, div_cached = cached
+            if chain_df is not None and not chain_df.empty and "type" in chain_df.columns:
+                calls_df = chain_df[chain_df["type"].astype(str).str.lower() == "call"].copy()
+                puts_df = chain_df[chain_df["type"].astype(str).str.lower() == "put"].copy()
+                return calls_df, puts_df, float(spot_cached), float(rf_cached), float(div_cached)
 
     today = dt.date.today()
     base_payload = _fetch_yahoo_options_json(sym)
@@ -723,8 +874,41 @@ def fetch_options_details_yahoo(
 
     calls_df = pd.DataFrame(calls_rows)
     puts_df = pd.DataFrame(puts_rows)
+    spot_out = float(spot_val)
+    rf_out = 0.0
+    div_out = 0.0
 
-    return calls_df, puts_df, float(spot_val), 0.0, 0.0
+    if use_cache:
+        try:
+            chain_df = pd.concat([calls_df, puts_df], ignore_index=True)
+        except Exception:
+            chain_df = pd.DataFrame()
+        _save_yahoo_chain_cache(
+            csv_cache_path,
+            meta_cache_path,
+            chain_df=chain_df,
+            spot=spot_out,
+            rf=rf_out,
+            div=div_out,
+            max_maturity_years=max_maturity_years,
+            max_expiries=int(max_expiries),
+        )
+
+    # Best-effort: on API failure, fall back to any stale cache we have.
+    if use_cache and (calls_df.empty and puts_df.empty):
+        cached_stale = _load_yahoo_chain_cache(
+            csv_cache_path,
+            meta_cache_path,
+            ttl_sec=None,
+        )
+        if cached_stale is not None:
+            chain_df, spot_cached, rf_cached, div_cached = cached_stale
+            if chain_df is not None and not chain_df.empty and "type" in chain_df.columns:
+                calls_df = chain_df[chain_df["type"].astype(str).str.lower() == "call"].copy()
+                puts_df = chain_df[chain_df["type"].astype(str).str.lower() == "put"].copy()
+                return calls_df, puts_df, float(spot_cached), float(rf_cached), float(div_cached)
+
+    return calls_df, puts_df, spot_out, rf_out, div_out
 
 
 __all__ = [

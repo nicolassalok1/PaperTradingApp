@@ -11,16 +11,16 @@ from typing import Any
 import pandas as pd
 
 # Unified cache locations under cache/ and data/.
-from app.utils.paths import CACHE_CSV_DIR, JSON_DIR, ROOT_DIR
+from app.utils.paths import CACHE_CSV_DIR, CACHE_YAHOO_OPTION_CHAINS_DIR, JSON_DIR, ROOT_DIR
 
 SCRIPTS_DIR = ROOT_DIR / "app" / "scripts"
 
-for _p in (CACHE_CSV_DIR, JSON_DIR):
+for _p in (CACHE_CSV_DIR, CACHE_YAHOO_OPTION_CHAINS_DIR, JSON_DIR):
     _p.mkdir(parents=True, exist_ok=True)
 
-CACHE_OPTIONS_HISTORY_FILE = CACHE_CSV_DIR / "options_last_history.csv"
-CACHE_OPTIONS_CALLS_FILE = CACHE_CSV_DIR / "options_last_calls.csv"
-CACHE_OPTIONS_PUTS_FILE = CACHE_CSV_DIR / "options_last_puts.csv"
+CACHE_OPTIONS_HISTORY_FILE = CACHE_YAHOO_OPTION_CHAINS_DIR / "options_last_history.csv"
+CACHE_OPTIONS_CALLS_FILE = CACHE_YAHOO_OPTION_CHAINS_DIR / "options_last_calls.csv"
+CACHE_OPTIONS_PUTS_FILE = CACHE_YAHOO_OPTION_CHAINS_DIR / "options_last_puts.csv"
 CACHE_OPTIONS_META_FILE = JSON_DIR / "options_page_cache.json"
 CLOSING_CACHE_FILE = CACHE_CSV_DIR / "closing_cache.csv"
 OPTIONS_BOOK_FILE = JSON_DIR / "options_portfolio.json"
@@ -151,10 +151,37 @@ def load_cached_option_chain(
         meta = load_options_meta()
         if _norm_ticker(meta.get("ticker", "")) != tkr:
             return None, None, None, None, None
-        calls_df = (
-            pd.read_csv(CACHE_OPTIONS_CALLS_FILE) if CACHE_OPTIONS_CALLS_FILE.exists() else None
+        # Backward compatibility: old cache files lived directly under cache/
+        legacy_calls = CACHE_CSV_DIR / CACHE_OPTIONS_CALLS_FILE.name
+        legacy_puts = CACHE_CSV_DIR / CACHE_OPTIONS_PUTS_FILE.name
+
+        calls_path = (
+            CACHE_OPTIONS_CALLS_FILE
+            if CACHE_OPTIONS_CALLS_FILE.exists()
+            else (legacy_calls if legacy_calls.exists() else None)
         )
-        puts_df = pd.read_csv(CACHE_OPTIONS_PUTS_FILE) if CACHE_OPTIONS_PUTS_FILE.exists() else None
+        puts_path = (
+            CACHE_OPTIONS_PUTS_FILE
+            if CACHE_OPTIONS_PUTS_FILE.exists()
+            else (legacy_puts if legacy_puts.exists() else None)
+        )
+
+        calls_df = pd.read_csv(calls_path) if calls_path is not None else None
+        puts_df = pd.read_csv(puts_path) if puts_path is not None else None
+
+        # Migrate legacy cache files into the structured folder (best-effort).
+        if calls_path == legacy_calls and calls_df is not None and not calls_df.empty:
+            try:
+                CACHE_OPTIONS_CALLS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                calls_df.to_csv(CACHE_OPTIONS_CALLS_FILE, index=False)
+            except Exception:
+                pass
+        if puts_path == legacy_puts and puts_df is not None and not puts_df.empty:
+            try:
+                CACHE_OPTIONS_PUTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                puts_df.to_csv(CACHE_OPTIONS_PUTS_FILE, index=False)
+            except Exception:
+                pass
         return (
             calls_df,
             puts_df,
