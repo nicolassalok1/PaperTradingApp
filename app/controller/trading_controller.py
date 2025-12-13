@@ -125,6 +125,14 @@ def create_option_market_order(option_symbol: str, qty: float, side: str):
     return _orders_service().submit_option_market_order(option_symbol, qty, side)
 
 
+def create_option_limit_order(option_symbol: str, qty: float, limit_price: float, side: str):
+    return _orders_service().submit_option_limit_order(option_symbol, qty, limit_price, side)
+
+
+def get_orders_clock() -> Dict[str, Any]:
+    return _orders_service().get_clock()
+
+
 __all__ = [
     # Spot
     "get_spot_account",
@@ -145,4 +153,6 @@ __all__ = [
     "get_option_positions",
     "get_open_option_orders",
     "create_option_market_order",
+    "create_option_limit_order",
+    "get_orders_clock",
 ]

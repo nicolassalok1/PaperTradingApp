@@ -10,6 +10,7 @@ import streamlit as st
 
 from app.controller.calibration_controller import CalibrationController
 from app.controller import yieldcurve_controller as yc
+from app.model.options.data.iv_surface import fetch_iv_surface as _fetch_iv_surface
 from app.vue.components.page_utils import render_page_header
 
 TAB_LABEL = "🧮 Calibration"
@@ -17,6 +18,9 @@ TAB_LABEL = "🧮 Calibration"
 _CHAIN_STATE_KEY = "calib_alpaca_chain_df"
 _CHAIN_TICKER_KEY = "calib_alpaca_chain_ticker"
 _TICKERS_STATE_KEY = "calib_alpaca_underlyings"
+_YAHOO_SURFACE_STATE_KEY = "calib_yahoo_surface_df"
+_YAHOO_SURFACE_TICKER_KEY = "calib_yahoo_surface_ticker"
+_YAHOO_SURFACE_MAX_YEARS_KEY = "calib_yahoo_surface_max_years"
 _OPTIONABLE_TICKERS_CSV = Path(
     os.getenv("ALPACA_OPTIONABLE_TICKERS_PATH", "data/alpaca_optionable_tickers.csv")
 )
@@ -596,12 +600,10 @@ def render_tab() -> None:
                 st.warning("JSON invalide.")
 
     st.markdown("### Surface IV marché")
-    source = st.radio(
-        "Source",
-        options=["Upload CSV", "Cache (cache/*.csv)", "Alpaca (live)"],
-        horizontal=True,
-        key="calib_surface_source",
-    )
+    surface_sources = ["Ticker (Yahoo)", "Upload CSV", "Cache (cache/*.csv)", "Alpaca (live)"]
+    if st.session_state.get("calib_surface_source") not in surface_sources:
+        st.session_state["calib_surface_source"] = surface_sources[0]
+    source = st.radio("Source", options=surface_sources, horizontal=True, key="calib_surface_source")
 
     csv_bytes = None
     surface_path = None
@@ -609,7 +611,84 @@ def render_tab() -> None:
     preview_df = None
     surface_ticker = None
 
-    if source == "Upload CSV":
+    if source == "Ticker (Yahoo)":
+        default_ticker = (
+            st.session_state.get("calib_yahoo_ticker_input")
+            or st.session_state.get("tkr_common")
+            or st.session_state.get(_CHAIN_TICKER_KEY)
+            or "AAPL"
+        )
+        col_ticker, col_years, col_load = st.columns([2, 2, 1])
+        with col_ticker:
+            ticker_raw = st.text_input(
+                "Ticker",
+                value=str(default_ticker),
+                placeholder="ex: AAPL",
+                key="calib_yahoo_ticker_input",
+            )
+        with col_years:
+            try:
+                max_years_default = float(st.session_state.get("calib_yahoo_max_years", 2.0))
+            except Exception:
+                max_years_default = 2.0
+            max_years_default = min(2.0, max(0.25, max_years_default))
+            max_years = st.slider(
+                "Max maturité (années)",
+                min_value=0.25,
+                max_value=2.0,
+                step=0.25,
+                value=float(max_years_default),
+                key="calib_yahoo_max_years",
+            )
+        with col_load:
+            load_clicked = st.button("Load", use_container_width=True, key="calib_yahoo_load_btn")
+
+        ticker = (ticker_raw or "").strip().upper()
+        cached_df = st.session_state.get(_YAHOO_SURFACE_STATE_KEY)
+        cached_ticker = str(st.session_state.get(_YAHOO_SURFACE_TICKER_KEY) or "").strip().upper()
+        cached_max_years = st.session_state.get(_YAHOO_SURFACE_MAX_YEARS_KEY)
+
+        if load_clicked and ticker:
+            try:
+                with st.spinner(f"Chargement surface (Yahoo) pour {ticker}..."):
+                    surface_df = _fetch_iv_surface(ticker, max_maturity_years=float(max_years))
+                st.session_state[_YAHOO_SURFACE_STATE_KEY] = surface_df
+                st.session_state[_YAHOO_SURFACE_TICKER_KEY] = ticker
+                st.session_state[_YAHOO_SURFACE_MAX_YEARS_KEY] = float(max_years)
+            except Exception as exc:
+                st.error(f"Yahoo indisponible: {exc}")
+                st.session_state[_YAHOO_SURFACE_STATE_KEY] = None
+                st.session_state[_YAHOO_SURFACE_TICKER_KEY] = None
+                st.session_state[_YAHOO_SURFACE_MAX_YEARS_KEY] = None
+
+        cache_matches = (
+            isinstance(cached_df, pd.DataFrame)
+            and not cached_df.empty
+            and bool(cached_ticker)
+            and bool(ticker)
+            and cached_ticker == ticker
+            and (
+                cached_max_years is None
+                or float(cached_max_years) == float(max_years)
+            )
+        )
+        surface_df = surface_df if isinstance(surface_df, pd.DataFrame) else (cached_df if cache_matches else None)
+        if isinstance(surface_df, pd.DataFrame) and not surface_df.empty:
+            surface_ticker = ticker or None
+            preview_df = surface_df
+            _render_surface_preview_dropdown(
+                surface_df,
+                label=f"Aperçu / diagnostics surface ({surface_ticker or 'Yahoo'})",
+                key="calib_surface_preview_yahoo",
+            )
+        else:
+            needs_reload = bool(ticker) and not cache_matches
+            if needs_reload:
+                st.info("Clique sur `Load` pour récupérer l'option chain Yahoo.")
+            else:
+                st.info("Aucune surface Yahoo chargée.")
+
+    elif source == "Upload CSV":
         uploaded = st.file_uploader(
             "Charger une surface IV (CSV: K, T, S0, iv, type)", type=["csv"], key="calib_upload"
         )
@@ -648,7 +727,7 @@ def render_tab() -> None:
             except Exception as exc:
                 st.warning(f"Impossible de lire {chosen.name}: {exc}")
 
-    else:  # Alpaca (live)
+    elif source == "Alpaca (live)":
         tickers = _load_optionable_tickers()
         default_ticker = st.session_state.get(_CHAIN_TICKER_KEY) or (tickers[0] if tickers else "AAPL")
         col_ticker, col_load = st.columns([3, 1])
@@ -917,6 +996,8 @@ def render_tab() -> None:
                 payload["source"] = "upload"
             elif source.startswith("Cache"):
                 payload["source"] = "cache"
+            elif source.startswith("Ticker"):
+                payload["source"] = "yahoo"
             else:
                 payload["source"] = "alpaca"
             if surface_ticker:

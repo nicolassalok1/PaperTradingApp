@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+import time
+import json
 
 import pandas as pd
 import streamlit as st
@@ -13,6 +15,8 @@ _CHAIN_STATE_KEY = "alpaca_options_chain_df"
 _CHAIN_TICKER_KEY = "alpaca_options_chain_ticker"
 _TICKERS_STATE_KEY = "alpaca_options_underlyings"
 _TICKERS_META_STATE_KEY = "alpaca_options_underlyings_meta"
+_CLOCK_STATE_KEY = "alpaca_orders_clock"
+_CLOCK_TS_STATE_KEY = "alpaca_orders_clock_ts"
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -33,6 +37,71 @@ _OPTIONABLE_TICKERS_CSV = _resolve_repo_relative_path(_OPTIONABLE_TICKERS_CSV)
 _PREFERRED_DEFAULTS: list[str] = ["SPY", "AAPL", "MSFT", "TSLA", "QQQ"]
 _DEFAULT_MAX_PAGES = 10
 _DEFAULT_MAX_CONTRACTS = 2000
+_CLOCK_TTL_SEC = 60.0
+
+
+def _get_orders_clock_cached() -> dict | None:
+    now = time.time()
+    ts = st.session_state.get(_CLOCK_TS_STATE_KEY)
+    clock = st.session_state.get(_CLOCK_STATE_KEY)
+    try:
+        ts_f = float(ts) if ts is not None else None
+    except Exception:
+        ts_f = None
+
+    if isinstance(clock, dict) and ts_f is not None and (now - ts_f) < _CLOCK_TTL_SEC:
+        return clock
+
+    try:
+        clock = ctrl.get_orders_clock()
+    except Exception:
+        clock = None
+
+    st.session_state[_CLOCK_STATE_KEY] = clock
+    st.session_state[_CLOCK_TS_STATE_KEY] = now
+    return clock if isinstance(clock, dict) else None
+
+
+def _clock_is_open(clock: dict | None) -> bool | None:
+    if not isinstance(clock, dict):
+        return None
+    is_open = clock.get("is_open")
+    if isinstance(is_open, bool):
+        return is_open
+    if is_open is None:
+        return None
+    try:
+        return bool(is_open)
+    except Exception:
+        return None
+
+
+def _format_clock_dt(val) -> str:
+    if val is None or val == "":
+        return ""
+    try:
+        return pd.to_datetime(val).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        try:
+            return str(val)
+        except Exception:
+            return ""
+
+
+def _format_alpaca_error(exc: Exception) -> str:
+    raw = str(exc or "").strip()
+    if not raw:
+        return "Option order failed."
+    try:
+        if raw.startswith("{") and raw.endswith("}"):
+            payload = json.loads(raw)
+            if isinstance(payload, dict):
+                code = payload.get("code")
+                msg = payload.get("message") or raw
+                return f"Option order failed: {msg}" + (f" (code {code})" if code else "")
+    except Exception:
+        pass
+    return f"Option order failed: {raw}"
 
 
 def _to_float(val) -> float:
@@ -138,6 +207,13 @@ def _get_chain_from_state() -> pd.DataFrame | None:
 
 def _render_manual_opra_form() -> None:
     with st.expander("Advanced: enter OPRA symbol manually"):
+        clock = _get_orders_clock_cached()
+        is_open = _clock_is_open(clock)
+        status = "OPEN" if is_open else "CLOSED" if is_open is False else "n/a"
+        next_open = _format_clock_dt((clock or {}).get("next_open"))
+        if status != "n/a":
+            st.caption(f"Market: {status}" + (f" | next open: {next_open}" if next_open and status == "CLOSED" else ""))
+
         st.caption(
             "If you already know the exact OPRA symbol as used in Alpaca "
             "(e.g., AAPL240621C00150000), you can enter it directly below."
@@ -147,20 +223,46 @@ def _render_manual_opra_form() -> None:
                 "Option symbol (OPRA)",
                 placeholder="AAPL240621C00150000",
             ).upper()
+            order_type = st.radio(
+                "Order type (manual)",
+                options=["Market", "Limit"],
+                horizontal=True,
+            )
+            limit_price = None
+            if order_type == "Limit":
+                limit_price = st.number_input(
+                    "Limit price (manual)",
+                    min_value=0.01,
+                    value=0.10,
+                    step=0.01,
+                )
             qty = st.number_input("Contracts (manual)", min_value=1, value=1, step=1)
             side = st.radio("Side (manual)", options=["Buy", "Sell"], horizontal=True)
-            submitted = st.form_submit_button("Send option market order (manual)", type="secondary")
+            disable_market = order_type == "Market" and is_open is False
+            submitted = st.form_submit_button(
+                f"Send option {order_type.lower()} order (manual)",
+                type="secondary",
+                disabled=disable_market,
+            )
 
         if submitted:
             if not option_symbol:
                 st.warning("Please enter an option symbol.")
                 return
             try:
-                order = ctrl.create_option_market_order(option_symbol, qty, side.lower())
+                if order_type == "Limit":
+                    if limit_price is None or float(limit_price) <= 0:
+                        st.warning("Please enter a valid limit price.")
+                        return
+                    order = ctrl.create_option_limit_order(option_symbol, qty, float(limit_price), side.lower())
+                else:
+                    order = ctrl.create_option_market_order(option_symbol, qty, side.lower())
                 order_id = order.get("id") or order.get("client_order_id") or "order sent"
                 st.success(f"Option order sent: {order_id}")
             except Exception as exc:
-                st.error(f"Option order failed: {exc}")
+                st.error(_format_alpaca_error(exc))
+                if "market hours" in str(exc).lower():
+                    st.info("Market orders are only accepted during market hours. Use a limit order or try again when the market is open.")
 
 
 def _render_option_market_order_form() -> None:
@@ -333,6 +435,10 @@ def _render_option_market_order_form() -> None:
         _render_manual_opra_form()
         return
 
+    clock = _get_orders_clock_cached()
+    is_open = _clock_is_open(clock)
+    market_status = "OPEN" if is_open else "CLOSED" if is_open is False else "n/a"
+
     spot_val = None
     try:
         if "S0" in df_chain.columns:
@@ -343,10 +449,15 @@ def _render_option_market_order_form() -> None:
         spot_val = None
 
     chain_ticker = st.session_state.get(_CHAIN_TICKER_KEY) or str(ticker or "").strip().upper()
-    col_m1, col_m2, col_m3 = st.columns(3)
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     col_m1.metric("Underlying", chain_ticker or "n/a")
     col_m2.metric("Spot price", f"${spot_val:,.2f}" if spot_val is not None and spot_val == spot_val else "n/a")
     col_m3.metric("Contracts loaded", f"{len(df_chain):,}")
+    col_m4.metric("Market", market_status)
+    if market_status == "CLOSED":
+        next_open = _format_clock_dt((clock or {}).get("next_open"))
+        if next_open:
+            st.caption(f"Next market open: {next_open}")
 
     df = df_chain.copy()
     required_cols = {"opra", "K", "T", "type"}
@@ -419,7 +530,25 @@ def _render_option_market_order_form() -> None:
         with col_q:
             qty = st.number_input("Contracts", min_value=1, value=1, step=1)
 
-        submitted = st.form_submit_button("Send option market order", type="primary")
+        order_type = st.radio("Order type", options=["Market", "Limit"], horizontal=True)
+        limit_price = None
+        if order_type == "Limit":
+            limit_price = st.number_input(
+                "Limit price",
+                min_value=0.01,
+                value=0.10,
+                step=0.01,
+            )
+
+        disable_market = order_type == "Market" and is_open is False
+        if disable_market:
+            st.info("Market is closed: market orders are disabled. Switch to a limit order or try again during market hours.")
+
+        submitted = st.form_submit_button(
+            f"Send option {order_type.lower()} order",
+            type="primary",
+            disabled=disable_market,
+        )
 
     if submitted:
         chosen = df_slice[df_slice["K"] == strike]
@@ -432,11 +561,19 @@ def _render_option_market_order_form() -> None:
             st.error("No OPRA symbol available for the selected contract.")
             return
         try:
-            order = ctrl.create_option_market_order(opra_symbol, qty, side.lower())
+            if order_type == "Limit":
+                if limit_price is None or float(limit_price) <= 0:
+                    st.warning("Please enter a valid limit price.")
+                    return
+                order = ctrl.create_option_limit_order(opra_symbol, qty, float(limit_price), side.lower())
+            else:
+                order = ctrl.create_option_market_order(opra_symbol, qty, side.lower())
             order_id = order.get("id") or order.get("client_order_id") or "order sent"
             st.success(f"Option order sent: {order_id}")
         except Exception as exc:
-            st.error(f"Option order failed: {exc}")
+            st.error(_format_alpaca_error(exc))
+            if "market hours" in str(exc).lower():
+                st.info("Market orders are only accepted during market hours. Use a limit order or try again when the market is open.")
 
     _render_manual_opra_form()
 

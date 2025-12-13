@@ -18,7 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 from app.model.options.logic import _load_alpaca_credentials, fetch_alpaca_option_tickers
 
 
-DEFAULT_OUTPUT = Path("data/alpaca_optionable_tickers.csv")
+DEFAULT_OUTPUT = Path("data/scan_alpaca_optionable_tickers.csv")
 logger = logging.getLogger(__name__)
 
 

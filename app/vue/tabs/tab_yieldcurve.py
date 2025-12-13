@@ -105,42 +105,26 @@ def render_tab() -> None:
                     st.error(res.get("message", "Import échoué."))
 
         st.markdown("##### Éditeur rapide (nœuds)")
-        df_nodes_edit = pd.DataFrame(nodes)
-        cols = [c for c in ["tenor", "t_years", "zero_rate"] if c in df_nodes_edit.columns]
-        if cols:
-            df_edit = st.data_editor(
-                df_nodes_edit[cols],
-                num_rows="dynamic",
-                use_container_width=True,
-                key=f"yc_nodes_editor_{currency}",
-            )
-            if st.button("Sauvegarder l'éditeur", use_container_width=True):
-                result = yc.save_curve_nodes(currency, df_edit.to_dict(orient="records"))
-                if result.get("success"):
-                    st.success(f"Sauvegardé: {result.get('path')}")
-                    st.rerun()
-                st.error(result.get("message", "Sauvegarde échouée."))
-        else:
-            st.info("Aucun nœud existant; importe un fichier ou ajoute des lignes dans l'éditeur.")
+        df_nodes_export = pd.DataFrame(nodes)
+        editor_cols = ["tenor", "t_years", "zero_rate"]
+        df_nodes_editor = df_nodes_export.copy()
+        for c in editor_cols:
+            if c not in df_nodes_editor.columns:
+                df_nodes_editor[c] = None
+        df_nodes_editor = df_nodes_editor[editor_cols]
 
-        st.markdown("##### Export")
-        if not df_nodes_edit.empty:
-            st.download_button(
-                "Télécharger les nœuds (CSV)",
-                data=df_nodes_edit.to_csv(index=False).encode("utf-8"),
-                file_name=f"{currency}_nodes_export.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
-        df_grid_export = pd.DataFrame(grid)
-        if not df_grid_export.empty:
-            st.download_button(
-                "Télécharger la grille (CSV)",
-                data=df_grid_export.to_csv(index=False).encode("utf-8"),
-                file_name=f"{currency}_grid_export.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
+        df_edit = st.data_editor(
+            df_nodes_editor,
+            num_rows="dynamic",
+            use_container_width=True,
+            key=f"yc_nodes_editor_{currency}",
+        )
+        if st.button("Sauvegarder l'éditeur", use_container_width=True, disabled=df_edit.empty):
+            result = yc.save_curve_nodes(currency, df_edit.to_dict(orient="records"))
+            if result.get("success"):
+                st.success(f"Sauvegardé: {result.get('path')}")
+                st.rerun()
+            st.error(result.get("message", "Sauvegarde échouée."))
 
     col_rf, col_ref = st.columns([2, 1])
     with col_rf:
@@ -227,9 +211,39 @@ def render_tab() -> None:
     st.markdown("#### Discount factors")
     if not df_grid.empty:
         df_df = df_grid.copy()
-        if "t_years" in df_df.columns:
-            df_df = df_df.sort_values("t_years").set_index("t_years")
-        st.area_chart(df_df[["discount_factor"]], height=220)
+        if "t_years" not in df_df.columns or "discount_factor" not in df_df.columns:
+            st.info("Pas de discount factors calculables sans courbe.")
+        else:
+            df_df = df_df.sort_values("t_years").copy()
+            df_df["discount_factor"] = pd.to_numeric(df_df["discount_factor"], errors="coerce")
+            df_df = df_df.dropna(subset=["t_years", "discount_factor"])
+
+            x_axis = alt.Axis(
+                tickCount=12,
+                labelOverlap="greedy",
+                labelExpr=(
+                    "datum.value >= 1 ? "
+                    "(abs(datum.value - round(datum.value)) < 1e-6 ? round(datum.value) + 'a' : format(datum.value, '.1f') + 'a') : "
+                    "datum.value >= (1/12) ? "
+                    "(abs(datum.value*12 - round(datum.value*12)) < 1e-6 ? round(datum.value*12) + 'm' : format(datum.value*12, '.1f') + 'm') : "
+                    "(abs(datum.value*365 - round(datum.value*365)) < 1e-6 ? round(datum.value*365) + 'j' : format(datum.value*365, '.1f') + 'j')"
+                ),
+            )
+
+            chart = (
+                alt.Chart(df_df)
+                .mark_area(color="#88ccff", opacity=0.65, line={"color": "#88ccff"})
+                .encode(
+                    x=alt.X("t_years:Q", title="Maturité", axis=x_axis),
+                    y=alt.Y("discount_factor:Q", title="DF", scale=alt.Scale(domain=[0, 1])),
+                    tooltip=[
+                        alt.Tooltip("t_years:Q", title="T (années)", format=".4f"),
+                        alt.Tooltip("discount_factor:Q", title="Discount factor", format=".6f"),
+                    ],
+                )
+                .properties(height=220)
+            )
+            st.altair_chart(chart, use_container_width=True)
     else:
         st.info("Pas de discount factors calculables sans courbe.")
 

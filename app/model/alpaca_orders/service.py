@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from alpaca.trading.client import TradingClient
-from alpaca.trading.enums import OrderClass, OrderSide, OrderType, TimeInForce, AssetClass
+from alpaca.trading.enums import OrderClass, OrderSide, OrderType, TimeInForce
 from alpaca.trading.requests import (
     LimitOrderRequest,
     MarketOrderRequest,
@@ -116,6 +116,11 @@ class AlpacaOrdersService:
         orders = self.trading_client.get_orders(request)
         return [self._to_dict(order) for order in orders] if orders else []
 
+    def get_clock(self) -> dict[str, Any]:
+        """Return Alpaca market clock (is_open/next_open/next_close)."""
+        clock = self.trading_client.get_clock()
+        return self._to_dict(clock)
+
     # --- order submission -----------------------------------------------
     def submit_limit_order(self, symbol: str, qty: float, limit_price: float, side: str) -> dict[str, Any]:
         symbol_norm = self._normalize_symbol(symbol)
@@ -146,7 +151,25 @@ class AlpacaOrdersService:
             qty=qty_val,
             side=self._side(side),
             time_in_force=TimeInForce.DAY,
-            asset_class=AssetClass.OPTION,
+        )
+        order = self.trading_client.submit_order(req)
+        return self._to_dict(order)
+
+    def submit_option_limit_order(self, symbol: str, qty: float, limit_price: float, side: str) -> dict[str, Any]:
+        """
+        Limit order on an options contract (OPRA symbol).
+        """
+        symbol_norm = self._normalize_symbol(symbol)
+        qty_val = float(qty or 0.0)
+        price_val = float(limit_price or 0.0)
+        if not symbol_norm or qty_val <= 0 or price_val <= 0:
+            raise ValueError("Option symbol, positive quantity, and positive limit price are required")
+        req = LimitOrderRequest(
+            symbol=symbol_norm,
+            qty=qty_val,
+            side=self._side(side),
+            time_in_force=TimeInForce.DAY,
+            limit_price=price_val,
         )
         order = self.trading_client.submit_order(req)
         return self._to_dict(order)

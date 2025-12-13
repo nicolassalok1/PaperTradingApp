@@ -106,13 +106,37 @@ def save_forwards(data: dict) -> None:
 def _save_nodes_to_cache(currency: str, nodes: list[dict]) -> Path | None:
     if not nodes:
         return None
-    path = _cache_path_for_currency(currency)
     try:
-        df = pd.DataFrame(nodes)
-        df.to_csv(path, index=False)
-        return path
+        # Reuse the public sanitizer to ensure we write a canonical file
+        # (tenor/t_years/zero_rate/discount_factor) with discount factors filled.
+        res = save_curve_nodes(currency=currency, nodes=nodes)
+        if not res.get("success"):
+            return None
+        return Path(str(res.get("path") or ""))
     except Exception:
         return None
+
+
+def _years_to_tenor_label(t_years: float) -> str:
+    try:
+        t = float(t_years)
+    except Exception:
+        return ""
+    if not math.isfinite(t) or t <= 0:
+        return ""
+
+    months = int(round(t * 12))
+    try:
+        if months > 0 and abs(t - (months / 12.0)) <= 1e-6:
+            if months % 12 == 0:
+                return f"{months // 12}Y"
+            return f"{months}M"
+    except Exception:
+        pass
+
+    if t < 1:
+        return f"{t * 12.0:.2f}M"
+    return f"{t:.2f}Y"
 
 
 def compute_forward_price(spot: float, r: float, T: float) -> float:
@@ -227,9 +251,10 @@ def _fetch_usd_nodes_from_fred() -> list[dict]:
     Kept strictement côté modèle pour respecter le MVC.
     """
     fred_series: Dict[str, str] = {
-        "1M": "DTB1M",
-        "3M": "DTB3",
-        "6M": "DTB6",
+        # Prefer constant-maturity Treasury series (works via fredgraph.csv without API key).
+        "1M": "DGS1MO",
+        "3M": "DGS3MO",
+        "6M": "DGS6MO",
         "1Y": "DGS1",
         "2Y": "DGS2",
         "5Y": "DGS5",
@@ -248,10 +273,31 @@ def _fetch_usd_nodes_from_fred() -> list[dict]:
     api_key = os.getenv("FRED_API_KEY")
 
     def _fetch_series(series_id: str) -> float | None:
+        # 1) No-key CSV endpoint (preferred).
+        try:
+            resp = requests.get(
+                "https://fred.stlouisfed.org/graph/fredgraph.csv",
+                params={"id": series_id},
+                timeout=8,
+            )
+            resp.raise_for_status()
+            df = pd.read_csv(io.StringIO(resp.text))
+            if df is None or df.empty or series_id not in df.columns:
+                return None
+            vals = pd.to_numeric(df[series_id], errors="coerce").dropna()
+            if vals.empty:
+                return None
+            return float(vals.iloc[-1]) / 100.0
+        except Exception:
+            pass
+
+        # 2) JSON API (requires `FRED_API_KEY`) fallback.
+        if not api_key:
+            return None
         url = "https://api.stlouisfed.org/fred/series/observations"
         params = {
             "series_id": series_id,
-            "api_key": api_key or "",
+            "api_key": api_key,
             "file_type": "json",
             "sort_order": "desc",
             "limit": 1,
@@ -444,10 +490,13 @@ def save_curve_nodes(currency: str, nodes: list[dict]) -> dict[str, Any]:
     out_nodes: list[dict] = []
     for n in getattr(curve, "nodes", []) or []:
         try:
+            t_years = float(getattr(n, "t_years", 0.0))
+            tenor_raw = getattr(n, "tenor", None)
+            tenor_clean = str(tenor_raw).strip().upper() if tenor_raw is not None else ""
             out_nodes.append(
                 {
-                    "tenor": getattr(n, "tenor", None),
-                    "t_years": float(getattr(n, "t_years", 0.0)),
+                    "tenor": (tenor_clean or _years_to_tenor_label(t_years)),
+                    "t_years": t_years,
                     "zero_rate": float(getattr(n, "zero_rate", 0.0)),
                     "discount_factor": float(getattr(n, "discount_factor", 0.0)),
                 }
@@ -671,10 +720,13 @@ def get_curve_snapshot(
     ns_params, ns_curve = _compute_nelson_siegel_from_curve(curve, maturities_grid)
     nodes_table = []
     for n in getattr(curve, "nodes", []):
+        t_years = float(getattr(n, "t_years", 0.0))
+        tenor_raw = getattr(n, "tenor", None)
+        tenor_clean = str(tenor_raw).strip().upper() if tenor_raw is not None else ""
         nodes_table.append(
             {
-                "tenor": getattr(n, "tenor", None) or f"{getattr(n, 't_years', 0.0)}y",
-                "t_years": float(getattr(n, "t_years", 0.0)),
+                "tenor": (tenor_clean or _years_to_tenor_label(t_years) or f"{t_years}y"),
+                "t_years": t_years,
                 "zero_rate": float(getattr(n, "zero_rate", 0.0)),
                 "discount_factor": float(getattr(n, "discount_factor", 0.0)),
             }
