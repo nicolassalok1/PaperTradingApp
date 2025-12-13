@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import sys
 from typing import List
+import logging
 
 import pandas as pd
 
@@ -17,6 +18,19 @@ from app.utils.symbol_mapper import map_to_stooq
 
 
 DEFAULT_OUTPUT = Path("data/alpaca_optionable_tickers.csv")
+
+
+def _append_optionable_row(output: Path, row: dict) -> None:
+    """
+    Append a single optionable row to CSV so progress is visible in real time.
+    Headers are written only once, when the file does not yet exist.
+    """
+    try:
+        header_needed = not output.exists()
+        pd.DataFrame([row]).to_csv(output, mode="a", header=header_needed, index=False)
+    except Exception:
+        # Best-effort; don't fail the whole run on a single write issue.
+        pass
 
 
 def _delete_downloaded_options(sym: str) -> None:
@@ -56,19 +70,35 @@ def build_optionable_universe(limit_assets: int | None, min_contracts: int, outp
     """
     limit = limit_assets if limit_assets and limit_assets > 0 else None
     symbols = fetch_alpaca_option_tickers(limit=limit)
+    logging.info("Fetched %d tradable symbols from Alpaca (limit=%s).", len(symbols), limit or "none")
     optionable: List[dict] = []
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # Fresh file for this run; rows will be appended as soon as they qualify.
+    output.unlink(missing_ok=True)
 
     for sym in symbols:
         df = download_options_alpaca(sym)
         _delete_downloaded_options(sym)
         _delete_stooq_cache(sym)
         if df is None or df.empty:
+            logging.info("[alpaca-options] %s returned no contracts.", sym)
             continue
         if min_contracts and min_contracts > 0 and len(df) < min_contracts:
+            logging.info(
+                "[alpaca-options] %s skipped: %d contracts < min_contracts=%d.",
+                sym,
+                len(df),
+                min_contracts,
+            )
             continue
-        optionable.append({"symbol": sym, "n_contracts": int(len(df))})
+        row = {"symbol": sym, "n_contracts": int(len(df))}
+        optionable.append(row)
+        _append_optionable_row(output, row)
+        logging.info("[alpaca-options] %s OK: %d contracts (appended).", sym, len(df))
+        # Also print to stdout so progress is visible even without log capture.
+        print(f"[alpaca-options] {sym} OK: {len(df)} contracts")
 
-    output.parent.mkdir(parents=True, exist_ok=True)
     df_out = pd.DataFrame(optionable)
     if not df_out.empty:
         df_out = df_out.sort_values("symbol")
@@ -104,6 +134,13 @@ def main() -> None:
 
     args = parser.parse_args()
     output_path = Path(args.output)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+        stream=sys.stdout,
+    )
 
     n = build_optionable_universe(
         limit_assets=args.limit_assets,
