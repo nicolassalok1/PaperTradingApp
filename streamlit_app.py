@@ -19,4 +19,3 @@ from app.vue.main_app import main
 
 
 main()
-
