@@ -40,7 +40,6 @@ TAB_GROUPS = {
     ],
     "🧮 Models": [
         "🧮 Yield Curve",
-        "🧮 Calibration",
         "🧪 Advanced Calibration",
         "📈 Options",
     ],
@@ -55,7 +54,6 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     "tab_portfolio_and_risk": "📊 Portfolio & Risk",
     "tab_hedging_systems": "🛡️ Hedging Systems",
     "tab_yieldcurve": "🧮 Yield Curve",
-    "tab_calibration": "🧮 Calibration",
     "tab_advanced_calibration": "🧪 Advanced Calibration",
     # Internal trading sub-tabs (kept inside 💹 Trading only)
     "tab_alpaca_spot": "Alpaca Spot",

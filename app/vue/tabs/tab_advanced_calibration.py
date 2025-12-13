@@ -1,30 +1,39 @@
 import json
+import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-import plotly.graph_objects as go
 import pandas as pd
 import streamlit as st
 
 from app.controller.calibration_controller import CalibrationController
+from app.controller import yieldcurve_controller as yc
 from app.vue.components.page_utils import render_page_header
+from app.vue.components.surface_ui import (
+    canonicalize_surface_df,
+    discover_cached_surfaces,
+    grid_to_surface_df,
+    median_s0,
+    plot_iv_heatmap,
+    render_surface_filters,
+    render_surface_preview_dropdown,
+)
 
 
 TAB_LABEL = "🧪 Advanced Calibration"
 
+_CHAIN_STATE_KEY = "adv_calib_alpaca_chain_df"
+_CHAIN_TICKER_KEY = "adv_calib_alpaca_chain_ticker"
+_TICKERS_STATE_KEY = "adv_calib_alpaca_underlyings"
+_YAHOO_SURFACE_STATE_KEY = "adv_calib_yahoo_surface_df"
+_YAHOO_SURFACE_TICKER_KEY = "adv_calib_yahoo_surface_ticker"
+_YAHOO_SURFACE_MAX_YEARS_KEY = "adv_calib_yahoo_surface_max_years"
+_LAST_RESULT_KEY = "last_advanced_calibration_result"
 
-def _plot_heatmap(z: np.ndarray, x: np.ndarray, y: np.ndarray, title: str) -> None:
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=z,
-            x=x,
-            y=y,
-            colorscale="Viridis",
-            colorbar=dict(title="IV"),
-        )
-    )
-    fig.update_layout(title=title, xaxis_title="Moneyness", yaxis_title="Time to maturity (y)")
-    st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True, "scrollZoom": False})
+_OPTIONABLE_TICKERS_CSV = Path(
+    os.getenv("ALPACA_OPTIONABLE_TICKERS_PATH", "data/alpaca_optionable_tickers.csv")
+)
 
 
 def _parse_json_dict(raw: str) -> Dict[str, Any] | None:
@@ -50,12 +59,39 @@ def _as_float_list(raw: str) -> Optional[List[float]]:
     return out
 
 
+def _load_optionable_tickers() -> list[str]:
+    tickers = st.session_state.get(_TICKERS_STATE_KEY)
+    if isinstance(tickers, list) and tickers:
+        return tickers
+
+    tickers = []
+    try:
+        if _OPTIONABLE_TICKERS_CSV.exists():
+            df = pd.read_csv(_OPTIONABLE_TICKERS_CSV)
+            if not df.empty:
+                col = "symbol" if "symbol" in df.columns else df.columns[0]
+                syms = df[col].dropna().astype(str)
+                tickers = sorted({s.strip().upper() for s in syms if s.strip()})
+    except Exception:
+        tickers = []
+
+    st.session_state[_TICKERS_STATE_KEY] = tickers
+    return tickers
+
+
+def _get_chain_from_state() -> pd.DataFrame | None:
+    df = st.session_state.get(_CHAIN_STATE_KEY)
+    if isinstance(df, pd.DataFrame) and not df.empty:
+        return df
+    return None
+
+
 def render_tab() -> None:
     ctrl = CalibrationController()
 
     render_page_header(
-        "Advanced Calibration",
-        "SABR / Jump Diffusion / Heston / Rough & Volterra (modular, MVC-safe)",
+        "Calibration avancée",
+        "SABR / Jump Diffusion / Heston / Rough & Volterra (modulaire, MVC-safe)",
         icon="🧪",
         badge="Models",
     )
@@ -71,7 +107,7 @@ def render_tab() -> None:
     col_a, col_b = st.columns([2, 1])
     with col_a:
         model_key = st.selectbox(
-            "Model",
+            "Modèle",
             options=model_keys,
             index=model_keys.index("heston_fft") if "heston_fft" in model_keys else 0,
             format_func=lambda k: key_to_spec.get(k, {}).get("label", k),
@@ -80,71 +116,343 @@ def render_tab() -> None:
         spec = key_to_spec.get(model_key, {})
         st.caption(f"pricing={spec.get('pricing')} | calibration={spec.get('calibration')}")
         if spec.get("expensive"):
-            st.warning("Expensive model: expect slower runs.")
+            st.warning("Modèle coûteux: prévoir des runs plus longs.")
 
-    st.markdown("### Market IV surface")
-    uploaded = st.file_uploader("Upload CSV (columns: K, T, S0, iv, type)", type=["csv"], key="adv_calib_upload")
-    if uploaded is None:
-        st.info("Upload a CSV surface to run an advanced calibration.")
-        return
-
-    csv_bytes = uploaded.getvalue()
-    try:
-        preview_df = pd.read_csv(uploaded)
-        st.dataframe(preview_df.head(20), hide_index=True, use_container_width=True)
-    except Exception:
-        preview_df = None
-
-    col_r, col_q, col_s0 = st.columns(3)
-    with col_r:
-        r_val = float(st.number_input("r (risk-free)", value=float(st.session_state.get("common_rate_value", 0.02)), step=0.001))
-    with col_q:
-        q_val = float(st.number_input("q (dividend)", value=float(st.session_state.get("d_common", 0.0)), step=0.001))
-    with col_s0:
-        auto_s0 = st.checkbox("Auto S0 from CSV (if present)", value=True, key="adv_calib_auto_s0")
-        S0_val = None
-        if not auto_s0:
-            S0_val = float(st.number_input("S0", value=100.0, step=1.0))
-
-    with st.expander("Grid / settings", expanded=False):
-        fit_to_observed_only = st.checkbox("Fit to observed only", value=True, key="adv_fit_observed_only")
-        col_nfev, col_starts, col_seed = st.columns(3)
-        with col_nfev:
-            max_nfev = int(st.number_input("max_nfev", value=60, min_value=5, step=5))
-        with col_starts:
-            n_starts = int(st.number_input("n_starts", value=1, min_value=1, step=1))
-        with col_seed:
-            seed_raw = st.text_input("seed (optional)", value="", placeholder="e.g. 42")
-        seed = int(seed_raw) if seed_raw.strip().isdigit() else None
-
-        st.caption("Optional custom fixed grid (comma-separated). Leave empty to use app defaults.")
-        m_raw = st.text_input("m_grid (K/S0)", value="", placeholder="0.8,0.9,1.0,1.1")
-        t_raw = st.text_input("t_grid (years)", value="", placeholder="0.02,0.05,0.1,0.25,0.5,1.0")
-        m_grid = _as_float_list(m_raw)
-        t_grid = _as_float_list(t_raw)
-
-    with st.expander("Model constraints (JSON)", expanded=False):
+    constraints: Dict[str, Any] = {}
+    with st.expander("Contraintes (JSON)", expanded=False):
         st.caption(
-            "Examples:\n"
+            "Exemples:\n"
             "- SABR: {\"beta\": 0.5}\n"
             "- FFT: {\"fft_cfg\": {\"alpha\": 1.5, \"n\": 2048, \"eta\": 0.25}}\n"
             "- rHeston: {\"fft_cfg\": {...}, \"markovian_cfg\": {\"n_factors\": 12, \"steps_per_year\": 120}}\n"
             "- rBergomi: {\"mc_cfg\": {\"n_design\": 24, \"n_paths\": 4000, \"n_steps\": 60}}\n"
             "- Volterra: {\"mc_cfg\": {\"kernel_type\": \"fractional\", \"H\": 0.1, \"n_design\": 24}}"
         )
-        constraints_raw = st.text_area("constraints", value="{}", height=140, key="adv_calib_constraints_json")
-        constraints = _parse_json_dict(constraints_raw) or {}
+        constraints_raw = st.text_area(
+            "Contraintes (JSON)",
+            value="{}",
+            height=140,
+            key="adv_calib_constraints_json",
+        )
+        parsed = _parse_json_dict(constraints_raw)
+        if constraints_raw and parsed is None:
+            st.warning("JSON invalide.")
+        constraints = parsed or {}
 
-    if st.button("Run calibration", type="primary", use_container_width=True):
+    st.markdown("### Surface IV marché")
+    surface_sources = [
+        "Ticker (Yahoo)",
+        "Upload CSV",
+        "Cache (cache/*.csv, cache/YahooOptionChains/*.csv)",
+        "Alpaca (live)",
+    ]
+    if st.session_state.get("adv_calib_surface_source") not in surface_sources:
+        st.session_state["adv_calib_surface_source"] = surface_sources[0]
+    source = st.radio("Source", options=surface_sources, horizontal=True, key="adv_calib_surface_source")
+
+    preview_df: pd.DataFrame | None = None
+    surface_ticker: str | None = None
+
+    if source == "Ticker (Yahoo)":
+        default_ticker = (
+            st.session_state.get("adv_calib_yahoo_ticker_input")
+            or st.session_state.get("tkr_common")
+            or st.session_state.get(_CHAIN_TICKER_KEY)
+            or "AAPL"
+        )
+        col_ticker, col_years, col_load = st.columns([2, 2, 1])
+        with col_ticker:
+            ticker_raw = st.text_input(
+                "Ticker",
+                value=str(default_ticker),
+                placeholder="ex: AAPL",
+                key="adv_calib_yahoo_ticker_input",
+            )
+        with col_years:
+            try:
+                max_years_default = float(st.session_state.get("adv_calib_yahoo_max_years", 2.0))
+            except Exception:
+                max_years_default = 2.0
+            max_years_default = min(2.0, max(0.25, max_years_default))
+            max_years = st.slider(
+                "Max maturité (années)",
+                min_value=0.25,
+                max_value=2.0,
+                step=0.25,
+                value=float(max_years_default),
+                key="adv_calib_yahoo_max_years",
+            )
+        with col_load:
+            load_clicked = st.button("Load", use_container_width=True, key="adv_calib_yahoo_load_btn")
+
+        ticker = (ticker_raw or "").strip().upper()
+        cached_df = st.session_state.get(_YAHOO_SURFACE_STATE_KEY)
+        cached_ticker = st.session_state.get(_YAHOO_SURFACE_TICKER_KEY)
+        cached_max_years = st.session_state.get(_YAHOO_SURFACE_MAX_YEARS_KEY)
+
+        surface_df = None
+        if load_clicked and ticker:
+            try:
+                with st.spinner(f"Chargement Yahoo IV surface pour {ticker}..."):
+                    surface_df = ctrl.fetch_yahoo_iv_surface(ticker, max_maturity_years=float(max_years))
+                if surface_df is None or getattr(surface_df, "empty", True):
+                    st.warning("Yahoo n'a retourné aucune surface.")
+                    surface_df = None
+                else:
+                    st.session_state[_YAHOO_SURFACE_STATE_KEY] = surface_df
+                    st.session_state[_YAHOO_SURFACE_TICKER_KEY] = ticker
+                    st.session_state[_YAHOO_SURFACE_MAX_YEARS_KEY] = float(max_years)
+                    st.success(f"Surface Yahoo chargée ({len(surface_df):,} lignes).")
+            except Exception as exc:
+                st.error(f"Yahoo indisponible: {exc}")
+                st.session_state[_YAHOO_SURFACE_STATE_KEY] = None
+                st.session_state[_YAHOO_SURFACE_TICKER_KEY] = None
+                st.session_state[_YAHOO_SURFACE_MAX_YEARS_KEY] = None
+
+        cache_matches = (
+            isinstance(cached_df, pd.DataFrame)
+            and not cached_df.empty
+            and bool(cached_ticker)
+            and bool(ticker)
+            and cached_ticker == ticker
+            and (cached_max_years is None or float(cached_max_years) == float(max_years))
+        )
+        surface_df = surface_df if isinstance(surface_df, pd.DataFrame) else (cached_df if cache_matches else None)
+        if isinstance(surface_df, pd.DataFrame) and not surface_df.empty:
+            surface_ticker = ticker or None
+            preview_df = surface_df
+            render_surface_preview_dropdown(
+                surface_df,
+                label=f"Aperçu / diagnostics surface ({surface_ticker or 'Yahoo'})",
+                key="adv_calib_surface_preview_yahoo",
+                diag_key_prefix="adv_calib",
+            )
+        else:
+            needs_reload = bool(ticker) and not cache_matches
+            if needs_reload:
+                st.info("Clique sur `Load` pour récupérer l'option chain Yahoo.")
+            else:
+                st.info("Aucune surface Yahoo chargée.")
+
+    elif source == "Upload CSV":
+        uploaded = st.file_uploader(
+            "Charger une surface IV (CSV: K, T, S0, iv, type)", type=["csv"], key="adv_calib_upload"
+        )
+        if uploaded is not None:
+            try:
+                preview_df = pd.read_csv(uploaded)
+                render_surface_preview_dropdown(
+                    preview_df,
+                    label="Aperçu / diagnostics surface",
+                    key="adv_calib_surface_preview_upload",
+                    diag_key_prefix="adv_calib",
+                )
+            except Exception as exc:
+                st.warning(f"Impossible de lire le CSV: {exc}")
+
+    elif source == "Cache (cache/*.csv, cache/YahooOptionChains/*.csv)":
+        cache_dir = Path("cache")
+        cached = discover_cached_surfaces(cache_dir)
+        if not cached:
+            st.info(
+                "Aucune surface détectée dans `cache/` ou `cache/YahooOptionChains/`. Dépose un CSV ou utilise l'upload."
+            )
+        else:
+            chosen = st.selectbox(
+                "Surface disponible",
+                options=cached,
+                format_func=lambda p: p.name,
+                key="adv_calib_cached_surface",
+            )
+            try:
+                preview_df = pd.read_csv(chosen)
+                render_surface_preview_dropdown(
+                    preview_df,
+                    label="Aperçu / diagnostics surface",
+                    key="adv_calib_surface_preview_cache",
+                    diag_key_prefix="adv_calib",
+                )
+            except Exception as exc:
+                st.warning(f"Impossible de lire {chosen.name}: {exc}")
+
+    elif source == "Alpaca (live)":
+        tickers = _load_optionable_tickers()
+        default_ticker = st.session_state.get(_CHAIN_TICKER_KEY) or (tickers[0] if tickers else "AAPL")
+        col_ticker, col_load = st.columns([3, 1])
+        with col_ticker:
+            if tickers:
+                if default_ticker not in tickers:
+                    default_ticker = tickers[0]
+                ticker = st.selectbox(
+                    "Underlying ticker",
+                    options=tickers,
+                    index=tickers.index(default_ticker),
+                    key="adv_calib_alpaca_ticker",
+                )
+            else:
+                ticker = st.text_input("Underlying ticker", value=str(default_ticker)).upper().strip()
+        with col_load:
+            load_clicked = st.button("Load chain", use_container_width=True, key="adv_calib_alpaca_load_btn")
+
+        if load_clicked and ticker:
+            with st.spinner(f"Loading options for {ticker} from Alpaca..."):
+                res = ctrl.download_alpaca_options_chain(ticker)
+            if not res.get("success"):
+                st.error(res.get("message", "Erreur Alpaca."))
+            else:
+                surface_ticker = str(res.get("ticker") or ticker).strip().upper()
+                st.session_state[_CHAIN_TICKER_KEY] = surface_ticker
+                st.session_state[_CHAIN_STATE_KEY] = res.get("df")
+                st.success(res.get("message", "OK"))
+
+        surface_df = _get_chain_from_state()
+        if surface_df is not None:
+            surface_ticker = surface_ticker or str(st.session_state.get(_CHAIN_TICKER_KEY) or "").strip().upper() or None
+            preview_df = surface_df
+            render_surface_preview_dropdown(
+                surface_df,
+                label="Aperçu / diagnostics surface",
+                key="adv_calib_surface_preview_alpaca",
+                diag_key_prefix="adv_calib",
+            )
+        else:
+            st.info("Chargez une chaîne d'options Alpaca pour calibrer.")
+
+    calib_df: pd.DataFrame | None = None
+    canon_df: pd.DataFrame | None = None
+    if isinstance(preview_df, pd.DataFrame) and not preview_df.empty:
+        canon_df = canonicalize_surface_df(preview_df)
+        if canon_df.empty:
+            st.warning("Surface non reconnue (colonnes attendues: K, T, S0, iv).")
+        else:
+            with st.expander("Filtrage surface", expanded=False):
+                calib_df = render_surface_filters(canon_df, key_prefix="adv_calib")
+
+    s0_default = median_s0(calib_df) or median_s0(canon_df) or float(st.session_state.get("common_spot_value", 100.0))
+
+    st.markdown("### Paramètres du sous-jacent")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        S0 = st.number_input("S0", value=float(s0_default), min_value=0.01, step=1.0, key="adv_calib_S0")
+    with col2:
+        r_source = st.selectbox("Source r", options=["Manuel", "Yield Curve"], index=0, key="adv_calib_r_source")
+        r_val = 0.02
+        if r_source == "Yield Curve":
+            try:
+                currencies = yc.available_currencies()
+            except Exception:
+                currencies = []
+            default_currency = "USD" if "USD" in currencies else (currencies[0] if currencies else "USD")
+            currency_options = currencies or [default_currency]
+            default_ccy_index = currency_options.index(default_currency) if default_currency in currency_options else 0
+            currency = st.selectbox(
+                "Currency",
+                options=currency_options,
+                index=default_ccy_index,
+                key="adv_calib_r_ccy",
+            )
+            t_ref_options = [0.25, 0.5, 1.0, 2.0, 5.0, 10.0]
+            t_ref = st.selectbox("T", options=t_ref_options, index=t_ref_options.index(1.0), key="adv_calib_r_T")
+            try:
+                r_val = float(yc.get_risk_free_rate(T_ref=float(t_ref), currency=str(currency)))
+            except Exception:
+                r_val = 0.02
+            st.number_input(
+                "r(T)",
+                value=float(r_val),
+                step=0.001,
+                format="%.4f",
+                disabled=True,
+                key="adv_calib_r_val_curve",
+            )
+        else:
+            r_val = float(
+                st.number_input(
+                    "Taux sans risque r",
+                    value=float(st.session_state.get("common_rate_value", 0.02)),
+                    step=0.001,
+                    format="%.4f",
+                    key="adv_calib_r_val_manual",
+                )
+            )
+    with col3:
+        q_val = float(
+            st.number_input(
+                "Dividende q",
+                value=float(st.session_state.get("d_common", 0.0)),
+                step=0.001,
+                format="%.4f",
+                key="adv_calib_q_val",
+            )
+        )
+
+    fit_to_observed_only = True
+    max_nfev = 60
+    n_starts = 1
+    seed = None
+    m_grid = None
+    t_grid = None
+    with st.expander("Optimisation (avancé)", expanded=False):
+        fit_to_observed_only = st.checkbox(
+            "Fit uniquement sur points observés (mask)",
+            value=True,
+            key="adv_calib_fit_mask_only",
+        )
+        col_nfev, col_starts, col_seed = st.columns(3)
+        with col_nfev:
+            max_nfev = int(
+                st.number_input(
+                    "max_nfev",
+                    min_value=5,
+                    max_value=500,
+                    value=60,
+                    step=5,
+                    key="adv_calib_max_nfev",
+                )
+            )
+        with col_starts:
+            n_starts = int(
+                st.number_input(
+                    "Multi-start (n)",
+                    min_value=1,
+                    max_value=25,
+                    value=1,
+                    step=1,
+                    key="adv_calib_n_starts",
+                )
+            )
+        with col_seed:
+            seed_raw = st.text_input(
+                "Seed (random, optionnel)",
+                value="",
+                placeholder="ex: 42",
+                key="adv_calib_seed_raw",
+            )
+        seed = int(seed_raw) if seed_raw.strip().isdigit() else None
+
+        st.caption("Grille fixe optionnelle (valeurs séparées par des virgules). Laisser vide = défauts app.")
+        m_raw = st.text_input("m_grid (K/S0)", value="", placeholder="0.8,0.9,1.0,1.1", key="adv_calib_m_grid_raw")
+        t_raw = st.text_input(
+            "t_grid (années)", value="", placeholder="0.02,0.05,0.1,0.25,0.5,1.0", key="adv_calib_t_grid_raw"
+        )
+        m_grid = _as_float_list(m_raw)
+        t_grid = _as_float_list(t_raw)
+        if m_raw.strip() and m_grid is None:
+            st.warning("m_grid invalide (liste de floats séparés par des virgules).")
+        if t_raw.strip() and t_grid is None:
+            st.warning("t_grid invalide (liste de floats séparés par des virgules).")
+
+    can_run = isinstance(calib_df, pd.DataFrame) and not calib_df.empty
+    if st.button("Calibrer", type="primary", disabled=not can_run, use_container_width=True, key="adv_calib_run_btn"):
         payload: Dict[str, Any] = {
             "model": model_key,
-            "csv_bytes": csv_bytes,
-            "r": r_val,
-            "q": q_val,
-            "S0": S0_val,
-            "fit_to_observed_only": fit_to_observed_only,
-            "max_nfev": max_nfev,
-            "n_starts": n_starts,
+            "df": calib_df,
+            "r": float(r_val),
+            "q": float(q_val),
+            "S0": float(S0),
+            "fit_to_observed_only": bool(fit_to_observed_only),
+            "max_nfev": int(max_nfev),
+            "n_starts": int(n_starts),
             "seed": seed,
             "constraints": constraints,
         }
@@ -153,45 +461,141 @@ def render_tab() -> None:
         if t_grid is not None:
             payload["t_grid"] = t_grid
 
-        with st.spinner("Calibrating..."):
+        with st.spinner("Calibration..."):
             result = ctrl.run_advanced_surface_calibration(payload)
 
-        if not result.get("success"):
-            st.error(str(result.get("message") or "Calibration failed."))
-            details = result.get("details")
-            if details:
-                st.json(details)
-            return
+        if surface_ticker:
+            try:
+                result = dict(result or {})
+                result["ticker"] = surface_ticker
+            except Exception:
+                pass
+        st.session_state[_LAST_RESULT_KEY] = result
 
-        st.success(str(result.get("message") or "OK"))
-        metrics = result.get("metrics") or {}
-        if isinstance(metrics, dict) and metrics:
-            col1, col2, col3 = st.columns(3)
-            col1.metric("MAE (IV)", f"{float(metrics.get('mae', 0.0)):.4f}")
-            col2.metric("RMSE (IV)", f"{float(metrics.get('rmse', 0.0)):.4f}")
-            col3.metric("Max |err| (IV)", f"{float(metrics.get('max_abs', 0.0)):.4f}")
+    result = st.session_state.get(_LAST_RESULT_KEY)
+    if not isinstance(result, dict) or not result:
+        return
 
-        st.markdown("### Calibrated parameters")
-        st.json(result.get("params") or {})
+    if not result.get("success"):
+        st.warning(str(result.get("message") or "Calibration échouée."))
+        if result.get("details"):
+            with st.expander("Détails", expanded=False):
+                st.json(result.get("details"))
+        return
 
-        m_grid_arr = np.asarray(result.get("m_grid") or [], dtype=float)
-        t_grid_arr = np.asarray(result.get("t_grid") or [], dtype=float)
-        iv_mkt = np.asarray(result.get("iv_market") or [], dtype=float)
-        iv_model = np.asarray(result.get("iv_model") or [], dtype=float)
-        iv_err = np.asarray(result.get("iv_error") or [], dtype=float)
+    st.success(str(result.get("message") or "OK"))
 
-        if iv_mkt.size and iv_model.size and iv_err.size:
-            st.markdown("### IV surfaces")
-            c_mkt, c_mod, c_err = st.columns(3)
-            with c_mkt:
-                _plot_heatmap(iv_mkt, m_grid_arr, t_grid_arr, "IV market")
-            with c_mod:
-                _plot_heatmap(iv_model, m_grid_arr, t_grid_arr, "IV model")
-            with c_err:
-                _plot_heatmap(iv_err, m_grid_arr, t_grid_arr, "Error (model - market)")
+    details = result.get("details") or {}
+    runs = details.get("runs") if isinstance(details, dict) else None
+    if isinstance(runs, list) and runs:
+        with st.expander("Détails optimisation (multi-start)", expanded=False):
+            best_run = details.get("best_run") if isinstance(details, dict) else None
+            if best_run is not None:
+                st.caption(f"Best run: {best_run}")
+            try:
+                rows = []
+                for r in runs:
+                    if not isinstance(r, dict):
+                        continue
+                    rows.append(
+                        {
+                            "idx": r.get("idx"),
+                            "ok": r.get("ok"),
+                            "converged": r.get("converged"),
+                            "cost": r.get("cost"),
+                            "nfev": r.get("nfev"),
+                            "optimality": r.get("optimality"),
+                            "message": r.get("message") or r.get("error"),
+                        }
+                    )
+                df_runs = pd.DataFrame(rows).sort_values("cost", ascending=True, na_position="last")
+                st.dataframe(df_runs, hide_index=True, use_container_width=True)
+            except Exception as exc:
+                st.warning(f"Impossible d'afficher les runs: {exc}")
 
-        with st.expander("Details / runs", expanded=False):
-            st.json(result.get("details") or {})
+    metrics = result.get("metrics") or {}
+    if isinstance(metrics, dict) and metrics:
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("MAE (IV)", f"{float(metrics.get('mae', 0.0)):.4f}")
+        col_b.metric("RMSE (IV)", f"{float(metrics.get('rmse', 0.0)):.4f}")
+        col_c.metric("Max |err| (IV)", f"{float(metrics.get('max_abs', 0.0)):.4f}")
+
+    st.markdown("### Paramètres calibrés")
+    st.json(result.get("params") or {})
+
+    if st.button("Envoyer IV modèle vers Options", use_container_width=True, type="secondary", key="adv_calib_send_to_opt"):
+        try:
+            S0_res = float(result.get("S0") or S0)
+            m_grid_res = np.array(result.get("m_grid") or [])
+            t_grid_res = np.array(result.get("t_grid") or [])
+            iv_model_res = np.array(result.get("iv_model") or [])
+            df_model_surface = grid_to_surface_df(
+                S0=S0_res, m_grid=m_grid_res, t_grid=t_grid_res, iv_grid=iv_model_res, opt_type="call"
+            )
+            st.session_state["calib_model_surface_df"] = df_model_surface
+            st.session_state["calib_model_surface_meta"] = {
+                "ticker": result.get("ticker"),
+                "method": result.get("method") or "advanced",
+                "model": result.get("model") or model_key,
+                "S0": S0_res,
+                "r": float(result.get("r") or r_val),
+                "q": float(result.get("q") or q_val),
+            }
+            st.session_state["opt_iv_surface_source"] = "Calibration"
+
+            tkr = str(result.get("ticker") or "").strip().upper()
+            if tkr:
+                st.session_state["tkr_common"] = tkr
+                st.session_state["common_underlying"] = tkr
+
+            try:
+                st.session_state["common_rate_value"] = float(result.get("r") or r_val)
+                st.session_state["d_common"] = float(result.get("q") or q_val)
+                if str(r_source).lower().startswith("man"):
+                    st.session_state["opt_use_yield_curve_rate"] = False
+            except Exception:
+                pass
+
+            try:
+                if m_grid_res.size and t_grid_res.size and iv_model_res.size:
+                    j_atm = int(np.abs(m_grid_res - 1.0).argmin())
+                    i_t = int(np.abs(t_grid_res - 1.0).argmin())
+                    atm_iv = float(iv_model_res[i_t, j_atm])
+                    if np.isfinite(atm_iv) and atm_iv > 0:
+                        st.session_state["common_sigma_value"] = atm_iv
+                    try:
+                        st.session_state["opt_iv_surface_max_years"] = float(
+                            min(2.0, max(0.25, float(np.max(t_grid_res))))
+                        )
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            st.success("Surface IV modèle envoyée. Ouvrez l'onglet Options → IV surface → Source=Calibration.")
+        except Exception as exc:
+            st.error(f"Impossible d'envoyer vers Options: {exc}")
+
+    m_grid_arr = np.asarray(result.get("m_grid") or [], dtype=float)
+    t_grid_arr = np.asarray(result.get("t_grid") or [], dtype=float)
+    iv_mkt = np.asarray(result.get("iv_market") or [], dtype=float)
+    iv_model = np.asarray(result.get("iv_model") or [], dtype=float)
+    iv_err = np.asarray(result.get("iv_error") or [], dtype=float)
+
+    if iv_mkt.size and iv_model.size and iv_err.size:
+        st.markdown("### Surfaces IV")
+        c_mkt, c_mod, c_err = st.columns(3)
+        with c_mkt:
+            plot_iv_heatmap(iv_mkt, m_grid_arr, t_grid_arr, "IV marché")
+        with c_mod:
+            plot_iv_heatmap(iv_model, m_grid_arr, t_grid_arr, "IV modèle")
+        with c_err:
+            plot_iv_heatmap(iv_err, m_grid_arr, t_grid_arr, "Erreur (modèle - marché)")
+    else:
+        st.info("Aucune surface à afficher.")
+
+    with st.expander("Détails", expanded=False):
+        st.json(details or {})
 
 
 render = render_tab
