@@ -60,19 +60,18 @@ def _delete_stooq_cache(sym: str) -> None:
             pass
 
 
-def build_optionable_universe(limit_assets: int | None, min_contracts: int, output: Path) -> int:
+def build_optionable_universe(output: Path) -> int:
     """
     Build a list of underlyings that have options available via Alpaca.
 
-    1) Pull a universe of active US equities from Alpaca (unlimited by default).
+    1) Pull the full universe of active US equities from Alpaca.
     2) For each symbol, call download_options_alpaca().
-    3) Keep only symbols with a non-empty options DataFrame (optional min_contracts filter).
+    3) Keep only symbols with a non-empty options DataFrame.
     4) Save the result to a CSV file for use in the UI.
     5) Remove downloaded options and spot cache files so only the summary CSV remains.
     """
-    limit = limit_assets if limit_assets and limit_assets > 0 else None
-    symbols = fetch_alpaca_option_tickers(limit=limit)
-    logger.info("Fetched %d tradable symbols from Alpaca (limit=%s).", len(symbols), limit or "none")
+    symbols = fetch_alpaca_option_tickers(limit=None)
+    logger.info("Fetched %d tradable symbols from Alpaca.", len(symbols))
     optionable: List[dict] = []
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -80,25 +79,15 @@ def build_optionable_universe(limit_assets: int | None, min_contracts: int, outp
     output.unlink(missing_ok=True)
 
     ok_count = 0
-    with tqdm(total=len(symbols), desc="Scanning Alpaca tickers", unit="ticker") as pbar:
+    with tqdm(total=len(symbols), desc="Scanning Alpaca tickers", unit="ticker", file=sys.stdout) as pbar:
         for sym in symbols:
             df = download_options_alpaca(sym)
-            _delete_downloaded_options(sym)
-            _delete_stooq_cache(sym)
             if df is None or df.empty:
                 pbar.update(1)
                 pbar.set_postfix({"ok": ok_count})
                 logger.info("[alpaca-options] %s returned no contracts.", sym)
-                continue
-            if min_contracts and min_contracts > 0 and len(df) < min_contracts:
-                pbar.update(1)
-                pbar.set_postfix({"ok": ok_count})
-                logger.info(
-                    "[alpaca-options] %s skipped: %d contracts < min_contracts=%d.",
-                    sym,
-                    len(df),
-                    min_contracts,
-                )
+                _delete_downloaded_options(sym)
+                _delete_stooq_cache(sym)
                 continue
             row = {"symbol": sym, "n_contracts": int(len(df))}
             optionable.append(row)
@@ -107,6 +96,8 @@ def build_optionable_universe(limit_assets: int | None, min_contracts: int, outp
             pbar.update(1)
             pbar.set_postfix({"ok": ok_count})
             logger.info("[alpaca-options] %s OK: %d contracts (appended).", sym, len(df))
+            _delete_downloaded_options(sym)
+            _delete_stooq_cache(sym)
 
     df_out = pd.DataFrame(optionable)
     if not df_out.empty:
@@ -121,18 +112,6 @@ def main() -> None:
             "Build a precomputed universe of optionable tickers for Alpaca "
             "and save it to a CSV used by the Options (Alpaca) UI."
         )
-    )
-    parser.add_argument(
-        "--limit-assets",
-        type=int,
-        default=0,
-        help="Maximum number of Alpaca assets to scan (0 or negative means no limit; default: unlimited).",
-    )
-    parser.add_argument(
-        "--min-contracts",
-        type=int,
-        default=0,
-        help="Minimum number of option contracts required to keep a ticker (0 or negative means no minimum).",
     )
     parser.add_argument(
         "--output",
@@ -157,11 +136,7 @@ def main() -> None:
 
     log_path = _configure_logging()
 
-    n = build_optionable_universe(
-        limit_assets=args.limit_assets,
-        min_contracts=args.min_contracts,
-        output=output_path,
-    )
+    n = build_optionable_universe(output=output_path)
     print(f"Saved {n} optionable tickers to {output_path}")
     print(f"Detailed log: {log_path}")
 
