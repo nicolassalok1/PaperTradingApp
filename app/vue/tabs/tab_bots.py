@@ -171,8 +171,8 @@ def _render_execution() -> None:
 def _render_volatility() -> None:
     st.subheader("Volatilité")
 
-    straddle_tab, crush_tab, regime_tab = st.tabs(
-        ["Straddle", "IV Crush", "Realized Vol Regime"]
+    straddle_tab, crush_tab, regime_tab, meanrev_tab, markov_tab = st.tabs(
+        ["Straddle", "IV Crush", "Realized Vol Regime", "Mean Reversion", "Markov"]
     )
 
     with straddle_tab:
@@ -270,11 +270,165 @@ def _render_volatility() -> None:
             st.line_chart(df["vol"], height=220)
         st.dataframe(df.tail(30), use_container_width=True)
 
+    with meanrev_tab:
+        st.markdown("Analyse de mean-reversion sur la volatilité réalisée (OHLC).")
+        sym = st.text_input("Symbol", value="SPY", key="bots_meanrev_symbol")
+        period = st.selectbox(
+            "History",
+            options=["6mo", "1y", "2y", "5y"],
+            index=2,
+            key="bots_meanrev_period",
+        )
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            vol_window = st.number_input(
+                "Vol window (days)",
+                min_value=5,
+                max_value=252,
+                value=20,
+                step=1,
+                key="bots_meanrev_vol_window",
+            )
+        with c2:
+            forward_window = st.number_input(
+                "Forward avg (days)",
+                min_value=5,
+                max_value=90,
+                value=30,
+                step=1,
+                key="bots_meanrev_forward_window",
+            )
+
+        if st.button("Compute mean reversion", type="primary"):
+            res = bots_controller.realized_vol_mean_reversion(
+                sym,
+                period=str(period),
+                vol_window=int(vol_window),
+                forward_window=int(forward_window),
+                annualization=252,
+            )
+            st.session_state["bots_meanrev"] = res
+
+        res = st.session_state.get("bots_meanrev")
+        if not res:
+            return
+        if res.get("error"):
+            st.error(res["error"])
+            return
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Current vol", value=f"{res.get('current_vol', 0.0):.2%}")
+        c2.metric("Percentile", value=f"{res.get('percentile', 0.0):.1%}")
+        c3.metric("Hint", value=str(res.get("mean_reversion_hint") or "N/A"))
+
+        st.caption(f"Split vol (intersection y=x): {float(res.get('split_x') or 0.0):.2%}")
+        st.json(
+            {
+                "reg_forward": res.get("reg_forward"),
+                "reg_vol_diff_all": res.get("reg_vol_diff_all"),
+                "reg_vol_diff_high": res.get("reg_vol_diff_high"),
+                "reg_vol_diff_low": res.get("reg_vol_diff_low"),
+            }
+        )
+
+        df = _as_df(res.get("series"))
+        if not df.empty and "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+            df = df.dropna(subset=["date"])
+
+        if df.empty:
+            return
+
+        st.markdown("**Scatter: current vs forward**")
+        try:
+            st.scatter_chart(df, x="current_vol", y="forward_vol", height=240)
+        except Exception:
+            st.dataframe(df[["current_vol", "forward_vol"]].tail(200), use_container_width=True)
+
+        st.markdown("**Scatter: current vs (forward-current)**")
+        try:
+            st.scatter_chart(df, x="current_vol", y="vol_diff", height=240)
+        except Exception:
+            st.dataframe(df[["current_vol", "vol_diff"]].tail(200), use_container_width=True)
+
+        if "date" in df.columns:
+            df_ts = df.set_index("date")
+            cols = [c for c in ["current_vol", "forward_vol"] if c in df_ts.columns]
+            if cols:
+                st.markdown("**Time series**")
+                st.line_chart(df_ts[cols], height=220)
+
+        st.dataframe(df.tail(30), use_container_width=True)
+
+    with markov_tab:
+        st.markdown("Matrice de transition Markov sur régimes de volatilité réalisée (quantiles).")
+        sym = st.text_input("Symbol", value="SPY", key="bots_markov_symbol")
+        period = st.selectbox(
+            "History",
+            options=["6mo", "1y", "2y", "5y"],
+            index=2,
+            key="bots_markov_period",
+        )
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            window = st.number_input(
+                "Vol window (days)",
+                min_value=5,
+                max_value=252,
+                value=20,
+                step=1,
+                key="bots_markov_window",
+            )
+        with c2:
+            n_states = st.number_input(
+                "States",
+                min_value=2,
+                max_value=6,
+                value=3,
+                step=1,
+                key="bots_markov_states",
+            )
+
+        if st.button("Compute Markov matrix", type="primary"):
+            res = bots_controller.markov_vol_transition(
+                sym,
+                period=str(period),
+                window=int(window),
+                annualization=252,
+                n_states=int(n_states),
+            )
+            st.session_state["bots_markov"] = res
+
+        res = st.session_state.get("bots_markov")
+        if not res:
+            return
+        if res.get("error"):
+            st.error(res["error"])
+            return
+
+        st.caption(
+            f"Current state: {res.get('current_state')} | Next probs: {res.get('next_state_probs')}"
+        )
+        st.json({"cuts": res.get("cuts"), "labels": res.get("labels")})
+
+        labels = res.get("labels") or []
+        mat = res.get("transition_matrix") or []
+        if labels and mat:
+            df_m = pd.DataFrame(mat, index=labels, columns=labels)
+            st.markdown("**Transition matrix (rows sum to 1)**")
+            st.dataframe(df_m, use_container_width=True)
+
+        df_s = _as_df(res.get("series"))
+        if not df_s.empty and "date" in df_s.columns:
+            df_s["date"] = pd.to_datetime(df_s["date"], errors="coerce")
+        if not df_s.empty:
+            st.dataframe(df_s.tail(40), use_container_width=True)
+
 
 def render_tab() -> None:
     render_page_header(
         "Bots & Assistant",
-        "Outils d’assistance, exécution (grid/DCA) et utilitaires volatilité.",
+        "Outils d'assistance, exécution (grid/DCA) et analytics de volatilité/régimes.",
         icon="🤖",
         badge="Tools",
     )
@@ -283,7 +437,7 @@ def render_tab() -> None:
         [
             "‘Assistant’ montre l’état du compte/positions et peut répondre à partir du snapshot.",
             "‘Exécution’ est safe par défaut (`dry-run`). Active le live uniquement si tu sais ce que tu fais.",
-            "‘Volatilité’ contient des outils rapides (straddle, IV crush, régime de vol).",
+            "'Volatilité' contient des outils rapides (straddle, IV crush, régime, mean reversion, Markov).",
         ],
         expanded=False,
     )

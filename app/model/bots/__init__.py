@@ -18,6 +18,8 @@ from .storage import (
     upsert_grid_config,
 )
 from .volatility import (
+    compute_markov_vol_transition,
+    compute_realized_vol_mean_reversion,
     compute_realized_vol_regime,
     compute_straddle_snapshot,
     compute_straddle_iv_crush,
@@ -35,7 +37,8 @@ __all__ = [
     "run_grid_bot_once",
     # Volatility
     "compute_realized_vol_regime",
+    "compute_realized_vol_mean_reversion",
+    "compute_markov_vol_transition",
     "compute_straddle_snapshot",
     "compute_straddle_iv_crush",
 ]
-

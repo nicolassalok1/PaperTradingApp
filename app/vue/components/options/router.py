@@ -1,3 +1,5 @@
+import textwrap
+
 import streamlit as st
 
 import pandas as pd
@@ -279,18 +281,16 @@ def _render_iv_surface_section(ticker: str) -> None:
 def render_options_router():
     st.caption("Espace Options: pricing, grecs, surfaces IV et stratégies (interface unifiée).")
 
-    st.markdown(
-        """
-        <style>
-        [data-testid="stTabs"] button[role="tab"] {
-            padding: 0.35rem 0.65rem !important;
-            font-size: 0.85rem !important;
-            min-height: 2rem !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    css = """
+    <style>
+    [data-testid="stTabs"] button[role="tab"] {
+        padding: 0.35rem 0.65rem !important;
+        font-size: 0.85rem !important;
+        min-height: 2rem !important;
+    }
+    </style>
+    """
+    st.markdown(textwrap.dedent(css).strip(), unsafe_allow_html=True)
 
     _render_global_params()
 

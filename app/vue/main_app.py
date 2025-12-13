@@ -170,9 +170,16 @@ def _configure_page() -> None:
 def _inject_global_styles() -> None:
     theme_path = Path(__file__).parent / "styles" / "theme_animated.css"
     if theme_path.exists():
-        with open(theme_path, "r", encoding="utf-8") as f:
+        if hasattr(st, "html"):
+            try:
+                st.html(theme_path)  # type: ignore[arg-type,attr-defined]
+                return
+            except Exception:
+                pass
+
+        with open(theme_path, "r", encoding="utf-8") as f:  # pragma: no cover
             css = f"<style>{f.read()}</style>"
-            st.markdown(css, unsafe_allow_html=True)
+        st.markdown(css, unsafe_allow_html=True)  # pragma: no cover
 
 
 def _patch_streamlit_charts() -> None:

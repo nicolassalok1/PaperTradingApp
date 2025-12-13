@@ -12,7 +12,13 @@ from typing import Any
 from app.model.bots.assistant import ask_portfolio_copilot, get_portfolio_snapshot
 from app.model.bots.grid_bot import GridBotRunReport, run_grid_bot_once
 from app.model.bots.storage import GridBotConfig, delete_grid_config, load_grid_configs, upsert_grid_config
-from app.model.bots.volatility import compute_realized_vol_regime, compute_straddle_iv_crush, compute_straddle_snapshot
+from app.model.bots.volatility import (
+    compute_markov_vol_transition,
+    compute_realized_vol_mean_reversion,
+    compute_realized_vol_regime,
+    compute_straddle_iv_crush,
+    compute_straddle_snapshot,
+)
 from app.model.market_data.market_data import fetch_spot_price as _fetch_spot_price
 
 
@@ -110,6 +116,40 @@ def realized_vol_regime(
     )
 
 
+def realized_vol_mean_reversion(
+    symbol: str,
+    *,
+    period: str = "2y",
+    vol_window: int = 20,
+    forward_window: int = 30,
+    annualization: int = 252,
+) -> dict[str, Any]:
+    return compute_realized_vol_mean_reversion(
+        symbol,
+        period=period,
+        vol_window=vol_window,
+        forward_window=forward_window,
+        annualization=annualization,
+    )
+
+
+def markov_vol_transition(
+    symbol: str,
+    *,
+    period: str = "2y",
+    window: int = 20,
+    annualization: int = 252,
+    n_states: int = 3,
+) -> dict[str, Any]:
+    return compute_markov_vol_transition(
+        symbol,
+        period=period,
+        window=window,
+        annualization=annualization,
+        n_states=n_states,
+    )
+
+
 def straddle_snapshot(
     *,
     spot: float,
@@ -171,6 +211,8 @@ __all__ = [
     "run_grid_once",
     # Vol tools
     "realized_vol_regime",
+    "realized_vol_mean_reversion",
+    "markov_vol_transition",
     "straddle_snapshot",
     "straddle_iv_crush",
 ]

@@ -1,4 +1,5 @@
 import importlib
+import textwrap
 import streamlit as st
 
 from app.vue.components.selector import choose_option_select
@@ -88,23 +89,21 @@ SUBTAB_TO_MODULE = {
 
 def render_options_root():
     """Top-level entry point for the Options section."""
-    st.markdown(
-        """
-        <style>
-            .stTabs [data-baseweb="tab"] {
-                font-weight: 500;
-                padding-top: 0px;
-                padding-bottom: 0px;
-                margin-right: 16px;
-            }
-            .stTabs [aria-selected="true"] {
-                border-bottom: 2px solid #E63946 !important;
-                color: #E63946 !important;
-            }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    css = """
+    <style>
+      .stTabs [data-baseweb="tab"] {
+        font-weight: 500;
+        padding-top: 0px;
+        padding-bottom: 0px;
+        margin-right: 16px;
+      }
+      .stTabs [aria-selected="true"] {
+        border-bottom: 2px solid #E63946 !important;
+        color: #E63946 !important;
+      }
+    </style>
+    """
+    st.markdown(textwrap.dedent(css).strip(), unsafe_allow_html=True)
     render_page_header(
         "Options",
         "Suite complete de pricing d'options : vanilla, exotiques, spreads et structures.",
