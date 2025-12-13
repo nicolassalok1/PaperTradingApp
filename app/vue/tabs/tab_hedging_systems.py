@@ -3,12 +3,13 @@ import streamlit as st
 
 from app.controller import hedger_v2_controller as ctrl
 from app.vue.components.page_utils import render_page_header
+from app.vue.components.ui_helpers import render_quickstart
 
-TAB_LABEL = "??? Hedging Systems"
+TAB_LABEL = "🛡️ Hedging Systems"
 
 
 def _render_account() -> None:
-    st.markdown("### Account Snapshot (Alpaca)")
+    st.markdown("### Aperçu du compte (Alpaca)")
     account = ctrl.get_account_snapshot()
     equity = float(account.get("equity", 0.0) or 0.0)
     cash = float(account.get("cash", 0.0) or 0.0)
@@ -22,7 +23,7 @@ def _render_account() -> None:
 
 
 def _render_positions() -> list[dict]:
-    st.markdown("### Positions (equities & options)")
+    st.markdown("### Positions (actions & options)")
     equities = ctrl.get_equity_positions()
     options = ctrl.get_option_positions()
 
@@ -42,7 +43,7 @@ def _render_positions() -> list[dict]:
 
 
 def _render_dqn_panel(option_positions: list[dict]) -> None:
-    st.markdown("### DQN Hedging Panel")
+    st.markdown("### Panneau de couverture (DQN)")
 
     choices = [
         f"{pos.get('symbol', '')} | {pos.get('side', '')} {pos.get('qty', '')}"
@@ -80,10 +81,19 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
 
 def render_tab() -> None:
     render_page_header(
-        "Hedging Systems - Alpaca",
-        "DQN-based Alpaca options hedging (no manual orders).",
-        icon="???",
+        "Hedging Systems (Alpaca)",
+        "Couverture options: suggestions DQN (prototype) et exécution via Alpaca.",
+        icon="🛡️",
         badge="Hedging",
+    )
+    render_quickstart(
+        "Guide rapide",
+        [
+            "Ce module est expérimental: considère les suggestions comme une aide, pas une vérité.",
+            "Vérifie toujours la position sélectionnée avant d’exécuter une couverture.",
+            "Exécuter enverra des ordres sur Alpaca: fais-le seulement en connaissance de cause.",
+        ],
+        expanded=False,
     )
 
     # Account snapshot

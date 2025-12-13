@@ -16,11 +16,11 @@ plot_crr_tree = oc.plot_crr_tree
 def render_options_history_block() -> None:
     """
     Render:
-      - subheader 'Historique 1 an du ticker (prix de cloture)'
+      - subheader 'Historique 1 an du ticker (prix de clôture)'
       - meta table from load_options_meta()
       - 1y close chart from load_cached_option_history()
     """
-    st.subheader("Historique 1 an du ticker (prix de cloture)")
+    st.subheader("Historique 1 an du ticker (prix de clôture)")
     ticker = st.session_state.get("tkr_common") or st.session_state.get("common_underlying") or ""
     ticker = str(ticker or "").strip().upper()
     if not ticker:
@@ -41,7 +41,7 @@ def render_options_history_block() -> None:
     if df_hist is None or df_hist.empty or "Close" not in df_hist.columns:
         st.info(
             "Pas d'historique disponible pour ce ticker dans le cache. "
-            "Clique sur Refresh dans l'onglet Options pour le telecharger."
+            "Clique sur Refresh dans l'onglet Options pour le télécharger."
         )
         return
 
@@ -51,7 +51,7 @@ def render_options_history_block() -> None:
         except Exception:
             st.info(
                 "Pas d'historique disponible pour ce ticker dans le cache. "
-                "Clique sur Refresh dans l'onglet Options pour le telecharger."
+                "Clique sur Refresh dans l'onglet Options pour le télécharger."
             )
             return
 
@@ -82,7 +82,7 @@ def option_panel(title: str, subtitle: str | None = None):
     return st.container()
 
 
-def params_expander(label: str = "Parametres"):
+def params_expander(label: str = "Paramètres"):
     """
     Convenience wrapper for parameter sections.
     """

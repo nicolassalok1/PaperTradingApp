@@ -5,7 +5,7 @@ def render_page_header(
     title: str,
     subtitle: str | None = None,
     *,
-    icon: str = "??",
+    icon: str = "✨",
     badge: str | None = None,
 ) -> None:
     """Render a stylized page title card to keep headers consistent."""
@@ -25,4 +25,3 @@ def render_page_header(
 
 
 __all__ = ["render_page_header"]
-

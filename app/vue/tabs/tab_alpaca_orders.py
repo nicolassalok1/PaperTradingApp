@@ -3,6 +3,7 @@ import streamlit as st
 
 from app.controller import trading_controller as ctrl
 from app.vue.components.page_utils import render_page_header
+from app.vue.components.ui_helpers import render_quickstart
 
 
 def _to_float(val) -> float:
@@ -13,7 +14,7 @@ def _to_float(val) -> float:
 
 
 def _render_account_section() -> None:
-    st.markdown("### Account metrics")
+    st.markdown("### Métriques du compte")
     try:
         account = ctrl.get_orders_account()
     except Exception as exc:
@@ -210,10 +211,18 @@ def _render_bracket_form() -> None:
 
 def render_tab() -> None:
     render_page_header(
-        "Advanced Orders",
-        "Alpaca limit, stop, take-profit, stop-limit, and bracket orders",
-        icon="??",
+        "Ordres avancés (Alpaca)",
+        "Limit/stop/take-profit/stop-limit/bracket — exécution via Alpaca.",
+        icon="🧾",
         badge="Alpaca",
+    )
+    render_quickstart(
+        "Guide rapide",
+        [
+            "Les ordres avancés sont sensibles aux paramètres (prix, stop, take-profit).",
+            "En cas de doute: commence en petite taille et vérifie le récapitulatif.",
+        ],
+        expanded=False,
     )
     _render_account_section()
     st.divider()

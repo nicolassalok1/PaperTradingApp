@@ -10,6 +10,7 @@ import streamlit as st
 from app.controller.calibration_controller import CalibrationController
 from app.controller import yieldcurve_controller as yc
 from app.vue.components.page_utils import render_page_header
+from app.vue.components.ui_helpers import render_quickstart
 from app.vue.components.surface_ui import (
     canonicalize_surface_df,
     discover_cached_surfaces,
@@ -21,7 +22,7 @@ from app.vue.components.surface_ui import (
 )
 
 
-TAB_LABEL = "🧪 Advanced Calibration"
+TAB_LABEL = "🧪 Calibration avancée"
 
 _CHAIN_STATE_KEY = "adv_calib_alpaca_chain_df"
 _CHAIN_TICKER_KEY = "adv_calib_alpaca_chain_ticker"
@@ -94,6 +95,15 @@ def render_tab() -> None:
         "SABR / Jump Diffusion / Heston / Rough & Volterra (modulaire, MVC-safe)",
         icon="🧪",
         badge="Models",
+    )
+    render_quickstart(
+        "Guide rapide",
+        [
+            "Charge une surface IV (Yahoo / CSV / Cache / Alpaca), puis filtre-la si besoin.",
+            "Règle `S0`, `r`, `q` avant de calibrer (r peut venir de `🧮 Yield Curve`).",
+            "Après calibration, clique ‘Envoyer IV modèle vers Options’ pour la visualiser/pricer.",
+        ],
+        expanded=False,
     )
 
     specs = ctrl.get_advanced_models()
@@ -599,4 +609,3 @@ def render_tab() -> None:
 
 
 render = render_tab
-

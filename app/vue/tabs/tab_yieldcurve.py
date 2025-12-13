@@ -4,6 +4,7 @@ import altair as alt
 
 from app.controller import yieldcurve_controller as yc
 from app.vue.components.page_utils import render_page_header
+from app.vue.components.ui_helpers import render_quickstart
 
 
 TAB_LABEL = "🧮 Yield Curve"
@@ -51,10 +52,19 @@ def render_tab() -> None:
     currency = snapshot.get("currency") or currency
 
     render_page_header(
-        "Yield Curve",
-        "Courbe zc/df + taux forward (optionnel) • source: fichiers nodes / cache",
-        icon="🧭",
+        "Yield Curve (courbe des taux)",
+        "ZC/DF, forwards et taux instantanés — source: fichiers nodes / cache.",
+        icon="🧮",
         badge="Rates",
+    )
+    render_quickstart(
+        "Guide rapide",
+        [
+            "Choisis une devise et une maturité de référence pour calculer `r(T)`.",
+            "Importe des nœuds via l’expander ‘Gestion de la courbe’ (CSV/JSON).",
+            "Si l’API est activée, ‘Refresh API’ peut mettre à jour USD/EUR.",
+        ],
+        expanded=False,
     )
 
     source_label = source_path if source_path else "data/yield_curves/*_nodes.(csv|json)"

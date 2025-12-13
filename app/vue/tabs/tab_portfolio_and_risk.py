@@ -4,12 +4,13 @@ import altair as alt
 
 from app.controller import portfolio_and_risk_controller as ctrl
 from app.vue.components.page_utils import render_page_header
+from app.vue.components.ui_helpers import render_quickstart
 
-TAB_LABEL = "?? Portfolio & Risk"
+TAB_LABEL = "🧭 Portefeuille & Risque"
 
 
 def _render_account_snapshot(account: dict) -> None:
-    st.markdown("### Account snapshot")
+    st.markdown("### Aperçu du compte")
     equity = account.get("equity", 0.0)
     cash = account.get("cash", 0.0)
     pv = account.get("portfolio_value", equity)
@@ -22,7 +23,7 @@ def _render_account_snapshot(account: dict) -> None:
 def _render_exposure(
     per_position: list[dict], exposure: float, net_exposure: float
 ) -> None:
-    st.markdown("### Exposure")
+    st.markdown("### Exposition")
     if not per_position:
         st.info("No positions to compute exposure.")
         return
@@ -37,7 +38,7 @@ def _render_exposure(
     st.altair_chart(chart, use_container_width=True)
     st.caption(f"Total exposure: ${exposure:,.2f}")
 
-    st.markdown("### Net exposure (long vs short)")
+    st.markdown("### Exposition net (long vs short)")
     long_expo = df[df["market_value"] > 0]["market_value"].sum()
     short_expo = df[df["market_value"] < 0]["market_value"].abs().sum()
     net_df = pd.DataFrame(
@@ -55,7 +56,7 @@ def _render_pnl_and_var(unrealized_pnl_total: float, var_lite: float) -> None:
 
 
 def _render_position_table(per_position: list[dict]) -> None:
-    st.markdown("### Per-position risk metrics")
+    st.markdown("### Risque par position")
     if not per_position:
         st.info("No positions to display.")
         return
@@ -65,7 +66,7 @@ def _render_position_table(per_position: list[dict]) -> None:
 
 
 def _render_alerts(alerts: list[str]) -> None:
-    st.markdown("### Alerts")
+    st.markdown("### Alertes")
     if not alerts:
         st.success("No active risk alerts.")
         return
@@ -77,7 +78,7 @@ def _render_pnl_chart(pnl_series: pd.Series | None) -> None:
     if pnl_series is None or pnl_series.empty:
         st.info("PnL series unavailable.")
         return
-    st.markdown("### Rolling PnL")
+    st.markdown("### PnL glissant")
     df = pnl_series.reset_index()
     df.columns = ["Date", "PnL"]
     df["Date"] = pd.to_datetime(df["Date"])
@@ -118,7 +119,7 @@ def _render_orders_table(orders: list[dict]) -> None:
 
 
 def _render_rebalancing_tools() -> None:
-    st.markdown("### Allocation & Rebalance")
+    st.markdown("### Allocation & Rebalancement")
 
     method_label = st.selectbox(
         "Optimization method",
@@ -160,10 +161,19 @@ def _render_rebalancing_tools() -> None:
 
 def render_tab() -> None:
     render_page_header(
-        "Portfolio & Risk",
-        "Alpaca portfolio allocation, exposure and live risk metrics in one view.",
-        icon="??",
-        badge="Portfolio",
+        "Portefeuille & Risque",
+        "Allocation, exposition, PnL, VaR-lite et alertes — centralisé en un seul écran.",
+        icon="🧭",
+        badge="Risk",
+    )
+    render_quickstart(
+        "Guide rapide",
+        [
+            "Lis d’abord les alertes: elles résument les risques (exposition, concentration, etc.).",
+            "Utilise l’allocation/rebalancement pour simuler un plan avant d’exécuter quoi que ce soit.",
+            "Les boutons qui exécutent sur Alpaca sont à utiliser avec prudence (ordres réels).",
+        ],
+        expanded=False,
     )
 
     account = ctrl.get_account()

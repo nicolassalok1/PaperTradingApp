@@ -23,6 +23,7 @@ from app.vue.tabs.tab_dashboard_v2 import render_tab as render_dashboard_v2
 from app.vue.tabs.tab_trading import render_tab as render_trading
 from app.vue.tabs.tab_portfolio_and_risk import render_tab as render_portfolio_and_risk
 from app.vue.tabs.tab_hedging_systems import render_tab as render_hedging_systems
+from app.vue.tabs.tab_bots import render_tab as render_bots
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -30,31 +31,34 @@ if str(PROJECT_ROOT) not in sys.path:
 
 # Top-level grouping and ordering (user-visible labels)
 TAB_GROUPS = {
-    "📊 Overview": [
-        "📊 Dashboard v2",
-        "📊 Portfolio & Risk",
+    "🏠 Vue d’ensemble": [
+        "📊 Dashboard",
+        "🧭 Portefeuille & Risque",
     ],
-    "📈 Trading": [
+    "💹 Trading": [
         "💹 Trading",
         "🛡️ Hedging Systems",
     ],
-    "🧮 Models": [
+    "🧩 Modèles": [
         "🧮 Yield Curve",
-        "🧪 Advanced Calibration",
+        "🧪 Calibration avancée",
         "📈 Options",
+    ],
+    "🧰 Outils": [
+        "🤖 Bots",
     ],
 }
 
-
 # Explicit labels for tab modules (override TAB_LABEL when present)
 DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
-    "tab_dashboard_v2": "📊 Dashboard v2",
+    "tab_dashboard_v2": "📊 Dashboard",
     "tab_options": "📈 Options",
     "tab_trading": "💹 Trading",
-    "tab_portfolio_and_risk": "📊 Portfolio & Risk",
+    "tab_portfolio_and_risk": "🧭 Portefeuille & Risque",
     "tab_hedging_systems": "🛡️ Hedging Systems",
     "tab_yieldcurve": "🧮 Yield Curve",
-    "tab_advanced_calibration": "🧪 Advanced Calibration",
+    "tab_advanced_calibration": "🧪 Calibration avancée",
+    "tab_bots": "🤖 Bots",
     # Internal trading sub-tabs (kept inside 💹 Trading only)
     "tab_alpaca_spot": "Alpaca Spot",
     "tab_alpaca_orders": "Advanced Orders",
@@ -117,44 +121,46 @@ def ordered_tab_labels(all_tabs: Dict[str, Callable[[], None]]) -> list[str]:
                 ordered.append(lbl)
                 seen.add(lbl)
 
-    # Add any remaining tabs (non-grouped) in alpha order
-    for lbl in sorted(all_tabs.keys()):
-        if lbl in EXCLUDED_LABELS:
-            continue
-        if lbl not in seen:
-            ordered.append(lbl)
-            seen.add(lbl)
-
+    # Intentionally do not expose non-grouped tabs at the top-level.
     return ordered
 
 
 def sidebar_menu(all_tabs: Dict[str, Callable[[], None]], tab_labels: list[str]) -> None:
     """Sidebar kept for branding/info; navigation handled by tabs only."""
     st.sidebar.markdown("### PaperTradingApp")
-    st.sidebar.info(
-        "Navigation via les onglets en haut. "
-        "La barre latérale reste disponible pour d'éventuels réglages."
-    )
+    st.sidebar.caption("Interface de paper trading orientée modèles (MVC).")
+    st.sidebar.info("Navigation via les onglets en haut. La barre latérale sert d’aide et de réglages.")
+    with st.sidebar.expander("Guide rapide", expanded=False):
+        st.markdown(
+            "- Commence par `📊 Dashboard` pour vérifier l’état du compte.\n"
+            "- Utilise `🧮 Yield Curve` si tu veux un `r(T)` cohérent.\n"
+            "- Calibre une surface dans `🧪 Calibration avancée`, puis envoie-la vers `📈 Options`.\n"
+            "- Tout ce qui envoie des ordres Alpaca est volontairement explicite et peut être dangereux."
+        )
 
 
 ALL_TABS = autodiscover_tabs()
+if "Bots" not in ALL_TABS:
+    ALL_TABS["Bots"] = render_bots
 # Fallback registration if autodiscovery misses key tabs
-if "📊 Dashboard v2" not in ALL_TABS:
-    ALL_TABS["📊 Dashboard v2"] = render_dashboard_v2
+if "📊 Dashboard" not in ALL_TABS:
+    ALL_TABS["📊 Dashboard"] = render_dashboard_v2
 if "💹 Trading" not in ALL_TABS:
     ALL_TABS["💹 Trading"] = render_trading
-if "📊 Portfolio & Risk" not in ALL_TABS:
-    ALL_TABS["📊 Portfolio & Risk"] = render_portfolio_and_risk
+if "🧭 Portefeuille & Risque" not in ALL_TABS:
+    ALL_TABS["🧭 Portefeuille & Risque"] = render_portfolio_and_risk
 if "🛡️ Hedging Systems" not in ALL_TABS:
     ALL_TABS["🛡️ Hedging Systems"] = render_hedging_systems
+if "🤖 Bots" not in ALL_TABS:
+    ALL_TABS["🤖 Bots"] = render_bots
 
 
 def _configure_page() -> None:
     """Global Streamlit page configuration."""
     try:
         st.set_page_config(
-            page_title="AI Trading Bot",
-            page_icon="📊",
+            page_title="PaperTradingApp",
+            page_icon="📈",
             layout="wide",
             initial_sidebar_state="collapsed",
         )

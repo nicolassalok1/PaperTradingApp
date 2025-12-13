@@ -225,7 +225,7 @@ def _render_iv_surface_section(ticker: str) -> None:
         if df_cal is None or getattr(df_cal, "empty", True):
             st.info(
                 "Aucune surface Calibration disponible. Lance une calibration puis clique "
-                "'Envoyer IV modele vers Options' dans l'onglet Calibration."
+                "‘Envoyer IV modèle vers Options’ dans l’onglet `🧪 Calibration avancée`."
             )
             return
 
@@ -277,7 +277,7 @@ def _render_iv_surface_section(ticker: str) -> None:
 
 
 def render_options_router():
-    st.header("🧮 Options - Interface Professionnelle")
+    st.caption("Espace Options: pricing, grecs, surfaces IV et stratégies (interface unifiée).")
 
     st.markdown(
         """
@@ -295,7 +295,7 @@ def render_options_router():
     _render_global_params()
 
     tkr_common = st.text_input(
-        "Ticker commun pour les historiques IV/cl“tures (optionnel)",
+        "Ticker commun pour les historiques IV/clôtures (optionnel)",
         value=st.session_state.get("tkr_common", ""),
         placeholder="ex: AAPL",
     )
@@ -313,13 +313,13 @@ def render_options_router():
         tkr_label = ctx.get("ticker") or tkr_common_norm or "Ticker"
         render_static_line_chart(
             close_series,
-            title=f"{tkr_label} - Clotures (cache)",
-            y_label="Prix de cloture",
+            title=f"{tkr_label} - Clôtures (cache)",
+            y_label="Prix de clôture",
         )
     else:
         st.info(
-            "Aucune cloture disponible pour ce ticker (cache OHLC introuvable). "
-            "Verifie le symbole puis reessaie."
+            "Aucune clôture disponible pour ce ticker (cache OHLC introuvable). "
+            "Vérifie le symbole puis réessaie."
         )
 
     _render_iv_surface_section(ctx.get("ticker") or tkr_common_norm)
@@ -327,10 +327,10 @@ def render_options_router():
     families = [
         "Vanilla / Early Exercise",
         "Path-dependent",
-        "BarriSres",
+        "Barrières",
         "Spreads & Wings",
         "Calendriers",
-        "Exotiques avanc'es",
+        "Exotiques avancés",
     ]
 
     family_tabs = st.tabs(families)
@@ -340,13 +340,13 @@ def render_options_router():
                 render_panel_vanilla()
             elif fam_label == "Path-dependent":
                 render_panel_path()
-            elif fam_label == "BarriSres":
+            elif fam_label == "Barrières":
                 render_panel_barrier()
             elif fam_label == "Spreads & Wings":
                 render_panel_spreads()
             elif fam_label == "Calendriers":
                 render_panel_calendar()
-            elif fam_label == "Exotiques avanc'es":
+            elif fam_label == "Exotiques avancés":
                 render_panel_exotics()
             else:
                 st.error("Famille inconnue.")

@@ -72,13 +72,13 @@ def refresh_underlying_cache(ticker: str):
     """Download option chains and closing history for a ticker, then cache them."""
     tkr = _norm_ticker(ticker)
     if not tkr:
-        st.warning("Merci de saisir un ticker pour rafraichir le cache.")
+        st.warning("Merci de saisir un ticker pour rafraîchir le cache.")
         return
     try:
         meta = oc.refresh_underlying_cache(tkr)
-        st.success(f"Cache options mis a jour pour {tkr}. S0~{float(meta.get('S0_ref', 0.0)):.2f}")
+        st.success(f"Cache options mis à jour pour {tkr}. S0~{float(meta.get('S0_ref', 0.0)):.2f}")
     except Exception as exc:
-        st.error(f"Echec de la mise a jour du cache pour {tkr}: {exc}")
+        st.error(f"Échec de la mise à jour du cache pour {tkr}: {exc}")
 
 
 def show_cache_status(ticker: str):
@@ -93,17 +93,17 @@ def show_cache_status(ticker: str):
 
     if tkr and meta_tkr == tkr and chain_present:
         age_txt = f" (~{chain_age:.1f} h)" if chain_age is not None else ""
-        st.success(f"Chaines options en cache pour {tkr}{age_txt}.")
+        st.success(f"Chaînes d’options en cache pour {tkr}{age_txt}.")
     elif chain_present and not tkr:
-        st.info("Chaines options en cache (ticker non renseigne).")
+        st.info("Chaînes d’options en cache (ticker non renseigné).")
     elif hist_present:
         age_txt = f" (~{hist_age:.1f} h)" if hist_age is not None else ""
         st.warning(
-            f"Aucune chaine options en cache pour {tkr or 'ticker ?'}. Historique clotures disponible{age_txt}."
+            f"Aucune chaîne d’options en cache pour {tkr or 'ticker ?'}. Historique clôtures disponible{age_txt}."
         )
     else:
         st.warning(
-            f"Aucun cache disponible pour {tkr or 'ticker ?'}. Clique sur Refresh pour telecharger les donnees."
+            f"Aucun cache disponible pour {tkr or 'ticker ?'}. Clique sur Refresh pour télécharger les données."
         )
 
 

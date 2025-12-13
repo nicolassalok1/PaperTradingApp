@@ -3,8 +3,9 @@ import streamlit as st
 
 from app.controller import dashboard_v2_controller as ctrl
 from app.vue.components.page_utils import render_page_header
+from app.vue.components.ui_helpers import render_quickstart
 
-TAB_LABEL = "📊 Dashboard v2"
+TAB_LABEL = "📊 Dashboard"
 
 
 def _render_account_overview(summary: dict, drawdown: dict, risk: dict) -> None:
@@ -49,7 +50,7 @@ def _render_performance_section(lookback_days: int) -> None:
     col_eq, col_pnl = st.columns(2)
 
     with col_eq:
-        st.markdown("#### Equity curve")
+        st.markdown("#### Courbe d’equity")
         eq_curve = ctrl.get_equity_curve(lookback_days)
         if eq_curve:
             df_eq = pd.DataFrame(eq_curve)
@@ -66,7 +67,7 @@ def _render_performance_section(lookback_days: int) -> None:
             st.info("No equity data for the selected window.")
 
     with col_pnl:
-        st.markdown("#### PnL over time")
+        st.markdown("#### PnL dans le temps")
         pnl_ts = ctrl.get_pnl_timeseries(lookback_days)
         if pnl_ts:
             df_pnl = pd.DataFrame(pnl_ts)
@@ -89,7 +90,7 @@ def _render_positions_and_exposure() -> None:
     col_pos, col_expo = st.columns(2)
 
     with col_pos:
-        st.markdown("#### Current positions")
+        st.markdown("#### Positions ouvertes")
         spot = ctrl.get_spot_positions()
         options = ctrl.get_option_positions()
 
@@ -97,7 +98,7 @@ def _render_positions_and_exposure() -> None:
             st.info("No open Alpaca positions.")
         else:
             if spot:
-                with st.expander("Equities", expanded=True):
+                with st.expander("Actions", expanded=True):
                     st.dataframe(
                         pd.DataFrame(spot),
                         hide_index=True,
@@ -112,7 +113,7 @@ def _render_positions_and_exposure() -> None:
                     )
 
     with col_expo:
-        st.markdown("#### Exposure by symbol")
+        st.markdown("#### Exposition par symbole")
         exposure = ctrl.get_exposure_by_symbol()
         if exposure:
             df_expo = pd.DataFrame(exposure)
@@ -164,7 +165,7 @@ def _render_pnl_attribution_expander() -> None:
 
 def _render_trade_history_expander() -> None:
     """Compact trade history browser kept out of the main flow."""
-    with st.expander("Trade history (Alpaca)", expanded=False):
+    with st.expander("Historique des ordres (Alpaca)", expanded=False):
         col1, col2, col3 = st.columns(3)
         with col1:
             days_back = st.number_input(
@@ -197,11 +198,20 @@ def _render_trade_history_expander() -> None:
 
 def render_tab() -> None:
     render_page_header(
-        "📊 Dashboard v2 — Alpaca Overview",
-        "Résumé instantané de votre compte Alpaca : "
-        "cash, PnL, exposition et positions clés.",
+        "Dashboard (Alpaca)",
+        "Vue d’ensemble du compte: cash, PnL, exposition, positions et historique.",
         icon="📊",
         badge="Overview",
+    )
+
+    render_quickstart(
+        "Guide rapide",
+        [
+            "Les chiffres viennent d’Alpaca: si tout est à zéro, vérifie la connexion / clés.",
+            "Ajuste la fenêtre ‘Lookback’ pour les courbes Equity/PnL.",
+            "Ouvre les sections ‘détails’ si tu veux diagnostiquer une anomalie (attribution, historique).",
+        ],
+        expanded=False,
     )
 
     summary = ctrl.get_account_summary()

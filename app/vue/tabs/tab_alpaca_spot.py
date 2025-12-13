@@ -3,6 +3,7 @@ import streamlit as st
 
 from app.controller import trading_controller as ctrl
 from app.vue.components.page_utils import render_page_header
+from app.vue.components.ui_helpers import render_quickstart
 
 
 def _to_float(val) -> float:
@@ -13,7 +14,7 @@ def _to_float(val) -> float:
 
 
 def _render_account_section() -> None:
-    st.markdown("### Account metrics")
+    st.markdown("### Métriques du compte")
     try:
         account = ctrl.get_spot_account()
     except Exception as exc:
@@ -158,9 +159,17 @@ def _render_price_history() -> None:
 def render_tab() -> None:
     render_page_header(
         "Alpaca Spot",
-        "Live account view and market orders via Alpaca",
-        icon="??",
+        "Vue compte + positions + ordres spot (actions/ETF) via Alpaca.",
+        icon="⚡",
         badge="Alpaca",
+    )
+    render_quickstart(
+        "Guide rapide",
+        [
+            "‘Market order’ = exécution immédiate (peut glisser). Vérifie la quantité/sens.",
+            "Les tableaux sont read-only; les boutons d’ordres envoient réellement sur Alpaca.",
+        ],
+        expanded=False,
     )
     _render_account_section()
     st.divider()
@@ -176,4 +185,3 @@ def render_tab() -> None:
 def render() -> None:
     """Keep consistency with other tabs if a generic router is used."""
     render_tab()
-
