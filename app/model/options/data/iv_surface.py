@@ -74,11 +74,13 @@ def _build_iv_surface_from_yahoo(ticker: str, max_maturity_years: float = 2.0) -
 
     surface = pd.DataFrame(records, columns=["K", "T", "S0", "iv", "type"])
     path = CACHE_CSV_DIR / f"iv_surface_yahoo_{sym}.csv"
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        surface.to_csv(path, index=False)
-    except Exception:
-        pass
+    # Avoid overwriting a previously valid cache with an empty fetch.
+    if surface is not None and not surface.empty:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            surface.to_csv(path, index=False)
+        except Exception:
+            pass
     return surface
 
 
@@ -105,4 +107,3 @@ def load_iv_from_csv(path: str | Path) -> pd.DataFrame:
 
 
 __all__ = ["fetch_iv_surface", "_build_iv_surface_from_yahoo", "interpolate_surface", "load_iv_from_csv"]
-

@@ -41,7 +41,7 @@ MIN_IV_MATURITY = 0.1
 CACHE_DIR = CACHE_CSV_DIR
 
 def _load_alpaca_credentials():
-    """Load Alpaca creds from env or Streamlit secrets."""
+    """Load Alpaca creds from env or app secrets."""
     key = get_secret("APCA_API_KEY_ID")
     secret = get_secret("APCA_API_SECRET_KEY")
     base = get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"

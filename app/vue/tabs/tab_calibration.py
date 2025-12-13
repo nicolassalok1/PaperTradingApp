@@ -393,52 +393,39 @@ def _render_constraints_builder(default_bounds: Dict[str, Any]) -> Dict[str, Any
     return constraints
 
 
-def _download_surface_template() -> None:
-    df = pd.DataFrame(
-        [
-            {"K": 100.0, "T": 0.25, "S0": 100.0, "iv": 0.20, "type": "call"},
-            {"K": 105.0, "T": 0.25, "S0": 100.0, "iv": 0.22, "type": "call"},
-            {"K": 95.0, "T": 1.00, "S0": 100.0, "iv": 0.25, "type": "call"},
-        ],
-        columns=["K", "T", "S0", "iv", "type"],
-    )
-    st.download_button(
-        "Télécharger un template CSV",
-        data=df.to_csv(index=False).encode("utf-8"),
-        file_name="surface_template.csv",
-        mime="text/csv",
-        use_container_width=True,
-    )
-
-
 def _render_surface_preview_dropdown(df: pd.DataFrame, *, label: str, key: str) -> None:
     if df is None or df.empty:
         st.info("Surface vide.")
         return
 
+    preview_n = 30
+
     def _render() -> None:
-        st.dataframe(df.head(30), hide_index=True, use_container_width=True)
-        if len(df) > 30:
-            st.caption(f"Aperçu: 30 premières lignes affichées (sur {len(df):,}).")
+        st.dataframe(df.head(preview_n), hide_index=True, use_container_width=True)
+        if len(df) > preview_n:
+            st.caption(
+                f"Aperçu: {preview_n} premières lignes affichées (sur {len(df):,})."
+            )
         st.divider()
         _surface_diagnostics(df)
 
     title = f"{label} ({len(df):,} lignes)"
-    expander = None
-    try:
-        expander = st.expander(title, expanded=False)
-    except Exception:
-        expander = None
 
-    if expander is not None:
-        with expander:
-            _render()
-        return
-
+    # Prefer popover (dropdown) when available: avoids nested expander issues.
     if hasattr(st, "popover"):
-        with st.popover(title):
+        try:
+            with st.popover(title):
+                _render()
+            return
+        except Exception:
+            pass
+
+    try:
+        with st.expander(title, expanded=False):
             _render()
         return
+    except Exception:
+        pass
 
     if st.checkbox(title, value=False, key=key):
         _render()

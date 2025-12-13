@@ -26,43 +26,38 @@ def _to_float(val, default: float) -> float:
 
 def _ensure_global_defaults() -> None:
     st.session_state.setdefault("common_maturity_value", 1.0)
-    st.session_state.setdefault("common_sigma_value", 0.20)
-    st.session_state.setdefault("d_common", 0.00)
-    st.session_state.setdefault("common_rate_value", 0.02)
-    st.session_state.setdefault("opt_use_yield_curve_rate", True)
- 
+
 
 def _ensure_iv_surface_defaults() -> None:
-    st.session_state.setdefault("opt_iv_surface_max_years", 2.0)
-    st.session_state.setdefault("opt_iv_surface_type", "Call")
-    st.session_state.setdefault("opt_iv_surface_source", "Yahoo")
-
     # Normalize legacy values safely before widgets are created.
-    try:
-        src_raw = str(st.session_state.get("opt_iv_surface_source") or "").strip()
-        src_low = src_raw.lower()
-        src_norm = "Calibration" if src_low.startswith("calib") else "Yahoo"
-        if st.session_state.get("opt_iv_surface_source") != src_norm:
-            st.session_state["opt_iv_surface_source"] = src_norm
-    except Exception:
-        st.session_state["opt_iv_surface_source"] = "Yahoo"
+    if "opt_iv_surface_source" in st.session_state:
+        try:
+            src_raw = str(st.session_state.get("opt_iv_surface_source") or "").strip()
+            src_low = src_raw.lower()
+            src_norm = "Calibration" if src_low.startswith("calib") else "Yahoo"
+            if st.session_state.get("opt_iv_surface_source") != src_norm:
+                st.session_state["opt_iv_surface_source"] = src_norm
+        except Exception:
+            pass
 
-    try:
-        typ_raw = str(st.session_state.get("opt_iv_surface_type") or "").strip()
-        typ_low = typ_raw.lower()
-        typ_norm = "Put" if typ_low.startswith("p") else "Call"
-        if st.session_state.get("opt_iv_surface_type") != typ_norm:
-            st.session_state["opt_iv_surface_type"] = typ_norm
-    except Exception:
-        st.session_state["opt_iv_surface_type"] = "Call"
+    if "opt_iv_surface_type" in st.session_state:
+        try:
+            typ_raw = str(st.session_state.get("opt_iv_surface_type") or "").strip()
+            typ_low = typ_raw.lower()
+            typ_norm = "Put" if typ_low.startswith("p") else "Call"
+            if st.session_state.get("opt_iv_surface_type") != typ_norm:
+                st.session_state["opt_iv_surface_type"] = typ_norm
+        except Exception:
+            pass
 
-    try:
-        max_years = float(st.session_state.get("opt_iv_surface_max_years", 2.0))
-    except Exception:
-        max_years = 2.0
-    max_years = min(2.0, max(0.25, max_years))
-    if st.session_state.get("opt_iv_surface_max_years") != max_years:
-        st.session_state["opt_iv_surface_max_years"] = max_years
+    if "opt_iv_surface_max_years" in st.session_state:
+        try:
+            max_years = float(st.session_state.get("opt_iv_surface_max_years"))
+        except Exception:
+            return
+        max_years = min(2.0, max(0.25, max_years))
+        if st.session_state.get("opt_iv_surface_max_years") != max_years:
+            st.session_state["opt_iv_surface_max_years"] = max_years
 
 
 def _render_global_params() -> None:
@@ -73,14 +68,13 @@ def _render_global_params() -> None:
         currency = (st.session_state.get("yc_currency") or "USD").strip().upper()
 
         with col_r:
-            st.toggle(
-                "r depuis Yield Curve",
-                key="opt_use_yield_curve_rate",
-            )
+            toggle_kwargs = {"value": True} if "opt_use_yield_curve_rate" not in st.session_state else {}
+            st.toggle("r depuis Yield Curve", key="opt_use_yield_curve_rate", **toggle_kwargs)
             st.caption(
                 f"YC: {currency} (r(T) est resolu dans chaque panneau selon le T selectionne)"
             )
 
+            rate_kwargs = {"value": 0.02} if "common_rate_value" not in st.session_state else {}
             st.number_input(
                 "Taux sans risque r",
                 min_value=-0.50,
@@ -89,9 +83,11 @@ def _render_global_params() -> None:
                 format="%.6f",
                 key="common_rate_value",
                 disabled=bool(st.session_state.get("opt_use_yield_curve_rate", True)),
+                **rate_kwargs,
             )
 
         with col_q:
+            q_kwargs = {"value": 0.00} if "d_common" not in st.session_state else {}
             st.number_input(
                 "Dividend yield q",
                 min_value=-0.50,
@@ -99,9 +95,11 @@ def _render_global_params() -> None:
                 step=0.001,
                 format="%.6f",
                 key="d_common",
+                **q_kwargs,
             )
 
         with col_sig:
+            sig_kwargs = {"value": 0.20} if "common_sigma_value" not in st.session_state else {}
             st.number_input(
                 "Volatilite sigma",
                 min_value=0.0001,
@@ -109,6 +107,7 @@ def _render_global_params() -> None:
                 step=0.01,
                 format="%.4f",
                 key="common_sigma_value",
+                **sig_kwargs,
             )
 
 
@@ -156,16 +155,26 @@ def _render_iv_surface_section(ticker: str) -> None:
 
     col_src, col_a, col_b = st.columns([1, 1, 1])
     with col_src:
-        st.selectbox("Source", ["Yahoo", "Calibration"], key="opt_iv_surface_source")
+        src_default_idx = 0
+        if str(st.session_state.get("opt_iv_surface_source") or "").strip().lower().startswith("calib"):
+            src_default_idx = 1
+        src_kwargs = {"index": src_default_idx} if "opt_iv_surface_source" not in st.session_state else {}
+        st.selectbox("Source", ["Yahoo", "Calibration"], key="opt_iv_surface_source", **src_kwargs)
     with col_a:
-        st.selectbox("Type", ["Call", "Put"], key="opt_iv_surface_type")
+        typ_default_idx = 0
+        if str(st.session_state.get("opt_iv_surface_type") or "").strip().lower().startswith("p"):
+            typ_default_idx = 1
+        typ_kwargs = {"index": typ_default_idx} if "opt_iv_surface_type" not in st.session_state else {}
+        st.selectbox("Type", ["Call", "Put"], key="opt_iv_surface_type", **typ_kwargs)
     with col_b:
+        slider_kwargs = {"value": 2.0} if "opt_iv_surface_max_years" not in st.session_state else {}
         st.slider(
             "Max maturite (annees)",
             min_value=0.25,
             max_value=2.0,
             step=0.25,
             key="opt_iv_surface_max_years",
+            **slider_kwargs,
         )
 
     max_years = float(st.session_state.get("opt_iv_surface_max_years", 2.0))
