@@ -27,9 +27,9 @@
 4. Optional diagnostics: CRR surface in an expander
 
 ## Tests
-- Run: `pytest scripts/test_options_*.py`
+- Install dev deps: `python -m pip install -r requirements_full.txt`
+- Run: `python -m pytest scripts/test_options_*.py`
 - CI runs full test suite.
 
 ## CI
 - GitHub Actions workflow in `.github/workflows/tests.yml` installs deps and runs pytest on push/PR.
-
