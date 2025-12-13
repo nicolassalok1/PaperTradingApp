@@ -32,6 +32,7 @@ from app.model.options.exotic.american.pricing import (
 )
 from app.model.options.exotic.lookback.lookback_call import lookback_call_option
 from app.utils.paths import CACHE_CSV_DIR
+from app.utils.secrets import get_secret
 
 CLOSING_CACHE_FILE = CACHE_CSV_DIR / "closing_cache.csv"
 
@@ -39,34 +40,11 @@ CLOSING_CACHE_FILE = CACHE_CSV_DIR / "closing_cache.csv"
 MIN_IV_MATURITY = 0.1
 CACHE_DIR = CACHE_CSV_DIR
 
-# ---------------------------------------------------------------------------
-# Alpaca helpers (optional)
-# ---------------------------------------------------------------------------
-
-def _load_env_fallback():
-    """Load .env into environment if present (minimal parser)."""
-    env_file = Path(".env")
-    if not env_file.exists():
-        return
-    try:
-        for line in env_file.read_text().splitlines():
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            k = k.strip()
-            v = v.strip()
-            if k and v and k not in os.environ:
-                os.environ[k] = v
-    except Exception:
-        pass
-
-
 def _load_alpaca_credentials():
-    """Load Alpaca creds from env; lightweight to avoid file dependencies."""
-    _load_env_fallback()
-    key = os.getenv("APCA_API_KEY_ID")
-    secret = os.getenv("APCA_API_SECRET_KEY")
-    base = os.getenv("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
+    """Load Alpaca creds from env or Streamlit secrets."""
+    key = get_secret("APCA_API_KEY_ID")
+    secret = get_secret("APCA_API_SECRET_KEY")
+    base = get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
     return key, secret, base
 
 

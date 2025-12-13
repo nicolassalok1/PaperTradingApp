@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
+from app.utils.secrets import get_secret
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, TimeInForce
@@ -27,9 +28,9 @@ class AlpacaPortfolioClient:
     base_url: str
 
     def __init__(self) -> None:
-        self.api_key = os.getenv("APCA_API_KEY_ID") or ""
-        self.api_secret = os.getenv("APCA_API_SECRET_KEY") or ""
-        self.base_url = os.getenv("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
+        self.api_key = (get_secret("APCA_API_KEY_ID") or "").strip()
+        self.api_secret = (get_secret("APCA_API_SECRET_KEY") or "").strip()
+        self.base_url = (get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets").strip()
         self.offline = False
         if (not self.api_key or not self.api_secret) or self.api_key.lower().startswith("dummy") or self.api_secret.lower().startswith("dummy"):
             self.offline = True

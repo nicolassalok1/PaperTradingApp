@@ -7,6 +7,8 @@ try:  # pragma: no cover - import guard
 except Exception:  # noqa: BLE001
     openai = None  # type: ignore
 
+from app.utils.secrets import get_secret
+
 
 def _get_openai_client() -> Tuple[object, str]:
     """
@@ -16,7 +18,7 @@ def _get_openai_client() -> Tuple[object, str]:
     if openai is None:
         return None, "OpenAI SDK not installed"
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = get_secret("OPENAI_API_KEY")
     if not api_key:
         return None, "OPENAI_API_KEY not configured"
 

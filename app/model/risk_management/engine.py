@@ -10,6 +10,7 @@ from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
+from app.utils.secrets import get_secret
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import GetOrdersRequest
@@ -27,9 +28,9 @@ class AlpacaKeys:
 
     @classmethod
     def from_env(cls) -> "AlpacaKeys":
-        api_key = os.getenv("APCA_API_KEY_ID") or ""
-        api_secret = os.getenv("APCA_API_SECRET_KEY") or ""
-        base_url = os.getenv("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
+        api_key = (get_secret("APCA_API_KEY_ID") or "").strip()
+        api_secret = (get_secret("APCA_API_SECRET_KEY") or "").strip()
+        base_url = (get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets").strip()
         if (not api_key or not api_secret) or api_key.lower().startswith("dummy") or api_secret.lower().startswith("dummy"):
             raise EnvironmentError("APCA_API_KEY_ID and APCA_API_SECRET_KEY must be set")
         return cls(api_key=api_key, api_secret=api_secret, base_url=base_url)

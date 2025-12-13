@@ -14,6 +14,8 @@ from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 
+from app.utils.secrets import get_secret
+
 
 def _to_dict(obj: Any) -> Dict[str, Any]:
     if obj is None:
@@ -38,9 +40,9 @@ def _to_dict(obj: Any) -> Dict[str, Any]:
 
 class AlpacaHedgerClient:
     def __init__(self) -> None:
-        api_key = os.getenv("APCA_API_KEY_ID") or ""
-        api_secret = os.getenv("APCA_API_SECRET_KEY") or ""
-        base_url = os.getenv("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
+        api_key = (get_secret("APCA_API_KEY_ID") or "").strip()
+        api_secret = (get_secret("APCA_API_SECRET_KEY") or "").strip()
+        base_url = (get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets").strip()
         self.offline = False
         if (not api_key or not api_secret) or api_key.lower().startswith("dummy") or api_secret.lower().startswith("dummy"):
             self.offline = True

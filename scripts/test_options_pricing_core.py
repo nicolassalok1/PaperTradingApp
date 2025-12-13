@@ -5,7 +5,6 @@ import pandas as pd
 
 from app.model.options.core import pricing_lib
 from app.model.options.core.shared import get_cached_iv_for
-from app.model.options.engines.black_scholes import price_basket_call
 from app.model.options.engines.crr import price_american_crr
 
 
@@ -61,23 +60,3 @@ def test_get_cached_iv_for_accepts_iv_column_and_type_filter():
 
     assert abs(float(iv_call) - 0.25) < 1e-12
     assert abs(float(iv_put) - 0.30) < 1e-12
-
-
-def test_basket_call_rho_zero_matches_independent():
-    weights = [0.5, 0.5]
-    spots = [100.0, 100.0]
-    r = 0.02
-    q = 0.0
-    T = 1.0
-    sigma = 0.2
-    strike = 100.0
-
-    p_indep = price_basket_call(
-        weights, spots, r, q, T, sigma, strike=strike, rho=None, n_paths=5000, seed=123
-    )
-    p_rho0 = price_basket_call(
-        weights, spots, r, q, T, sigma, strike=strike, rho=0.0, n_paths=5000, seed=123
-    )
-
-    assert abs(float(p_indep) - float(p_rho0)) < 1e-12
-

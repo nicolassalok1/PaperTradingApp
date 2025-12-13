@@ -18,6 +18,7 @@ import requests
 from app.model.market_data.service import fetch_historical_prices as _fetch_stooq_history
 from app.model.market_data.service import fetch_spot_price as _fetch_stooq_spot
 from app.utils.paths import CACHE_CSV_DIR
+from app.utils.secrets import get_secret
 from app.utils.symbol_mapper import map_to_stooq
 
 try:  # optional dependency
@@ -38,25 +39,10 @@ _YAHOO_OPTIONS_SESSION: requests.Session | None = None
 _YAHOO_OPTIONS_CRUMB: str | None = None
 
 
-def _load_env_fallback() -> None:
-    env_path = Path(".env")
-    if not env_path.exists():
-        return
-    try:
-        for line in env_path.read_text().splitlines():
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
-    except Exception:
-        pass
-
-
 def _alpaca_credentials() -> Tuple[str | None, str | None, str]:
-    _load_env_fallback()
-    key = os.getenv("APCA_API_KEY_ID")
-    secret = os.getenv("APCA_API_SECRET_KEY")
-    base = os.getenv("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
+    key = get_secret("APCA_API_KEY_ID")
+    secret = get_secret("APCA_API_SECRET_KEY")
+    base = get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
     return key, secret, base
 
 

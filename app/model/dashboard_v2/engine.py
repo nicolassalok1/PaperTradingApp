@@ -20,6 +20,8 @@ from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 
+from app.utils.secrets import get_secret
+
 
 def _to_dict(obj: Any) -> Dict[str, Any]:
     if obj is None:
@@ -128,15 +130,15 @@ class _LiveDashboardBackend:
 
 class DashboardV2Client:
     def __init__(self) -> None:
-        api_key = os.getenv("APCA_API_KEY_ID")
-        api_secret = os.getenv("APCA_API_SECRET_KEY")
-        base_url = os.getenv("APCA_API_BASE_URL")
+        api_key = get_secret("APCA_API_KEY_ID")
+        api_secret = get_secret("APCA_API_SECRET_KEY")
+        base_url = get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
 
         self.offline = False
         def _invalid(k: str | None) -> bool:
             return not k or str(k).lower().startswith("dummy")
 
-        if _invalid(api_key) or _invalid(api_secret) or not base_url:
+        if _invalid(api_key) or _invalid(api_secret):
             self.offline = True
             self.trading = None
             self.data = None
@@ -144,7 +146,6 @@ class DashboardV2Client:
             return
 
         is_paper = "paper" in (base_url or "").lower()
-        base_url = base_url or "https://paper-api.alpaca.markets"
         self.trading = TradingClient(
             api_key,
             api_secret,

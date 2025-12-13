@@ -115,3 +115,12 @@ vue/ → Streamlit pages and components
 
 
 This structure is now validated and clean.
+
+---
+
+## 5. Deploy on Streamlit Community Cloud (streamlit.io)
+
+- **Main file path**: `streamlit_app.py`
+- **Python**: set by `runtime.txt`
+- **Dependencies**: Streamlit Cloud installs `requirements.txt` (lean); use `requirements_full.txt` only for local dev
+- **Secrets**: add these in Streamlit Cloud → App settings → Secrets (see `.streamlit/secrets_template.toml`)
