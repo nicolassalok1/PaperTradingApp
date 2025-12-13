@@ -600,6 +600,7 @@ def render_tab() -> None:
                 st.warning("JSON invalide.")
 
     st.markdown("### Surface IV marché")
+    _download_surface_template()
     surface_sources = ["Ticker (Yahoo)", "Upload CSV", "Cache (cache/*.csv)", "Alpaca (live)"]
     if st.session_state.get("calib_surface_source") not in surface_sources:
         st.session_state["calib_surface_source"] = surface_sources[0]

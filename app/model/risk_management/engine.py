@@ -158,25 +158,64 @@ class RiskEngine:
         }
 
     def _load_price_panel(self, symbols: list[str], limit: int = 90) -> pd.DataFrame:
+        if self.offline or self.data_client is None:
+            return pd.DataFrame()
+
         symbols_norm = [s.strip().upper() for s in symbols if s]
         if not symbols_norm:
             return pd.DataFrame()
-        req = StockBarsRequest(
+
+        def _safe_get_df(req: StockBarsRequest) -> pd.DataFrame:
+            try:
+                bars = self.data_client.get_stock_bars(req)
+            except Exception:
+                return pd.DataFrame()
+            try:
+                df = getattr(bars, "df", None)
+            except Exception:
+                return pd.DataFrame()
+            if df is None or getattr(df, "empty", True):
+                return pd.DataFrame()
+            return df
+
+        req_all = StockBarsRequest(
             symbol_or_symbols=symbols_norm,
             timeframe=TimeFrame.Day,
             limit=min(max(limit, 2), 1000),
         )
-        bars = self.data_client.get_stock_bars(req)
-        df = getattr(bars, "df", None)
-        if df is None or df.empty:
-            return pd.DataFrame()
+
+        df = _safe_get_df(req_all)
+        if df.empty:
+            # Fallback: fetch per-symbol (more robust if a single symbol breaks the batch request).
+            frames: list[pd.DataFrame] = []
+            for sym in symbols_norm:
+                req_one = StockBarsRequest(
+                    symbol_or_symbols=[sym],
+                    timeframe=TimeFrame.Day,
+                    limit=min(max(limit, 2), 1000),
+                )
+                df_one = _safe_get_df(req_one)
+                if not df_one.empty:
+                    frames.append(df_one)
+            if not frames:
+                return pd.DataFrame()
+            df = pd.concat(frames, axis=0, ignore_index=False)
+
         if isinstance(df.index, pd.MultiIndex):
             df = df.reset_index()
+        if df is None or df.empty:
+            return pd.DataFrame()
+
+        # Ensure we have the expected columns; otherwise return empty to avoid crashing callers.
+        if "symbol" not in df.columns or "timestamp" not in df.columns:
+            return pd.DataFrame()
         # Ensure we have symbol, timestamp, close columns
         if "timestamp" in df.columns:
             df = df.rename(columns={"timestamp": "time"})
         if "close" not in df.columns and "Close" in df.columns:
             df = df.rename(columns={"Close": "close"})
+        if "time" not in df.columns or "symbol" not in df.columns or "close" not in df.columns:
+            return pd.DataFrame()
         return df
 
     def compute_portfolio_pnl_series(self, limit: int = 90) -> pd.Series:
