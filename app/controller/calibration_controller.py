@@ -11,6 +11,12 @@ import numpy as np
 import pandas as pd
 
 from app.model.calibration.logic import get_supported_models, run_calibration, validate_request
+from app.model.calibration.heston_calibrator import (
+    PARAM_ORDER as HESTON_PARAM_ORDER,
+    DEFAULT_BOUNDS as HESTON_DEFAULT_BOUNDS,
+    build_bounds as build_heston_bounds,
+    calibrate_heston_least_squares,
+)
 from app.model.calibration.yahoo_iv_parser import parse_yahoo_iv_csv
 from app.model.calibration.market_surface import (
     load_csv as load_market_surface_csv_v2,
@@ -28,6 +34,7 @@ from app.model.calibration.types import (
     CalibrationResult,
     MarketSurfaceSource,
 )
+from app.model.options.logic import download_options_alpaca as _download_options_alpaca
 
 
 class CalibrationController:
@@ -78,6 +85,31 @@ class CalibrationController:
         except Exception:
             return np.array([])
 
+    def get_heston_nn_info(self) -> Dict[str, Any]:
+        """Expose whether Heston NN weights are available on disk."""
+        try:
+            exists = bool(WEIGHTS_PATH.exists())
+        except Exception:
+            exists = False
+        return {"weights_path": str(WEIGHTS_PATH), "weights_exists": exists}
+
+    def get_heston_default_bounds(self) -> Dict[str, Any]:
+        """Expose default calibration bounds for UI builder."""
+        return {k: [float(v[0]), float(v[1])] for k, v in (HESTON_DEFAULT_BOUNDS or {}).items()}
+
+    def download_alpaca_options_chain(self, ticker: str) -> Dict[str, Any]:
+        """Download an Alpaca options snapshot chain for an underlying ticker."""
+        sym = str(ticker or "").strip().upper()
+        if not sym:
+            return {"success": False, "message": "Ticker manquant.", "df": None}
+        try:
+            df = _download_options_alpaca(sym)
+        except Exception as exc:
+            return {"success": False, "message": f"Erreur Alpaca: {exc}", "df": None}
+        if df is None or df.empty:
+            return {"success": False, "message": f"Aucune option retournée pour {sym}.", "df": None}
+        return {"success": True, "message": f"{len(df)} contrats chargés pour {sym}.", "ticker": sym, "df": df}
+
     def run_heston_nn_from_yahoo(self, payload: Dict | None) -> Dict[str, Any]:
         data = payload or {}
         csv_bytes = data.get("csv_bytes") or data.get("file")
@@ -85,6 +117,7 @@ class CalibrationController:
         r = float(data.get("r") or 0.0)
         q = float(data.get("q") or 0.0)
         asof_date = data.get("asof_date")
+        constraints = data.get("constraints") if isinstance(data.get("constraints"), dict) else None
 
         if csv_bytes is None and not data.get("surface_path"):
             return {"success": False, "message": "CSV Yahoo IV requis.", "details": {}}
@@ -106,6 +139,14 @@ class CalibrationController:
             return {"success": False, "message": pred.get("message", "Erreur prédiction."), "details": {}}
 
         params = pred.get("params") or {}
+        lb, ub, err = build_heston_bounds(constraints)
+        if not err and params:
+            for i, name in enumerate(HESTON_PARAM_ORDER):
+                if name in params and params[name] is not None:
+                    try:
+                        params[name] = float(np.clip(float(params[name]), float(lb[i]), float(ub[i])))
+                    except Exception:
+                        pass
         params_tuple = (
             params.get("kappa"),
             params.get("theta"),
@@ -132,6 +173,7 @@ class CalibrationController:
             "iv_market": iv_market.tolist(),
             "iv_model": iv_model.tolist(),
             "iv_error": iv_error.tolist(),
+            "metrics": self._iv_error_metrics(iv_error, mask),
             "mask": mask.tolist(),
         }
 
@@ -142,16 +184,20 @@ class CalibrationController:
         data = payload or {}
         csv_bytes = data.get("csv_bytes") or data.get("file")
         surface_path = data.get("surface_path")
+        df_in = data.get("df")
+        constraints = data.get("constraints") if isinstance(data.get("constraints"), dict) else None
 
-        if csv_bytes is None and surface_path is None:
+        if not isinstance(df_in, pd.DataFrame) and csv_bytes is None and surface_path is None:
             return {"success": False, "message": "CSV surface requis.", "details": {}}
 
         try:
-            raw_df = (
-                pd.read_csv(io.BytesIO(csv_bytes))
-                if isinstance(csv_bytes, (bytes, bytearray))
-                else pd.read_csv(surface_path) if surface_path is not None else None
-            )
+            raw_df = None
+            if isinstance(df_in, pd.DataFrame):
+                raw_df = df_in.copy()
+            elif isinstance(csv_bytes, (bytes, bytearray)):
+                raw_df = pd.read_csv(io.BytesIO(csv_bytes))
+            elif surface_path is not None:
+                raw_df = pd.read_csv(surface_path)
         except Exception as exc:
             return {"success": False, "message": f"Lecture CSV échouée: {exc}", "details": {}}
 
@@ -186,6 +232,14 @@ class CalibrationController:
             return {"success": False, "message": pred.get("message", "Erreur prédiction."), "details": {}}
 
         params = pred.get("params") or {}
+        lb, ub, err = build_heston_bounds(constraints)
+        if not err and params:
+            for i, name in enumerate(HESTON_PARAM_ORDER):
+                if name in params and params[name] is not None:
+                    try:
+                        params[name] = float(np.clip(float(params[name]), float(lb[i]), float(ub[i])))
+                    except Exception:
+                        pass
         params_tuple = (
             params.get("kappa"),
             params.get("theta"),
@@ -215,7 +269,135 @@ class CalibrationController:
             "iv_market": iv_market.tolist(),
             "iv_model": iv_model.tolist(),
             "iv_error": iv_error.tolist(),
+            "metrics": self._iv_error_metrics(iv_error, mask),
             "mask": mask.tolist(),
+        }
+
+    def _iv_error_metrics(self, iv_error: np.ndarray, mask: np.ndarray) -> Dict[str, float]:
+        try:
+            err = np.asarray(iv_error, dtype=float)[np.asarray(mask, dtype=bool)]
+            err = err[np.isfinite(err)]
+        except Exception:
+            return {}
+        if err.size == 0:
+            return {}
+        mae = float(np.mean(np.abs(err)))
+        rmse = float(np.sqrt(np.mean(err * err)))
+        max_abs = float(np.max(np.abs(err)))
+        return {"mae": mae, "rmse": rmse, "max_abs": max_abs}
+
+    def run_heston_ls_from_surface(self, payload: Dict | None) -> Dict[str, Any]:
+        """
+        Least-squares Heston calibration from an IV surface (K,T,S0,iv,type).
+        Does not require NN weights.
+        """
+        data = payload or {}
+        csv_bytes = data.get("csv_bytes") or data.get("file")
+        surface_path = data.get("surface_path")
+        df_in = data.get("df")
+        constraints = data.get("constraints") if isinstance(data.get("constraints"), dict) else None
+
+        if not isinstance(df_in, pd.DataFrame) and csv_bytes is None and surface_path is None:
+            return {"success": False, "message": "CSV surface requis.", "details": {}}
+
+        try:
+            raw_df = None
+            if isinstance(df_in, pd.DataFrame):
+                raw_df = df_in.copy()
+            elif isinstance(csv_bytes, (bytes, bytearray)):
+                raw_df = pd.read_csv(io.BytesIO(csv_bytes))
+            elif surface_path is not None:
+                raw_df = pd.read_csv(surface_path)
+        except Exception as exc:
+            return {"success": False, "message": f"Lecture CSV échouée: {exc}", "details": {}}
+
+        market_df = load_market_surface_csv_v2(raw_df if raw_df is not None else csv_bytes)
+        if market_df is None or market_df.empty:
+            return {"success": False, "message": "Surface IV vide après parsing.", "details": {}}
+
+        # S0 default from CSV median if not provided
+        S0_raw = data.get("S0")
+        S0_val = None
+        try:
+            if S0_raw is not None:
+                S0_val = float(S0_raw)
+            elif raw_df is not None and "S0" in raw_df.columns:
+                s0_vals = pd.to_numeric(raw_df["S0"], errors="coerce")
+                s0_pos = s0_vals[s0_vals > 0]
+                if not s0_pos.empty:
+                    S0_val = float(s0_pos.median())
+        except Exception:
+            S0_val = None
+
+        if S0_val is None or S0_val <= 0:
+            return {"success": False, "message": "S0 invalide ou manquant.", "details": {}}
+
+        r = float(data.get("r") or 0.0)
+        q = float(data.get("q") or 0.0)
+        fit_to_observed_only = bool(data.get("fit_to_observed_only", True))
+        u_max = float(data.get("u_max") or 50.0)
+        n_integration = int(data.get("n_integration") or 2000)
+        max_nfev = int(data.get("max_nfev") or 50)
+
+        iv_market, mask, m_grid, t_grid = build_fixed_grid(market_df)
+
+        calib = calibrate_heston_least_squares(
+            S0=S0_val,
+            r=r,
+            q=q,
+            m_grid=m_grid,
+            t_grid=t_grid,
+            iv_market=iv_market,
+            mask=mask,
+            constraints=constraints,
+            fit_to_observed_only=fit_to_observed_only,
+            u_max=u_max,
+            n_integration=n_integration,
+            max_nfev=max_nfev,
+        )
+        if not calib.get("success"):
+            return {"success": False, "message": calib.get("message", "Calibration échouée."), "details": calib}
+
+        params = calib.get("params") or {}
+        params_tuple = (
+            params.get("kappa"),
+            params.get("theta"),
+            params.get("sigma"),
+            params.get("rho"),
+            params.get("v0"),
+        )
+        if any(p is None for p in params_tuple):
+            return {"success": False, "message": "Paramètres incomplets après calibration.", "details": calib}
+
+        try:
+            price_grid = price_grid_from_params(S0_val, m_grid, t_grid, r, q, params_tuple)
+            iv_model = implied_vol_grid(price_grid, S0_val, m_grid, t_grid, r, q)
+            iv_error = np.where(mask, iv_model - iv_market, np.nan)
+            metrics = self._iv_error_metrics(iv_error, mask)
+        except Exception as exc:
+            return {"success": False, "message": f"Erreur calcul surface modèle: {exc}", "details": calib}
+
+        msg = calib.get("message") or "OK"
+        nfev = calib.get("nfev")
+        if nfev:
+            msg = f"{msg} (nfev={nfev})"
+
+        return {
+            "success": True,
+            "message": msg,
+            "method": "least_squares",
+            "params": params,
+            "metrics": metrics,
+            "S0": S0_val,
+            "r": r,
+            "q": q,
+            "m_grid": m_grid.tolist(),
+            "t_grid": t_grid.tolist(),
+            "iv_market": iv_market.tolist(),
+            "iv_model": iv_model.tolist(),
+            "iv_error": iv_error.tolist(),
+            "mask": mask.tolist(),
+            "details": calib,
         }
 
     def run_heston_nn_calibration(self, payload: Dict | None) -> Dict[str, Any]:
