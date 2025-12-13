@@ -140,8 +140,6 @@ def sidebar_menu(all_tabs: Dict[str, Callable[[], None]], tab_labels: list[str])
 
 
 ALL_TABS = autodiscover_tabs()
-if "Bots" not in ALL_TABS:
-    ALL_TABS["Bots"] = render_bots
 # Fallback registration if autodiscovery misses key tabs
 if "📊 Dashboard" not in ALL_TABS:
     ALL_TABS["📊 Dashboard"] = render_dashboard_v2
