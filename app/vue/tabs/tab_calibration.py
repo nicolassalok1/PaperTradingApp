@@ -407,6 +407,39 @@ def _download_surface_template() -> None:
     )
 
 
+def _render_surface_preview_dropdown(df: pd.DataFrame, *, label: str, key: str) -> None:
+    if df is None or df.empty:
+        st.info("Surface vide.")
+        return
+
+    def _render() -> None:
+        st.dataframe(df.head(30), hide_index=True, use_container_width=True)
+        if len(df) > 30:
+            st.caption(f"Aperçu: 30 premières lignes affichées (sur {len(df):,}).")
+        st.divider()
+        _surface_diagnostics(df)
+
+    title = f"{label} ({len(df):,} lignes)"
+    expander = None
+    try:
+        expander = st.expander(title, expanded=False)
+    except Exception:
+        expander = None
+
+    if expander is not None:
+        with expander:
+            _render()
+        return
+
+    if hasattr(st, "popover"):
+        with st.popover(title):
+            _render()
+        return
+
+    if st.checkbox(title, value=False, key=key):
+        _render()
+
+
 def _surface_diagnostics(df: pd.DataFrame) -> None:
     if df is None or df.empty:
         st.info("Aucune donnée à diagnostiquer.")
@@ -538,6 +571,133 @@ def render_tab() -> None:
     if model_choice != "heston":
         st.info("Sélectionnez HESTON pour lancer la calibration.")
         return
+
+    constraints: Dict[str, Any] | None = None
+    with st.expander("Contraintes", expanded=False):
+        mode = st.radio(
+            "Mode",
+            options=["Builder", "JSON"],
+            horizontal=True,
+            index=0,
+            key="calib_constraints_mode",
+        )
+        if mode == "Builder":
+            default_bounds = ctrl.get_heston_default_bounds() or {}
+            constraints = _render_constraints_builder(default_bounds)
+        else:
+            constraints_raw = st.text_area(
+                "Contraintes (JSON)",
+                value="{}",
+                height=120,
+                key="calib_constraints",
+            )
+            constraints = _parse_constraints(constraints_raw)
+            if constraints_raw and constraints is None:
+                st.warning("JSON invalide.")
+
+    st.markdown("### Surface IV marché")
+    source = st.radio(
+        "Source",
+        options=["Upload CSV", "Cache (cache/*.csv)", "Alpaca (live)"],
+        horizontal=True,
+        key="calib_surface_source",
+    )
+
+    csv_bytes = None
+    surface_path = None
+    surface_df = None
+    preview_df = None
+    surface_ticker = None
+
+    if source == "Upload CSV":
+        uploaded = st.file_uploader(
+            "Charger une surface IV (CSV: K, T, S0, iv, type)", type=["csv"], key="calib_upload"
+        )
+        if uploaded is not None:
+            csv_bytes = uploaded.getvalue()
+            try:
+                preview_df = pd.read_csv(uploaded)
+                _render_surface_preview_dropdown(
+                    preview_df,
+                    label="Aperçu / diagnostics surface",
+                    key="calib_surface_preview_upload",
+                )
+            except Exception as exc:
+                st.warning(f"Impossible de lire le CSV: {exc}")
+
+    elif source == "Cache (cache/*.csv)":
+        cache_dir = Path("cache")
+        cached = _discover_cached_surfaces(cache_dir)
+        if not cached:
+            st.info("Aucune surface détectée dans `cache/`. Dépose un CSV ou utilise l'upload.")
+        else:
+            chosen = st.selectbox(
+                "Surface disponible",
+                options=cached,
+                format_func=lambda p: p.name,
+                key="calib_cached_surface",
+            )
+            surface_path = str(chosen)
+            try:
+                preview_df = pd.read_csv(chosen)
+                _render_surface_preview_dropdown(
+                    preview_df,
+                    label="Aperçu / diagnostics surface",
+                    key="calib_surface_preview_cache",
+                )
+            except Exception as exc:
+                st.warning(f"Impossible de lire {chosen.name}: {exc}")
+
+    else:  # Alpaca (live)
+        tickers = _load_optionable_tickers()
+        default_ticker = st.session_state.get(_CHAIN_TICKER_KEY) or (tickers[0] if tickers else "AAPL")
+        col_ticker, col_load = st.columns([3, 1])
+        with col_ticker:
+            if tickers:
+                if default_ticker not in tickers:
+                    default_ticker = tickers[0]
+                ticker = st.selectbox(
+                    "Underlying ticker",
+                    options=tickers,
+                    index=tickers.index(default_ticker),
+                    key="calib_alpaca_ticker",
+                )
+            else:
+                ticker = st.text_input("Underlying ticker", value=str(default_ticker)).upper().strip()
+        with col_load:
+            load_clicked = st.button("Load chain", use_container_width=True)
+
+        if load_clicked and ticker:
+            with st.spinner(f"Loading options for {ticker} from Alpaca..."):
+                res = ctrl.download_alpaca_options_chain(ticker)
+            if not res.get("success"):
+                st.error(res.get("message", "Erreur Alpaca."))
+            else:
+                surface_ticker = str(res.get("ticker") or ticker).strip().upper()
+                st.session_state[_CHAIN_TICKER_KEY] = res.get("ticker") or ticker
+                st.session_state[_CHAIN_STATE_KEY] = res.get("df")
+                st.success(res.get("message", "OK"))
+
+        surface_df = _get_chain_from_state()
+        if surface_df is not None:
+            surface_ticker = surface_ticker or str(st.session_state.get(_CHAIN_TICKER_KEY) or "").strip().upper() or None
+            preview_df = surface_df
+            _render_surface_preview_dropdown(
+                surface_df,
+                label="Aperçu / diagnostics surface",
+                key="calib_surface_preview_alpaca",
+            )
+        else:
+            st.info("Chargez une chaîne d'options Alpaca pour calibrer.")
+
+    calib_df = None
+    if isinstance(preview_df, pd.DataFrame) and not preview_df.empty:
+        canon = _canonicalize_surface_df(preview_df)
+        if canon.empty:
+            st.warning("Surface non reconnue (colonnes attendues: K, T, S0, iv).")
+        else:
+            with st.expander("Filtrage surface", expanded=False):
+                calib_df = _render_surface_filters(canon)
 
     with st.expander("Neural Net (entraîner les poids)", expanded=False):
         st.caption(f"Chemin: {nn_info.get('weights_path')}")
@@ -673,128 +833,6 @@ def render_tab() -> None:
                 st.rerun()
             else:
                 st.error(res_train.get("message", "Entraînement échoué."))
-
-    constraints: Dict[str, Any] | None = None
-    with st.expander("Contraintes", expanded=False):
-        mode = st.radio(
-            "Mode",
-            options=["Builder", "JSON"],
-            horizontal=True,
-            index=0,
-            key="calib_constraints_mode",
-        )
-        if mode == "Builder":
-            default_bounds = ctrl.get_heston_default_bounds() or {}
-            constraints = _render_constraints_builder(default_bounds)
-        else:
-            constraints_raw = st.text_area(
-                "Contraintes (JSON)",
-                value="{}",
-                height=120,
-                key="calib_constraints",
-            )
-            constraints = _parse_constraints(constraints_raw)
-            if constraints_raw and constraints is None:
-                st.warning("JSON invalide.")
-
-    st.markdown("### Surface IV marché")
-    _download_surface_template()
-    source = st.radio(
-        "Source",
-        options=["Upload CSV", "Cache (cache/*.csv)", "Alpaca (live)"],
-        horizontal=True,
-        key="calib_surface_source",
-    )
-
-    csv_bytes = None
-    surface_path = None
-    surface_df = None
-    preview_df = None
-    surface_ticker = None
-
-    if source == "Upload CSV":
-        uploaded = st.file_uploader(
-            "Charger une surface IV (CSV: K, T, S0, iv, type)", type=["csv"], key="calib_upload"
-        )
-        if uploaded is not None:
-            csv_bytes = uploaded.getvalue()
-            try:
-                preview_df = pd.read_csv(uploaded)
-                st.dataframe(preview_df.head(30), hide_index=True, use_container_width=True)
-                if st.checkbox("Diagnostics surface", value=False, key="calib_surface_diag_upload"):
-                    _surface_diagnostics(preview_df)
-            except Exception as exc:
-                st.warning(f"Impossible de lire le CSV: {exc}")
-
-    elif source == "Cache (cache/*.csv)":
-        cache_dir = Path("cache")
-        cached = _discover_cached_surfaces(cache_dir)
-        if not cached:
-            st.info("Aucune surface détectée dans `cache/`. Dépose un CSV ou utilise l'upload.")
-        else:
-            chosen = st.selectbox(
-                "Surface disponible",
-                options=cached,
-                format_func=lambda p: p.name,
-                key="calib_cached_surface",
-            )
-            surface_path = str(chosen)
-            try:
-                preview_df = pd.read_csv(chosen)
-                st.dataframe(preview_df.head(30), hide_index=True, use_container_width=True)
-                if st.checkbox("Diagnostics surface", value=False, key="calib_surface_diag_cache"):
-                    _surface_diagnostics(preview_df)
-            except Exception as exc:
-                st.warning(f"Impossible de lire {chosen.name}: {exc}")
-
-    else:  # Alpaca (live)
-        tickers = _load_optionable_tickers()
-        default_ticker = st.session_state.get(_CHAIN_TICKER_KEY) or (tickers[0] if tickers else "AAPL")
-        col_ticker, col_load = st.columns([3, 1])
-        with col_ticker:
-            if tickers:
-                if default_ticker not in tickers:
-                    default_ticker = tickers[0]
-                ticker = st.selectbox(
-                    "Underlying ticker",
-                    options=tickers,
-                    index=tickers.index(default_ticker),
-                    key="calib_alpaca_ticker",
-                )
-            else:
-                ticker = st.text_input("Underlying ticker", value=str(default_ticker)).upper().strip()
-        with col_load:
-            load_clicked = st.button("Load chain", use_container_width=True)
-
-        if load_clicked and ticker:
-            with st.spinner(f"Loading options for {ticker} from Alpaca..."):
-                res = ctrl.download_alpaca_options_chain(ticker)
-            if not res.get("success"):
-                st.error(res.get("message", "Erreur Alpaca."))
-            else:
-                surface_ticker = str(res.get("ticker") or ticker).strip().upper()
-                st.session_state[_CHAIN_TICKER_KEY] = res.get("ticker") or ticker
-                st.session_state[_CHAIN_STATE_KEY] = res.get("df")
-                st.success(res.get("message", "OK"))
-
-        surface_df = _get_chain_from_state()
-        if surface_df is not None:
-            surface_ticker = surface_ticker or str(st.session_state.get(_CHAIN_TICKER_KEY) or "").strip().upper() or None
-            preview_df = surface_df
-            st.dataframe(surface_df.head(30), hide_index=True, use_container_width=True)
-            if st.checkbox("Diagnostics surface", value=False, key="calib_surface_diag_alpaca"):
-                _surface_diagnostics(surface_df)
-        else:
-            st.info("Chargez une chaîne d'options Alpaca pour calibrer.")
-
-    calib_df = None
-    if isinstance(preview_df, pd.DataFrame) and not preview_df.empty:
-        canon = _canonicalize_surface_df(preview_df)
-        if canon.empty:
-            st.warning("Surface non reconnue (colonnes attendues: K, T, S0, iv).")
-        else:
-            with st.expander("Filtrage surface", expanded=False):
-                calib_df = _render_surface_filters(canon)
 
     # Defaults for underlying inputs
     s0_default = _median_s0(calib_df if isinstance(calib_df, pd.DataFrame) else preview_df) or float(
@@ -1018,76 +1056,6 @@ def render_tab() -> None:
         except Exception as exc:
             st.error(f"Impossible d'envoyer vers Options: {exc}")
 
-    try:
-        export_bytes = json.dumps(result, indent=2, ensure_ascii=False).encode("utf-8")
-        st.download_button(
-            "Télécharger le résultat (JSON)",
-            data=export_bytes,
-            file_name="calibration_heston_result.json",
-            mime="application/json",
-            use_container_width=True,
-        )
-    except Exception:
-        pass
-
-    with st.expander("Historique (save / load)", expanded=False):
-        col_a, col_b = st.columns([3, 1])
-        default_name = ""
-        try:
-            tkr = str(result.get("ticker") or result.get("symbol") or "").strip().upper()
-            meth = str(result.get("method") or "").strip().lower() or "heston"
-            default_name = f"{tkr}_{meth}".strip("_") if tkr else f"{meth}"
-        except Exception:
-            default_name = ""
-
-        with col_a:
-            save_name = st.text_input("Nom (optionnel)", value=default_name, key="calib_save_name")
-        with col_b:
-            overwrite = st.checkbox("Overwrite", value=False, key="calib_save_overwrite")
-
-        col_s1, col_s2 = st.columns([1, 1])
-        with col_s1:
-            if st.button("Save current result", type="secondary", use_container_width=True):
-                res_save = ctrl.save_calibration_result(
-                    result=result, name=str(save_name or "").strip() or None, overwrite=bool(overwrite)
-                )
-                if res_save.get("success"):
-                    st.success(f"Sauvegardé: {res_save.get('name')}")
-                else:
-                    st.error(res_save.get("message", "Save failed."))
-        with col_s2:
-            listing = ctrl.list_saved_calibrations(limit=200)
-            items = listing.get("items") if isinstance(listing, dict) else []
-            names = [it.get("name") for it in (items or []) if isinstance(it, dict) and it.get("name")]
-            if not names:
-                st.info("Aucun résultat sauvegardé.")
-            else:
-                sel = st.selectbox("Charger", options=names, index=0, key="calib_load_select")
-                if st.button("Load", use_container_width=True):
-                    res_load = ctrl.load_calibration_result(str(sel))
-                    if res_load.get("success"):
-                        data = res_load.get("data")
-                        if isinstance(data, dict):
-                            st.session_state["last_calibration_result"] = data
-                            st.success(f"Chargé: {res_load.get('name')}")
-                            st.rerun()
-                        else:
-                            st.error("Contenu invalide.")
-                    else:
-                        st.error(res_load.get("message", "Load failed."))
-
-        if names:
-            show_files = st.checkbox(
-                "Afficher les fichiers disponibles",
-                value=False,
-                key="calib_show_saved_files",
-            )
-            if show_files:
-                try:
-                    st.dataframe(pd.DataFrame(items), hide_index=True, use_container_width=True)
-                except Exception:
-                    st.write(names)
-
     m_grid = np.array(result.get("m_grid") or [])
     t_grid = np.array(result.get("t_grid") or [])
     iv_mkt = np.array(result.get("iv_market") or [])
@@ -1095,9 +1063,13 @@ def render_tab() -> None:
     iv_err = np.array(result.get("iv_error") or [])
     if iv_mkt.size and iv_model.size and iv_err.size:
         st.markdown("### Surfaces IV")
-        _plot_heatmap(iv_mkt, m_grid, t_grid, "IV marché")
-        _plot_heatmap(iv_model, m_grid, t_grid, "IV modèle")
-        _plot_heatmap(iv_err, m_grid, t_grid, "Erreur (modèle - marché)")
+        col_mkt, col_model, col_err = st.columns(3)
+        with col_mkt:
+            _plot_heatmap(iv_mkt, m_grid, t_grid, "IV marché")
+        with col_model:
+            _plot_heatmap(iv_model, m_grid, t_grid, "IV modèle")
+        with col_err:
+            _plot_heatmap(iv_err, m_grid, t_grid, "Erreur (modèle - marché)")
     else:
         st.info("Aucune surface à afficher.")
 
