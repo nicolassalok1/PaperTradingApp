@@ -169,7 +169,7 @@ clear_closing_history_cache = oc.clear_closing_history_cache
 # Pricing extras
 price_iron_butterfly_bs = oc.price_iron_butterfly_bs
 compute_price_mc = oc.compute_price_mc
-price_european_from_cboe = oc.price_european_from_cboe
+price_european_from_market = oc.price_european_from_market
 try:
     price_option_mc_unified = oc.price_option_mc_unified
 except Exception:  # pragma: no cover - safety fallback
@@ -388,7 +388,7 @@ __all__ = [
     "plot_crr_tree",
     "get_option_context",
     "compute_price_mc",
-    "price_european_from_cboe",
+    "price_european_from_market",
     "get_data",
     "load_or_fetch_closing_history",
     "load_close_series_for_ticker",

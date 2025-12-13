@@ -4,7 +4,6 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from app.controller import options_controller as opt_ctrl
-from app.controller import yieldcurve_controller as yc
 from app.vue.components.options.panels.tab_vanilla import render_panel_vanilla
 from app.vue.components.options.panels.tab_path import render_panel_path
 from app.vue.components.options.panels.tab_barrier import render_panel_barrier
@@ -33,38 +32,16 @@ def _ensure_global_defaults() -> None:
     st.session_state.setdefault("common_rate_value", 0.02)
     st.session_state.setdefault("opt_use_yield_curve_rate", True)
     st.session_state.setdefault("opt_iv_surface_max_years", 2.0)
-    st.session_state.setdefault("opt_iv_surface_kind", "Surface 3D")
     st.session_state.setdefault("opt_iv_surface_type", "Call")
-    st.session_state.setdefault("opt_iv_surface_source", "CBOE")
+    st.session_state.setdefault("opt_iv_surface_source", "Yahoo")
 
 
 def _render_global_params() -> None:
     _ensure_global_defaults()
 
-    with st.expander("Paramètres globaux (r / q / σ / T)", expanded=True):
-        col_t, col_r, col_q, col_sig = st.columns([1, 1, 1, 1])
-
-        with col_t:
-            T = st.slider(
-                "TTM T (années)",
-                min_value=0.05,
-                max_value=2.0,
-                value=_to_float(st.session_state.get("common_maturity_value"), 1.0),
-                step=0.05,
-                key="common_maturity_value",
-            )
-
+    with st.expander("Parametres globaux (r / q / sigma)", expanded=True):
+        col_r, col_q, col_sig = st.columns([1, 1, 1])
         currency = (st.session_state.get("yc_currency") or "USD").strip().upper()
-        try:
-            r_curve = float(
-                yc.get_risk_free_rate(
-                    T_ref=float(T),
-                    currency=currency,
-                    ensure_cache=True,
-                )
-            )
-        except Exception:
-            r_curve = None
 
         with col_r:
             st.toggle(
@@ -72,14 +49,9 @@ def _render_global_params() -> None:
                 value=bool(st.session_state.get("opt_use_yield_curve_rate", True)),
                 key="opt_use_yield_curve_rate",
             )
-            if r_curve is None:
-                st.caption(f"YC: {currency} r(T) indisponible")
-            else:
-                st.caption(f"YC: {currency} r({float(T):.2f}y) = {float(r_curve) * 100:.2f}%")
-
-            if bool(st.session_state.get("opt_use_yield_curve_rate", True)) and r_curve is not None:
-                # Must happen before the number_input with the same key is instantiated.
-                st.session_state["common_rate_value"] = float(r_curve)
+            st.caption(
+                f"YC: {currency} (r(T) est resolu dans chaque panneau selon le T selectionne)"
+            )
 
             st.number_input(
                 "Taux sans risque r",
@@ -105,7 +77,7 @@ def _render_global_params() -> None:
 
         with col_sig:
             st.number_input(
-                "Volatilité σ",
+                "Volatilite sigma",
                 min_value=0.0001,
                 max_value=5.0,
                 value=_to_float(st.session_state.get("common_sigma_value"), 0.20),
@@ -124,7 +96,9 @@ def _pivot_surface(df: pd.DataFrame) -> pd.DataFrame:
     iv_col = cols.get("iv") or cols.get("iv_market") or cols.get("sigma") or "iv"
 
     df_clean = df.dropna(subset=[k_col, t_col, iv_col]).copy()
-    df_clean["T_days"] = (pd.to_numeric(df_clean[t_col], errors="coerce") * 365.0).round().astype("Int64")
+    df_clean["T_days"] = (
+        (pd.to_numeric(df_clean[t_col], errors="coerce") * 365.0).round().astype("Int64")
+    )
     df_clean[k_col] = pd.to_numeric(df_clean[k_col], errors="coerce")
     df_clean[iv_col] = pd.to_numeric(df_clean[iv_col], errors="coerce")
     df_clean = df_clean.dropna(subset=["T_days", k_col, iv_col])
@@ -152,82 +126,68 @@ def _render_iv_surface_section(ticker: str) -> None:
     if not tkr:
         return
 
-    st.markdown("### IV marché (surface)")
-    st.caption("Source: CBOE (marché) ou Calibration (Heston).")
+    st.markdown("### IV marche (surface)")
+    st.caption("Source: Yahoo (marche) ou Calibration (Heston).")
 
-    col_src, col_a, col_b, col_c = st.columns([1, 1, 1, 1])
+    col_src, col_a, col_b = st.columns([1, 1, 1])
     with col_src:
-        st.selectbox("Source", ["CBOE", "Calibration"], key="opt_iv_surface_source")
+        st.selectbox("Source", ["Yahoo", "Calibration"], key="opt_iv_surface_source")
     with col_a:
         st.selectbox("Type", ["Call", "Put"], key="opt_iv_surface_type")
     with col_b:
         st.slider(
-            "Max maturité (années)",
+            "Max maturite (annees)",
             min_value=0.25,
             max_value=2.0,
             value=_to_float(st.session_state.get("opt_iv_surface_max_years"), 2.0),
             step=0.25,
             key="opt_iv_surface_max_years",
         )
-    with col_c:
-        st.selectbox("Affichage", ["Surface 3D", "Heatmap"], key="opt_iv_surface_kind")
 
     max_years = float(st.session_state.get("opt_iv_surface_max_years", 2.0))
-    source_kind = str(st.session_state.get("opt_iv_surface_source") or "CBOE")
+    source_kind = str(st.session_state.get("opt_iv_surface_source") or "Yahoo").strip()
+    if source_kind not in {"Yahoo", "Calibration"}:
+        source_kind = "Yahoo"
+        st.session_state["opt_iv_surface_source"] = "Yahoo"
 
     def _render_surface(df_in: pd.DataFrame, title_suffix: str) -> None:
         df = df_in.copy()
         if "type" in df.columns:
             cp = (
                 "c"
-                if str(st.session_state.get("opt_iv_surface_type", "Call")).lower().startswith("c")
+                if str(st.session_state.get("opt_iv_surface_type", "Call"))
+                .lower()
+                .startswith("c")
                 else "p"
             )
             df = df[df["type"].astype(str).str.lower().str.startswith(cp)]
 
         surf = _pivot_surface(df)
         if surf.empty:
-            st.info("Surface IV vide après filtrage.")
+            st.info("Surface IV vide apres filtrage.")
             return
 
-        kind = str(st.session_state.get("opt_iv_surface_kind") or "Surface 3D")
-        if kind.lower().startswith("heat"):
-            fig = go.Figure(
-                data=go.Heatmap(
-                    z=surf.values,
-                    x=[float(x) for x in surf.columns],
-                    y=[int(y) for y in surf.index],
-                    colorscale="Viridis",
-                    colorbar={"title": "IV"},
-                )
+        fig = go.Figure(
+            data=go.Surface(
+                z=surf.values,
+                x=[float(x) for x in surf.columns],
+                y=[int(y) for y in surf.index],
+                colorscale="Viridis",
+                showscale=True,
             )
-            fig.update_layout(
-                title=f"{tkr} - IV surface ({st.session_state.get('opt_iv_surface_type')}) {title_suffix}",
+        )
+        fig.update_layout(
+            title=(
+                f"{tkr} - IV surface ({st.session_state.get('opt_iv_surface_type')}) {title_suffix}"
+            ),
+            scene=dict(
                 xaxis_title="Strike K",
                 yaxis_title="TTM (jours)",
-                height=420,
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            fig = go.Figure(
-                data=go.Surface(
-                    z=surf.values,
-                    x=[float(x) for x in surf.columns],
-                    y=[int(y) for y in surf.index],
-                    colorscale="Viridis",
-                    showscale=True,
-                )
-            )
-            fig.update_layout(
-                title=f"{tkr} - IV surface ({st.session_state.get('opt_iv_surface_type')}) {title_suffix}",
-                scene=dict(
-                    xaxis_title="Strike K",
-                    yaxis_title="TTM (jours)",
-                    zaxis_title="IV",
-                ),
-                height=520,
-            )
-            st.plotly_chart(fig, use_container_width=True)
+                zaxis_title="IV",
+            ),
+            height=520,
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
     if source_kind.lower().startswith("calib"):
         df_cal = st.session_state.get("calib_model_surface_df")
@@ -235,7 +195,7 @@ def _render_iv_surface_section(ticker: str) -> None:
         if df_cal is None or getattr(df_cal, "empty", True):
             st.info(
                 "Aucune surface Calibration disponible. Lance une calibration puis clique "
-                "'Envoyer IV modèle vers Options' dans l'onglet Calibration."
+                "'Envoyer IV modele vers Options' dans l'onglet Calibration."
             )
             return
 
@@ -255,7 +215,7 @@ def _render_iv_surface_section(ticker: str) -> None:
         _render_surface(df_iv, title_suffix="(Calibration)")
         return
 
-    # --- Market (CBOE) ---
+    # --- Market (Yahoo) ---
     if st.session_state.get(_IV_SURFACE_TKR_KEY) != tkr:
         st.session_state[_IV_SURFACE_TKR_KEY] = tkr
         st.session_state[_IV_SURFACE_DF_KEY] = None
@@ -265,7 +225,7 @@ def _render_iv_surface_section(ticker: str) -> None:
 
     if refresh:
         try:
-            with st.spinner(f"Chargement IV surface (CBOE) pour {tkr}..."):
+            with st.spinner(f"Chargement IV surface (Yahoo) pour {tkr}..."):
                 df_iv = opt_ctrl.fetch_iv_surface(
                     tkr,
                     max_maturity_years=float(st.session_state.get("opt_iv_surface_max_years", 2.0)),
@@ -277,19 +237,18 @@ def _render_iv_surface_section(ticker: str) -> None:
             return
 
     if df_iv is None:
-        st.info("Clique sur « Refresh IV surface » pour charger la surface IV.")
+        st.info("Clique sur 'Refresh IV surface' pour charger la surface IV.")
         return
     if getattr(df_iv, "empty", True):
         st.info("Surface IV vide.")
         return
 
-    _render_surface(df_iv, title_suffix="(CBOE)")
+    _render_surface(df_iv, title_suffix="(Yahoo)")
 
 
 def render_options_router():
-    st.header("?? Options - Interface Professionnelle")
+    st.header("🧮 Options - Interface Professionnelle")
 
-    # Compact tab styling
     st.markdown(
         """
         <style>
@@ -311,6 +270,7 @@ def render_options_router():
         placeholder="ex: AAPL",
     )
     tkr_common_norm = (tkr_common or "").strip().upper()
+
     prev_tkr = st.session_state.get("_prev_tkr_common")
     if tkr_common_norm and tkr_common_norm != prev_tkr:
         try:
@@ -318,14 +278,15 @@ def render_options_router():
             clear_closing_history_cache(tkr_common_norm, period="1y", interval="1d")
         except Exception:
             pass
+
     st.session_state["_prev_tkr_common"] = tkr_common_norm
     st.session_state["tkr_common"] = tkr_common_norm
     st.session_state["common_underlying"] = tkr_common_norm
 
-    # Close prices chart displayed directly under the ticker input
     ctx = get_option_context()
     if ctx.get("S0") is not None:
         st.session_state["common_spot_value"] = ctx["S0"]
+
     close_series = ctx.get("close_series")
     if close_series is not None and hasattr(close_series, "empty") and not close_series.empty:
         tkr_label = ctx.get("ticker") or tkr_common_norm or "Ticker"
@@ -336,8 +297,8 @@ def render_options_router():
         )
     else:
         st.info(
-            "Aucune clôture disponible pour ce ticker. Utilise un symbole Stooq (ex: AAPL, MSFT, SPY) "
-            "ou recharge un ticker supporté pour afficher la courbe."
+            "Aucune cloture disponible pour ce ticker. Utilise un symbole Stooq (ex: AAPL, MSFT, SPY) "
+            "ou recharge un ticker supporte pour afficher la courbe."
         )
 
     _render_iv_surface_section(ctx.get("ticker") or tkr_common_norm)
@@ -345,10 +306,10 @@ def render_options_router():
     families = [
         "Vanilla / Early Exercise",
         "Path-dependent",
-        "BarriŠres",
+        "BarriSres",
         "Spreads & Wings",
         "Calendriers",
-        "Exotiques avanc‚es",
+        "Exotiques avanc'es",
         "Basket",
     ]
 
@@ -359,13 +320,13 @@ def render_options_router():
                 render_panel_vanilla()
             elif fam_label == "Path-dependent":
                 render_panel_path()
-            elif fam_label == "BarriŠres":
+            elif fam_label == "BarriSres":
                 render_panel_barrier()
             elif fam_label == "Spreads & Wings":
                 render_panel_spreads()
             elif fam_label == "Calendriers":
                 render_panel_calendar()
-            elif fam_label == "Exotiques avanc‚es":
+            elif fam_label == "Exotiques avanc'es":
                 render_panel_exotics()
             elif fam_label == "Basket":
                 render_panel_basket()

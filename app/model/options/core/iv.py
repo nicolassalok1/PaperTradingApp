@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 # Unified cache locations under cache/ and data/.
@@ -128,7 +127,7 @@ def save_cached_option_history(ticker: str, df: pd.DataFrame) -> None:
 def save_cached_option_chain(
     ticker: str, calls_df: pd.DataFrame, puts_df: pd.DataFrame, S0_ref: float, r: float, q: float
 ) -> None:
-    """Persist the latest CBOE chains and meta information."""
+    """Persist the latest option chains and meta information."""
     try:
         CACHE_OPTIONS_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
         if calls_df is not None and not calls_df.empty:
@@ -144,7 +143,7 @@ def save_cached_option_chain(
 def load_cached_option_chain(
     ticker: str,
 ) -> tuple[pd.DataFrame | None, pd.DataFrame | None, float | None, float | None, float | None]:
-    """Load cached CBOE chain if it matches the requested ticker."""
+    """Load cached option chain if it matches the requested ticker."""
     tkr = _norm_ticker(ticker)
     if not tkr:
         return None, None, None, None, None
@@ -195,19 +194,24 @@ def fetch_option_history_to_cache(ticker: str) -> pd.DataFrame:
     return hist_df
 
 
-def load_cboe_data(symbol: str) -> tuple[pd.DataFrame, pd.DataFrame, float, float, float]:
+def load_market_data(
+    symbol: str, *, max_maturity_years: float | None = 2.0, max_expiries: int = 12
+) -> tuple[pd.DataFrame, pd.DataFrame, float, float, float]:
     """
-    Download CBOE call/put chains and return (calls_df, puts_df, S0_ref, r, q).
-    Caches are handled by the caller.
+    Download market call/put chains (Yahoo) and return (calls_df, puts_df, S0_ref, r, q).
+    Notes:
+    - Rates/dividend yield are returned as 0.0 (pricing uses Yield Curve / UI inputs elsewhere).
     """
-    from app.model.options import logic as opt_logic  # local import to keep optional deps lazy
+    from app.model.market_data.market_data import fetch_options_details_yahoo
 
-    calls_df, spot_calls, rf_calls, div_calls = opt_logic.download_options_cboe(symbol, "call")
-    puts_df, spot_puts, rf_puts, div_puts = opt_logic.download_options_cboe(symbol, "put")
-    S0_ref = float(np.nanmean([spot_calls, spot_puts]))
-    risk_free = float(np.nanmean([rf_calls, rf_puts]))
-    dividend_yield = float(np.nanmean([div_calls, div_puts]))
-    return calls_df, puts_df, S0_ref, risk_free, dividend_yield
+    calls_df, puts_df, spot, rf, div = fetch_options_details_yahoo(
+        symbol, max_maturity_years=max_maturity_years, max_expiries=max_expiries
+    )
+    try:
+        s0_ref = float(spot)
+    except Exception:
+        s0_ref = float("nan")
+    return calls_df, puts_df, s0_ref, float(rf), float(div)
 
 
 def get_last_cached_option_ticker() -> str | None:

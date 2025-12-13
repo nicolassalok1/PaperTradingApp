@@ -46,7 +46,7 @@ def _get_cached_iv_for(*args, **kwargs):
     except Exception:
         pass
     try:
-        # Prefer the currently loaded IV surface (CBOE) when available.
+        # Prefer the currently loaded market IV surface when available.
         df_iv = None
         try:
             df_iv = st.session_state.get("opt_iv_surface_df")

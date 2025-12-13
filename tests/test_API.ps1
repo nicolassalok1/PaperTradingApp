@@ -83,15 +83,15 @@ safe("ohlc", test_ohlc)
 
 
 # ============================
-# CBOE OPTION CHAIN
+# YAHOO OPTION CHAIN
 # ============================
 
-def test_cboe():
+def test_yahoo():
     from app.model.market_data.market_data import fetch_options_details
     calls, puts, spot, rf, div = fetch_options_details("AAPL")
     return f"calls={len(calls)}, puts={len(puts)}, spot={spot}, rf={rf}, div={div}"
 
-safe("cboe_options", test_cboe)
+safe("yahoo_options", test_yahoo)
 
 
 # ============================

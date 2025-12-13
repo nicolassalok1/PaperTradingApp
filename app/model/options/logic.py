@@ -9,6 +9,7 @@ import re
 import datetime
 import logging
 import json
+import time
 from urllib.parse import quote_plus
 import requests
 from scipy.stats import norm
@@ -1261,88 +1262,28 @@ def build_grid(
     return k_grid, t_grid, iv_grid
 
 
-def _download_cboe_html(symbol: str, option_type: str) -> str:
-    """Download option chain HTML page from CBOE delayed quotes."""
-    url = f"https://www.cboe.com/delayed_quotes/{symbol}/quote_table"
-    params = {"mkt": "stk", "type": option_type}
-    try:
-        resp = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        resp.raise_for_status()
-        return resp.text
-    except Exception as exc:
-        logging.warning(f"[CBOE] HTML error for {symbol} ({option_type}): {exc}")
-        return ""
-
-
-def _parse_cboe_html(html: str, option_type: str) -> pd.DataFrame:
-    """Parse the HTML table from CBOE into a normalized DataFrame."""
-    if not html:
-        return pd.DataFrame()
-    try:
-        tables = pd.read_html(html, header=0)
-    except Exception:
-        return pd.DataFrame()
-    if not tables:
-        return pd.DataFrame()
-    df = tables[0]
-    df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
-    keep_cols = [
-        "strike",
-        "last_sale",
-        "bid",
-        "ask",
-        "volume",
-        "open_interest",
-        "iv",
-        "delta",
-        "gamma",
-        "theta",
-        "vega",
-        "rho",
-    ]
-    cols = [c for c in keep_cols if c in df.columns]
-    df = df[cols]
-    for col in df.columns:
-        df[col] = df[col].apply(_extract_float)
-    df["type"] = option_type
-    return df
-
-
-def _extract_meta(html: str, label: str) -> float:
-    """Extract numeric meta-field from CBOE HTML."""
-    if not html:
-        return np.nan
-    try:
-        match = re.search(rf"{label}.*?([0-9\.]+)%?", html, flags=re.IGNORECASE | re.DOTALL)
-        if not match:
-            return np.nan
-        raw = match.group(1)
-        return float(raw)
-    except Exception:
-        return np.nan
-
-
-def download_options_cboe(symbol: str, option_type: str):
-    """
-    Downloads options from CBOE and returns (df, spot_price, risk_free_rate, dividend_yield), caching CSV.
-    """
-    sym = _normalize_symbol(symbol)
-    opt_type = (option_type or "").lower().strip()
-    html = _download_cboe_html(sym, opt_type)
-    df = _parse_cboe_html(html, opt_type)
-    if df.empty:
-        logging.warning(f"[CBOE] Empty chain for {sym} ({opt_type})")
-    spot = _extract_meta(html, "Underlying Price")
-    rf = _extract_meta(html, "Interest Rate")
-    div = _extract_meta(html, "Dividend Yield")
-    save_csv(df, f"CBOE_{sym}_{opt_type}.csv")
-    return df, spot, rf, div
-
-
-def download_options_alpaca(symbol: str) -> pd.DataFrame:
+def download_options_alpaca(
+    symbol: str,
+    *,
+    feed: str = "indicative",
+    max_pages: int = 10,
+    max_contracts: int | None = 2000,
+    min_days_to_expiry: int | None = 1,
+    include_spot: bool = True,
+    cache_to_csv: bool = True,
+    session: requests.Session | None = None,
+    timeout_sec: float = 10.0,
+    max_retries: int = 2,
+    backoff_sec: float = 0.5,
+) -> pd.DataFrame:
     """
     Download option snapshots from Alpaca Market Data API v1beta1.
     Returns a normalized DataFrame with columns: symbol, opra, K, T, S0, iv, type.
+
+    Notes:
+    - With the free/indicative feed, snapshots typically do NOT include greeks/IV.
+      In that case, iv will be NaN.
+    - Results are paginated; this helper can pull multiple pages via max_pages.
     """
     sym = _normalize_symbol(symbol)
     if not sym:
@@ -1355,21 +1296,18 @@ def download_options_alpaca(symbol: str) -> pd.DataFrame:
     }
     url = f"https://data.alpaca.markets/v1beta1/options/snapshots/{quote_plus(sym)}"
 
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        resp.raise_for_status()
-        payload = resp.json() or {}
-    except Exception as exc:
-        logging.warning(f"[alpaca-options] download failed for {sym}: {exc}")
-        return pd.DataFrame()
-
-    snapshots = payload.get("snapshots") or payload.get("data") or {}
-    if not isinstance(snapshots, dict) or not snapshots:
-        return pd.DataFrame()
-
     today = datetime.date.today()
-    s0_val = fetch_spot_price(sym)
-    s0_val = float(s0_val) if s0_val is not None else float("nan")
+    if include_spot:
+        s0_val = fetch_spot_price(sym)
+        s0_val = float(s0_val) if s0_val is not None else float("nan")
+    else:
+        s0_val = float("nan")
+
+    def _first_not_none(*vals):
+        for v in vals:
+            if v is not None:
+                return v
+        return None
 
     def _decode_from_opra(opra: str) -> tuple[float | None, datetime.date | None, str | None]:
         if not opra or len(opra) < 15:
@@ -1384,65 +1322,189 @@ def download_options_alpaca(symbol: str) -> pd.DataFrame:
             return None, None, None
 
     records: list[dict] = []
-    for opra, snap in snapshots.items():
-        if not isinstance(snap, dict):
-            continue
-        strike, expiry, opt_type = _decode_from_opra(opra if opra is not None else "")
-        if strike is None:
-            strike = snap.get("strike") or snap.get("strike_price") or snap.get("details", {}).get(
-                "strike_price"
-            )
-        if expiry is None:
-            exp_val = snap.get("expiration_date") or snap.get("details", {}).get("expiration_date")
-            if exp_val:
-                try:
-                    expiry = datetime.datetime.fromisoformat(str(exp_val)).date()
-                except Exception:
+
+    try:
+        max_pages = int(max_pages)
+    except Exception:
+        max_pages = 1
+    if max_pages <= 0:
+        max_pages = 1
+
+    try:
+        max_contracts_int = int(max_contracts) if max_contracts is not None else None
+    except Exception:
+        max_contracts_int = None
+    if max_contracts_int is not None and max_contracts_int <= 0:
+        max_contracts_int = None
+
+    try:
+        min_days = int(min_days_to_expiry) if min_days_to_expiry is not None else None
+    except Exception:
+        min_days = None
+
+    try:
+        timeout_s = float(timeout_sec)
+    except Exception:
+        timeout_s = 10.0
+    if timeout_s <= 0:
+        timeout_s = 10.0
+
+    try:
+        max_retries_i = int(max_retries)
+    except Exception:
+        max_retries_i = 0
+    if max_retries_i < 0:
+        max_retries_i = 0
+
+    try:
+        backoff_s = float(backoff_sec)
+    except Exception:
+        backoff_s = 0.5
+    if backoff_s < 0:
+        backoff_s = 0.0
+
+    requester = session.get if session is not None else requests.get
+
+    page_token: str | None = None
+    for _page in range(max_pages):
+        params: dict = {}
+        if feed:
+            params["feed"] = str(feed)
+        if page_token:
+            params["page_token"] = page_token
+
+        payload: dict | None = None
+        for attempt in range(max_retries_i + 1):
+            try:
+                resp = requester(url, headers=headers, params=params, timeout=timeout_s)
+                status = int(getattr(resp, "status_code", 0) or 0)
+                if status == 403:
+                    # e.g. OPRA agreement not signed
                     try:
-                        expiry = datetime.datetime.strptime(str(exp_val), "%Y-%m-%d").date()
+                        msg = (resp.json() or {}).get("message")
                     except Exception:
-                        expiry = None
-        if opt_type is None:
-            right = snap.get("type") or snap.get("right")
-            if right:
-                opt_type = "call" if str(right).upper().startswith("C") else "put"
+                        msg = None
+                    logging.warning(f"[alpaca-options] forbidden for {sym} (feed={feed}): {msg or status}")
+                    payload = None
+                    break
+                if status in (429, 500, 502, 503, 504):
+                    if attempt < max_retries_i:
+                        wait = backoff_s * (2 ** attempt)
+                        retry_after = None
+                        try:
+                            retry_after = float(resp.headers.get("Retry-After") or 0.0)
+                        except Exception:
+                            retry_after = None
+                        if retry_after is not None and retry_after > 0:
+                            wait = max(wait, retry_after)
+                        if wait > 0:
+                            time.sleep(wait)
+                        continue
+                resp.raise_for_status()
+                payload = resp.json() or {}
+                if not isinstance(payload, dict):
+                    payload = {}
+                break
+            except Exception as exc:
+                if attempt < max_retries_i:
+                    wait = backoff_s * (2 ** attempt)
+                    if wait > 0:
+                        time.sleep(wait)
+                    continue
+                logging.warning(f"[alpaca-options] download failed for {sym}: {exc}")
+                payload = None
+                break
 
-        greeks = snap.get("greeks") or snap.get("latestGreeks") or {}
-        iv_val = greeks.get("iv") or greeks.get("impliedVolatility") or snap.get("iv")
+        if payload is None:
+            break
 
-        quote = snap.get("latestQuote") or snap.get("quote") or {}
-        bid = quote.get("bidPrice") or quote.get("bid_price") or quote.get("bid")
-        ask = quote.get("askPrice") or quote.get("ask_price") or quote.get("ask")
-        mid = None
-        try:
-            if bid is not None and ask is not None:
-                mid = (float(bid) + float(ask)) / 2.0
-        except Exception:
-            mid = None
-        if iv_val is None and mid is not None:
-            iv_val = snap.get("impliedVolatility")
+        snapshots = payload.get("snapshots") or payload.get("data") or {}
+        if not isinstance(snapshots, dict) or not snapshots:
+            break
 
-        if strike is None or expiry is None or iv_val is None or opt_type is None:
-            continue
+        for opra, snap in snapshots.items():
+            if max_contracts_int is not None and len(records) >= max_contracts_int:
+                break
+            if not isinstance(snap, dict):
+                continue
 
-        T = (expiry - today).days / 365.0
-        records.append(
-            {
-                "symbol": sym,
-                "opra": str(opra) if opra is not None else "",
-                "K": float(strike),
-                "T": float(T),
-                "S0": s0_val,
-                "iv": float(iv_val),
-                "type": opt_type,
-            }
-        )
+            opra_sym = str(opra) if opra is not None else ""
+            strike, expiry, opt_type = _decode_from_opra(opra_sym)
+            if strike is None:
+                strike = _first_not_none(
+                    snap.get("strike"),
+                    snap.get("strike_price"),
+                    (snap.get("details") or {}).get("strike_price"),
+                )
+            if expiry is None:
+                exp_val = _first_not_none(
+                    snap.get("expiration_date"),
+                    (snap.get("details") or {}).get("expiration_date"),
+                )
+                if exp_val:
+                    try:
+                        expiry = datetime.datetime.fromisoformat(str(exp_val)).date()
+                    except Exception:
+                        try:
+                            expiry = datetime.datetime.strptime(str(exp_val), "%Y-%m-%d").date()
+                        except Exception:
+                            expiry = None
+            if opt_type is None:
+                right = _first_not_none(snap.get("type"), snap.get("right"))
+                if right is not None:
+                    opt_type = "call" if str(right).upper().startswith("C") else "put"
+
+            if strike is None or expiry is None or opt_type is None:
+                continue
+
+            days_to_expiry = int((expiry - today).days)
+            if min_days is not None and days_to_expiry < min_days:
+                continue
+
+            greeks = _first_not_none(snap.get("greeks"), snap.get("latestGreeks")) or {}
+            if not isinstance(greeks, dict):
+                greeks = {}
+            iv_val = _first_not_none(
+                greeks.get("iv"),
+                greeks.get("impliedVolatility"),
+                greeks.get("implied_volatility"),
+                snap.get("iv"),
+                snap.get("impliedVolatility"),
+                snap.get("implied_volatility"),
+            )
+            iv_float = float("nan")
+            if iv_val is not None:
+                try:
+                    iv_float = float(iv_val)
+                except Exception:
+                    iv_float = float("nan")
+
+            T = days_to_expiry / 365.0
+            records.append(
+                {
+                    "symbol": sym,
+                    "opra": opra_sym,
+                    "K": float(strike),
+                    "T": float(T),
+                    "S0": s0_val,
+                    "iv": iv_float,
+                    "type": opt_type,
+                }
+            )
+
+        if max_contracts_int is not None and len(records) >= max_contracts_int:
+            break
+
+        page_token = payload.get("next_page_token")
+        if not page_token:
+            break
 
     df = pd.DataFrame(records, columns=["symbol", "opra", "K", "T", "S0", "iv", "type"])
-    try:
-        CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
-        out_path = CACHE_CSV_DIR / f"options_alpaca_{sym}.csv"
-        df.to_csv(out_path, index=False)
-    except Exception:
-        pass
+    if cache_to_csv:
+        try:
+            CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
+            out_path = CACHE_CSV_DIR / f"options_alpaca_{sym}.csv"
+            df.to_csv(out_path, index=False)
+        except Exception:
+            pass
     return df

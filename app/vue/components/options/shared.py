@@ -49,14 +49,14 @@ def save_cached_option_history(ticker: str, df: pd.DataFrame) -> None:
 def save_cached_option_chain(
     ticker: str, calls_df: pd.DataFrame, puts_df: pd.DataFrame, S0_ref: float, r: float, q: float
 ) -> None:
-    """Persist the latest CBOE chains and meta information."""
+    """Persist the latest option chains and meta information."""
     oc.save_cached_option_chain(ticker, calls_df, puts_df, S0_ref, r, q)
 
 
 def load_cached_option_chain(
     ticker: str,
 ) -> tuple[pd.DataFrame | None, pd.DataFrame | None, float | None, float | None, float | None]:
-    """Load cached CBOE chain if it matches the requested ticker."""
+    """Load cached option chain if it matches the requested ticker."""
     return oc.load_cached_option_chain(ticker)
 
 
@@ -69,7 +69,7 @@ def fetch_option_history_to_cache(ticker: str) -> pd.DataFrame:
 
 
 def refresh_underlying_cache(ticker: str):
-    """Download CBOE chains and closing history for a ticker, then cache them."""
+    """Download option chains and closing history for a ticker, then cache them."""
     tkr = _norm_ticker(ticker)
     if not tkr:
         st.warning("Merci de saisir un ticker pour rafraichir le cache.")
@@ -93,13 +93,13 @@ def show_cache_status(ticker: str):
 
     if tkr and meta_tkr == tkr and chain_present:
         age_txt = f" (~{chain_age:.1f} h)" if chain_age is not None else ""
-        st.success(f"Chaines CBOE en cache pour {tkr}{age_txt}.")
+        st.success(f"Chaines options en cache pour {tkr}{age_txt}.")
     elif chain_present and not tkr:
-        st.info("Chaines CBOE en cache (ticker non renseigne).")
+        st.info("Chaines options en cache (ticker non renseigne).")
     elif hist_present:
         age_txt = f" (~{hist_age:.1f} h)" if hist_age is not None else ""
         st.warning(
-            f"Aucune chaine CBOE en cache pour {tkr or 'ticker ?'}. Historique clotures disponible{age_txt}."
+            f"Aucune chaine options en cache pour {tkr or 'ticker ?'}. Historique clotures disponible{age_txt}."
         )
     else:
         st.warning(
@@ -107,9 +107,9 @@ def show_cache_status(ticker: str):
         )
 
 
-def load_cboe_data(symbol: str) -> tuple[pd.DataFrame, pd.DataFrame, float, float, float]:
+def load_market_data(symbol: str) -> tuple[pd.DataFrame, pd.DataFrame, float, float, float]:
     """
-    Download CBOE call/put chains and return (calls_df, puts_df, S0_ref, r, q).
+    Download market call/put chains (Yahoo) and return (calls_df, puts_df, S0_ref, r, q).
     Caches are handled by the caller.
     """
-    return oc.load_cboe_data(symbol)
+    return oc.load_market_data(symbol)

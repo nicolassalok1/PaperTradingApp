@@ -1,38 +1,23 @@
 from __future__ import annotations
 
-import datetime as dt
 from pathlib import Path
 from typing import List
 
 import pandas as pd
 
-from app.model.market_data.market_data import fetch_options_details, fetch_spot_price
+from app.model.market_data.market_data import fetch_options_details_yahoo, fetch_spot_price
 from app.utils.paths import CACHE_CSV_DIR
 
 
-def _decode_opra_expiry(opra: str) -> dt.date | None:
+def _build_iv_surface_from_yahoo(ticker: str, max_maturity_years: float = 2.0) -> pd.DataFrame:
     """
-    Extract expiry date from OPRA code (…YYMMDDCTTTTTTTT).
+    Build IV surface from Yahoo option chain (calls + puts).
+    Returns a normalized DataFrame with columns: K, T, S0, iv, type.
     """
-    if not opra:
-        return None
-    code = str(opra)
-    if len(code) < 15:
-        return None
-    try:
-        expiry_str = code[-15:-9]
-        return dt.datetime.strptime(expiry_str, "%y%m%d").date()
-    except Exception:
-        return None
-
-
-def _build_iv_surface_from_cboe(ticker: str, max_maturity_years: float = 2.0) -> pd.DataFrame:
-    """
-    Build IV surface from CBOE call/put chains.
-    """
-    calls_df, puts_df, spot, _, _ = fetch_options_details(ticker)
+    calls_df, puts_df, spot, _, _ = fetch_options_details_yahoo(
+        ticker, max_maturity_years=max_maturity_years
+    )
     s0 = spot if pd.notna(spot) else fetch_spot_price(ticker)
-    today = dt.date.today()
     sym = (ticker or "").strip().upper()
 
     records: List[dict] = []
@@ -40,31 +25,39 @@ def _build_iv_surface_from_cboe(ticker: str, max_maturity_years: float = 2.0) ->
     def _append_rows(df: pd.DataFrame, opt_type: str) -> None:
         if df is None or df.empty:
             return
-        code_col = next(
-            (c for c in df.columns if str(c).lower() in {"opra", "symbol", "option_symbol", "code"}),
-            None,
-        )
-        expiry_col = next((c for c in df.columns if "exp" in str(c).lower()), None)
-        strike_col = next((c for c in df.columns if str(c).lower() == "strike"), None)
-        iv_col = next((c for c in df.columns if str(c).lower() == "iv"), None)
+
+        cols = {c.lower(): c for c in df.columns}
+        strike_col = cols.get("strike") or cols.get("k")
+        iv_col = cols.get("iv") or cols.get("iv_market") or cols.get("sigma")
+        t_col = cols.get("t") or cols.get("ttm") or cols.get("tau") or cols.get("maturity")
         if strike_col is None or iv_col is None:
             return
-        for _, row in df.iterrows():
-            opra_code = str(row[code_col]) if code_col else ""
-            expiry = _decode_opra_expiry(opra_code) if opra_code else None
-            if expiry is None and expiry_col:
-                try:
-                    expiry = pd.to_datetime(row[expiry_col]).date()
-                except Exception:
-                    expiry = None
-            if expiry is None:
-                continue
-            T = (expiry - today).days / 365.0
-            if T < 0 or T > max_maturity_years:
-                continue
+
+        df_clean = df.dropna(subset=[strike_col, iv_col]).copy()
+        df_clean[strike_col] = pd.to_numeric(df_clean[strike_col], errors="coerce")
+        df_clean[iv_col] = pd.to_numeric(df_clean[iv_col], errors="coerce")
+
+        if t_col and t_col in df_clean.columns:
+            df_clean[t_col] = pd.to_numeric(df_clean[t_col], errors="coerce")
+            df_clean = df_clean.dropna(subset=[t_col])
+            df_clean = df_clean[(df_clean[t_col] > 0) & (df_clean[t_col] <= max_maturity_years)]
+        elif "T" in df_clean.columns:
+            df_clean["T"] = pd.to_numeric(df_clean["T"], errors="coerce")
+            df_clean = df_clean.dropna(subset=["T"])
+            df_clean = df_clean[(df_clean["T"] > 0) & (df_clean["T"] <= max_maturity_years)]
+            t_col = "T"
+        else:
+            return
+
+        df_clean = df_clean.dropna(subset=[strike_col, iv_col, t_col])
+        if df_clean.empty:
+            return
+
+        for _, row in df_clean.iterrows():
             K = row[strike_col]
+            T = row[t_col]
             iv = row[iv_col]
-            if pd.isna(K) or pd.isna(iv):
+            if pd.isna(K) or pd.isna(T) or pd.isna(iv):
                 continue
             records.append(
                 {
@@ -80,7 +73,7 @@ def _build_iv_surface_from_cboe(ticker: str, max_maturity_years: float = 2.0) ->
     _append_rows(puts_df, "put")
 
     surface = pd.DataFrame(records, columns=["K", "T", "S0", "iv", "type"])
-    path = CACHE_CSV_DIR / f"iv_surface_cboe_{sym}.csv"
+    path = CACHE_CSV_DIR / f"iv_surface_yahoo_{sym}.csv"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         surface.to_csv(path, index=False)
@@ -90,8 +83,8 @@ def _build_iv_surface_from_cboe(ticker: str, max_maturity_years: float = 2.0) ->
 
 
 def fetch_iv_surface(ticker: str, max_maturity_years: float = 2.0) -> pd.DataFrame:
-    """Public entrypoint building an IV surface from CBOE chains."""
-    return _build_iv_surface_from_cboe(ticker, max_maturity_years=max_maturity_years)
+    """Public entrypoint building an IV surface from Yahoo option chain."""
+    return _build_iv_surface_from_yahoo(ticker, max_maturity_years=max_maturity_years)
 
 
 def interpolate_surface(df: pd.DataFrame):
@@ -111,4 +104,5 @@ def load_iv_from_csv(path: str | Path) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-__all__ = ["fetch_iv_surface", "_build_iv_surface_from_cboe", "interpolate_surface", "load_iv_from_csv"]
+__all__ = ["fetch_iv_surface", "_build_iv_surface_from_yahoo", "interpolate_surface", "load_iv_from_csv"]
+

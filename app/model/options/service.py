@@ -205,7 +205,7 @@ def price_european_from_market(
     max_maturity_years: float = 2.0,
 ) -> dict:
     """
-    European pricing based on market IV surface (CBOE / Alpaca via fetch_iv_surface).
+    European pricing based on market IV surface (Yahoo option chain via fetch_iv_surface).
     """
     from app.model.market_data.market_data import fetch_spot_price
     from app.model.yieldcurve.rates_utils import get_r
@@ -273,22 +273,6 @@ def price_european_from_market(
     }
 
 
-def price_european_from_cboe(
-    ticker: str,
-    K: float,
-    T: float,
-    option_type: str = "call",
-    max_maturity_years: float = 2.0,
-) -> dict:
-    """Backward-compatible alias to price_european_from_market (CBOE-driven)."""
-    return price_european_from_market(
-        ticker,
-        K,
-        T,
-        option_type=option_type,
-        max_maturity_years=max_maturity_years,
-    )
-
 __all__ = [
     "compute_price",
     "compute_greeks",
@@ -298,5 +282,4 @@ __all__ = [
     "price_option_mc",
     "price_option_mc_unified",
     "price_european_from_market",
-    "price_european_from_cboe",
 ]
