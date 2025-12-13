@@ -6,7 +6,17 @@ from app.controller import yieldcurve_controller as yc
 from app.vue.components.page_utils import render_page_header
 
 
-def render():
+TAB_LABEL = "🧮 Yield Curve"
+
+
+def _to_pct(series: pd.Series) -> pd.Series:
+    try:
+        return pd.to_numeric(series, errors="coerce").astype(float) * 100.0
+    except Exception:
+        return series
+
+
+def render_tab() -> None:
     currencies = yc.available_currencies()
     default_currency = "USD" if "USD" in currencies else (currencies[0] if currencies else "USD")
     currency_options = currencies or [default_currency]
@@ -14,7 +24,7 @@ def render():
 
     col_sel_ccy, col_sel_ref = st.columns([1, 1])
     with col_sel_ccy:
-        currency = st.selectbox("Currency", currency_options, index=default_index)
+        currency = st.selectbox("Currency", currency_options, index=default_index, key="yc_currency")
     t_ref_options = [0.25, 0.5, 1.0, 2.0, 5.0, 10.0]
     with col_sel_ref:
         risk_free_maturity = st.selectbox(
@@ -30,6 +40,9 @@ def render():
 
     nodes = snapshot.get("nodes") or []
     grid = snapshot.get("grid") or []
+    forwards = snapshot.get("forward_rates") or []
+    inst_curve = snapshot.get("inst_curve") or []
+    ns_params = snapshot.get("ns_params") or {}
     ns_curve = snapshot.get("ns_curve") or []
     risk_free_rate = snapshot.get("risk_free_rate")
     source_path = snapshot.get("source_path")
@@ -39,7 +52,7 @@ def render():
 
     render_page_header(
         "Yield Curve",
-        "Visualisation des taux zc et facteurs d'actualisation (lecture seule)",
+        "Courbe zc/df + taux forward (optionnel) • source: fichiers nodes / cache",
         icon="🧭",
         badge="Rates",
     )
@@ -51,6 +64,83 @@ def render():
     if source_kind == "flat_fallback":
         st.warning("Données indisponibles: courbe plate (DEFAULT_RF_RATE) utilisée en secours.")
     st.caption(meta)
+
+    with st.expander("Gestion de la courbe (import / édition)", expanded=False):
+        col_a, col_b, col_c = st.columns([1, 1, 2])
+        with col_a:
+            if st.button("Invalidate cache", use_container_width=True):
+                yc.invalidate_curve_cache(currency)
+                st.rerun()
+        with col_b:
+            if st.button("Refresh API (USD/EUR)", use_container_width=True):
+                ok = yc.refresh_curve_cache_from_api(currency)
+                if ok:
+                    st.success("Courbe rafraîchie depuis l'API.")
+                    st.rerun()
+                st.warning("Refresh API indisponible (active `YIELD_CURVE_ENABLE_API=1`) ou échec provider.")
+        with col_c:
+            uploaded = st.file_uploader(
+                "Importer un fichier nodes (CSV/JSON) — sera sauvegardé en `<CCY>_nodes.csv`",
+                type=["csv", "json"],
+                key="yc_nodes_upload",
+            )
+            if uploaded is not None:
+                raw = uploaded.getvalue()
+                parsed = yc.parse_nodes_upload(uploaded.name, raw)
+                df_parsed = pd.DataFrame(parsed)
+                if df_parsed.empty:
+                    st.error("Aucun nœud détecté dans ce fichier.")
+                else:
+                    st.dataframe(df_parsed, hide_index=True, use_container_width=True)
+                if st.button(
+                    f"Sauvegarder pour {currency}",
+                    disabled=df_parsed.empty,
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    res = yc.import_curve_nodes_upload(currency, uploaded.name, raw)
+                    if res.get("success"):
+                        st.success(res.get("message", "OK"))
+                        st.rerun()
+                    st.error(res.get("message", "Import échoué."))
+
+        st.markdown("##### Éditeur rapide (nœuds)")
+        df_nodes_edit = pd.DataFrame(nodes)
+        cols = [c for c in ["tenor", "t_years", "zero_rate"] if c in df_nodes_edit.columns]
+        if cols:
+            df_edit = st.data_editor(
+                df_nodes_edit[cols],
+                num_rows="dynamic",
+                use_container_width=True,
+                key=f"yc_nodes_editor_{currency}",
+            )
+            if st.button("Sauvegarder l'éditeur", use_container_width=True):
+                result = yc.save_curve_nodes(currency, df_edit.to_dict(orient="records"))
+                if result.get("success"):
+                    st.success(f"Sauvegardé: {result.get('path')}")
+                    st.rerun()
+                st.error(result.get("message", "Sauvegarde échouée."))
+        else:
+            st.info("Aucun nœud existant; importe un fichier ou ajoute des lignes dans l'éditeur.")
+
+        st.markdown("##### Export")
+        if not df_nodes_edit.empty:
+            st.download_button(
+                "Télécharger les nœuds (CSV)",
+                data=df_nodes_edit.to_csv(index=False).encode("utf-8"),
+                file_name=f"{currency}_nodes_export.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        df_grid_export = pd.DataFrame(grid)
+        if not df_grid_export.empty:
+            st.download_button(
+                "Télécharger la grille (CSV)",
+                data=df_grid_export.to_csv(index=False).encode("utf-8"),
+                file_name=f"{currency}_grid_export.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
 
     col_rf, col_ref = st.columns([2, 1])
     with col_rf:
@@ -76,6 +166,12 @@ def render():
         )
     else:
         st.info("Aucun nœud trouvé, courbe plate par défaut (DEFAULT_RF_RATE).")
+
+    with st.expander("Nelson–Siegel (paramètres)", expanded=False):
+        if ns_params:
+            st.json(ns_params)
+        else:
+            st.info("Pas assez de points pour calibrer Nelson–Siegel (>= 3 nœuds requis).")
 
     st.markdown("#### Zero rates (observed vs Nelson–Siegel)")
     df_grid = pd.DataFrame(grid)
@@ -136,3 +232,43 @@ def render():
         st.area_chart(df_df[["discount_factor"]], height=220)
     else:
         st.info("Pas de discount factors calculables sans courbe.")
+
+    st.markdown("#### Forwards & instantaneous")
+    df_fwds = pd.DataFrame(forwards)
+    if not df_fwds.empty and "forward_rate" in df_fwds.columns:
+        df_fwds = df_fwds.copy()
+        df_fwds["forward_pct"] = _to_pct(df_fwds["forward_rate"])
+        st.dataframe(
+            df_fwds.rename(
+                columns={
+                    "start_years": "Start (y)",
+                    "end_years": "End (y)",
+                    "forward_pct": "Forward rate (%)",
+                }
+            )[["Start (y)", "End (y)", "Forward rate (%)"]],
+            hide_index=True,
+            use_container_width=True,
+        )
+    else:
+        st.info("Forward rates indisponibles.")
+
+    df_inst = pd.DataFrame(inst_curve)
+    if not df_inst.empty and "inst_forward_rate" in df_inst.columns:
+        df_inst = df_inst.copy()
+        df_inst["fwd_pct"] = _to_pct(df_inst["inst_forward_rate"])
+        st.altair_chart(
+            alt.Chart(df_inst)
+            .mark_line(color="#ff66cc")
+            .encode(
+                x=alt.X("t_years:Q", title="Maturité (années)"),
+                y=alt.Y("fwd_pct:Q", title="Instantaneous forward (%)"),
+            )
+            .properties(height=220),
+            use_container_width=True,
+        )
+    else:
+        st.info("Instantaneous forward curve indisponible.")
+
+
+def render() -> None:
+    render_tab()

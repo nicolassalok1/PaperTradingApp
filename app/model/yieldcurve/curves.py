@@ -34,19 +34,26 @@ class NodeYieldCurve(YieldCurve):
                 t_f = float(t)
             except Exception:
                 continue
+            if not math.isfinite(t_f) or t_f <= 0:
+                continue
             zc_f = None
             df_f = None
             if zc is not None:
                 try:
                     zc_f = float(zc)
-                    if zc_f > 1.0:
-                        zc_f = zc_f / 100.0
                 except Exception:
                     zc_f = None
+                if zc_f is not None:
+                    if not math.isfinite(zc_f):
+                        zc_f = None
+                    elif zc_f > 1.0:
+                        zc_f = zc_f / 100.0
             if df is not None:
                 try:
                     df_f = float(df)
                 except Exception:
+                    df_f = None
+                if df_f is not None and (not math.isfinite(df_f) or df_f <= 0):
                     df_f = None
             if df_f is None and zc_f is not None:
                 df_f = math.exp(-zc_f * t_f)

@@ -6,6 +6,8 @@ Handles curve loading, caching, and forward rate computations.
 from __future__ import annotations
 
 import datetime
+import io
+import json
 import math
 import os
 from pathlib import Path
@@ -27,7 +29,7 @@ from app.model.yieldcurve.loader import (
     download_yield_curve_to_cache,
     load_yield_curve_csv,
 )
-from app.model.yieldcurve.parsing import load_nodes_from_file
+from app.model.yieldcurve.parsing import load_nodes_from_file, normalize_node_row
 from app.utils.io import load_json_file, save_json_file
 from app.utils.math_utils import floor_4
 from app.utils.paths import JSON_DIR
@@ -363,6 +365,147 @@ def _pick_currency(currency: str | None = None) -> str:
 _CURVE_CACHE: Dict[str, tuple[YieldCurve, Path | None, list[dict], str, datetime.datetime | None]] = {}
 
 
+def invalidate_curve_cache(currency: str | None = None) -> None:
+    """
+    Invalidate the in-memory yield curve cache.
+    If currency is None, clears all cached curves.
+    """
+    if currency:
+        _CURVE_CACHE.pop(str(currency).upper(), None)
+        return
+    _CURVE_CACHE.clear()
+
+
+def parse_nodes_upload(filename: str, content: bytes) -> list[dict]:
+    """
+    Parse an uploaded nodes file (CSV/JSON) into normalized node dicts.
+    Expected output keys: tenor, t_years, zero_rate, discount_factor.
+    """
+    if not filename or not content:
+        return []
+    suffix = Path(str(filename)).suffix.lower()
+
+    if suffix == ".json":
+        try:
+            payload = json.loads(content.decode("utf-8", errors="ignore"))
+        except Exception:
+            return []
+        if isinstance(payload, dict) and "nodes" in payload:
+            payload = payload.get("nodes")
+        if not isinstance(payload, list):
+            return []
+        nodes: list[dict] = []
+        for row in payload:
+            if isinstance(row, dict):
+                nodes.append(normalize_node_row(row))
+        return nodes
+
+    # Default to CSV parsing for any other extension.
+    try:
+        df = pd.read_csv(io.BytesIO(content))
+    except Exception:
+        return []
+
+    if df is None or df.empty:
+        return []
+
+    nodes = []
+    for _, row in df.iterrows():
+        try:
+            nodes.append(normalize_node_row(row.to_dict()))
+        except Exception:
+            continue
+    return nodes
+
+
+def save_curve_nodes(currency: str, nodes: list[dict]) -> dict[str, Any]:
+    """
+    Save sanitized curve nodes for a given currency into data/yield_curves/<CCY>_nodes.csv.
+    Returns a small status dict for the UI/controller.
+    """
+    ccy = (currency or "").strip().upper()
+    if not ccy:
+        return {"success": False, "message": "Currency is required."}
+
+    normalized = []
+    for row in nodes or []:
+        if not isinstance(row, dict):
+            continue
+        normalized.append(normalize_node_row(row))
+
+    if not normalized:
+        return {"success": False, "message": "No valid nodes to save."}
+
+    try:
+        curve = NodeYieldCurve(normalized, default_rate=DEFAULT_RF)
+    except Exception as exc:
+        return {"success": False, "message": f"Failed to build curve from nodes: {exc}"}
+
+    out_nodes: list[dict] = []
+    for n in getattr(curve, "nodes", []) or []:
+        try:
+            out_nodes.append(
+                {
+                    "tenor": getattr(n, "tenor", None),
+                    "t_years": float(getattr(n, "t_years", 0.0)),
+                    "zero_rate": float(getattr(n, "zero_rate", 0.0)),
+                    "discount_factor": float(getattr(n, "discount_factor", 0.0)),
+                }
+            )
+        except Exception:
+            continue
+
+    if not out_nodes:
+        return {"success": False, "message": "All nodes were invalid after sanitization."}
+
+    path = _cache_path_for_currency(ccy)
+    try:
+        pd.DataFrame(out_nodes).to_csv(path, index=False)
+    except Exception as exc:
+        return {"success": False, "message": f"Failed to write nodes file: {exc}"}
+
+    invalidate_curve_cache(ccy)
+    return {
+        "success": True,
+        "currency": ccy,
+        "path": str(path),
+        "count": len(out_nodes),
+    }
+
+
+def import_curve_nodes_upload(currency: str, filename: str, content: bytes) -> dict[str, Any]:
+    """
+    Import a nodes file (CSV/JSON) from an upload and persist it as <CCY>_nodes.csv.
+    """
+    nodes = parse_nodes_upload(filename=filename, content=content)
+    if not nodes:
+        return {"success": False, "message": "No nodes could be parsed from the uploaded file."}
+    result = save_curve_nodes(currency=currency, nodes=nodes)
+    if result.get("success"):
+        result["message"] = f"Saved {result.get('count', 0)} node(s)."
+    return result
+
+
+def _instantaneous_forward(curve: YieldCurve, t_years: float, h: float = 1e-4) -> float | None:
+    """
+    Instantaneous forward rate f(t) = -d/dt ln DF(t), approximated by central difference.
+    """
+    if t_years < 0:
+        return None
+    h = max(float(h), 1e-6)
+    t = float(t_years)
+    t_plus = t + h
+    t_minus = max(t - h, 0.0)
+    try:
+        df_plus = float(curve.discount_factor(t_plus))
+        df_minus = float(curve.discount_factor(t_minus))
+        if df_plus <= 0 or df_minus <= 0:
+            return None
+        return -(math.log(df_plus) - math.log(df_minus)) / (2 * h)
+    except Exception:
+        return None
+
+
 def _compute_nelson_siegel_from_curve(
     curve: YieldCurve, maturities_grid: List[float]
 ) -> tuple[Dict[str, float] | None, List[dict]]:
@@ -506,6 +649,24 @@ def get_curve_snapshot(
     ]
     risk_free_rate = curve.zero_rate(risk_free_maturity)
 
+    forward_horizons = [(0.0, 0.25), (0.25, 0.5), (0.5, 1.0), (1.0, 2.0), (2.0, 5.0), (5.0, 10.0)]
+    forward_rates: list[dict] = []
+    for t1, t2 in forward_horizons:
+        try:
+            fr = curve.forward_rate(float(t1), float(t2))
+        except Exception:
+            fr = None
+        if fr is not None and math.isfinite(fr):
+            forward_rates.append(
+                {"start_years": float(t1), "end_years": float(t2), "forward_rate": float(fr)}
+            )
+
+    inst_curve: list[dict] = []
+    for t in maturities_grid:
+        fwd = _instantaneous_forward(curve, float(t))
+        if fwd is not None and math.isfinite(fwd):
+            inst_curve.append({"t_years": float(t), "inst_forward_rate": float(fwd)})
+
     # Nelson–Siegel smoothing (optional, fully contained in the model layer).
     ns_params, ns_curve = _compute_nelson_siegel_from_curve(curve, maturities_grid)
     nodes_table = []
@@ -527,6 +688,8 @@ def get_curve_snapshot(
         "source_path": source_path,
         "source_kind": source_kind,
         "last_updated": last_updated.isoformat() if last_updated else None,
+        "forward_rates": forward_rates,
+        "inst_curve": inst_curve,
         "ns_params": ns_params,
         "ns_curve": ns_curve,
     }
@@ -675,6 +838,10 @@ __all__ = [
     "get_spot",
     "get_rate",
     "get_active_curve",
+    "invalidate_curve_cache",
+    "parse_nodes_upload",
+    "save_curve_nodes",
+    "import_curve_nodes_upload",
     "refresh_curve_cache_from_api",
     "get_curve_snapshot",
     "get_risk_free_rate",

@@ -28,7 +28,7 @@ def tenor_to_years(tenor: str | None) -> float | None:
         return None
 
 
-def _normalize_row(row: Dict) -> Dict:
+def normalize_node_row(row: Dict) -> Dict:
     tenor = row.get("tenor") or row.get("Tenor")
     t_years = row.get("t_years") or row.get("years") or row.get("T")
     zero_rate = row.get("zero_rate_cc") or row.get("zero_rate") or row.get("zero")
@@ -43,6 +43,10 @@ def _normalize_row(row: Dict) -> Dict:
     }
 
 
+# Backward-compatible alias (private name used internally before).
+_normalize_row = normalize_node_row
+
+
 def load_nodes_from_file(path: Path) -> List[Dict]:
     if not path or not path.exists():
         return []
@@ -55,7 +59,7 @@ def load_nodes_from_file(path: Path) -> List[Dict]:
             if isinstance(data, list):
                 for row in data:
                     if isinstance(row, dict):
-                        nodes.append(_normalize_row(row))
+                        nodes.append(normalize_node_row(row))
         except Exception:
             return []
     else:
@@ -64,5 +68,8 @@ def load_nodes_from_file(path: Path) -> List[Dict]:
         except Exception:
             return []
         for _, row in df.iterrows():
-            nodes.append(_normalize_row(row.to_dict()))
+            nodes.append(normalize_node_row(row.to_dict()))
     return nodes
+
+
+__all__ = ["tenor_to_years", "normalize_node_row", "load_nodes_from_file"]
