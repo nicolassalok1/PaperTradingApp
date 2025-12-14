@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.model.hedger_v2.alpaca_client import AlpacaHedgerClient
-from app.model.hedger_v2.dqn_hedger import suggest_hedge_action
+from app.model.hedger_v2.dqn_hedger import DQNConfig, get_dqn_model_info, load_or_train_dqn_model, suggest_hedge_action
 
 _CLIENT: AlpacaHedgerClient | None = None
 
@@ -88,6 +88,34 @@ def execute_dqn_hedge_for_option(option_symbol: str) -> Dict[str, Any]:
     return execute_dqn_hedge(underlying)
 
 
+def get_dqn_model_status() -> Dict[str, Any]:
+    return get_dqn_model_info()
+
+
+def train_dqn_model(
+    *,
+    train_steps: int | None = None,
+    seed: int | None = None,
+    force_retrain: bool = False,
+) -> Dict[str, Any]:
+    cfg = DQNConfig()
+    if train_steps is not None:
+        try:
+            ts = int(train_steps)
+        except Exception:
+            ts = cfg.train_steps
+        ts = max(250, min(ts, 250_000))
+        cfg = DQNConfig(**{**cfg.__dict__, "train_steps": ts})
+    if seed is not None:
+        try:
+            s = int(seed)
+        except Exception:
+            s = cfg.seed
+        cfg = DQNConfig(**{**cfg.__dict__, "seed": s})
+
+    return load_or_train_dqn_model(config=cfg, force_retrain=bool(force_retrain))
+
+
 __all__ = [
     "get_client",
     "get_account_snapshot",
@@ -98,4 +126,6 @@ __all__ = [
     "execute_dqn_hedge",
     "get_dqn_hedge_suggestion_for_option",
     "execute_dqn_hedge_for_option",
+    "get_dqn_model_status",
+    "train_dqn_model",
 ]

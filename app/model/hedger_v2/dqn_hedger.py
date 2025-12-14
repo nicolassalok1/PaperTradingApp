@@ -1,59 +1,578 @@
 """
-Simple DQN-style hedge suggester (placeholder, untrained).
+Deep Q-Network (DQN) hedger (numpy-only).
+
+Goal: suggest a *discrete* hedge adjustment (hold / buy / sell / flatten) for an
+underlying stock, given a simplified state (net option delta proxy + equity hedge).
+
+The model is trained offline on a synthetic environment and persisted under:
+`cache/HedgerDQN/`.
 """
 
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+import json
+from pathlib import Path
+from typing import Any, Dict, Iterable, Tuple
+
 import numpy as np
 
+from app.utils.paths import CACHE_CSV_DIR
+
 from .alpaca_client import AlpacaHedgerClient
-from .env import HedgingEnv
+from .env import HedgingEnv, SyntheticHedgingEnv
+
+
+DQN_HEDGER_VERSION = "dqn-v1-numpy"
+
+
+@dataclass(frozen=True)
+class DQNConfig:
+    # State encoding
+    state_keys: Tuple[str, ...] = ("net_delta_proxy", "equity_position")
+    delta_scale: float = 10.0
+    position_scale: float = 10.0
+
+    # Network
+    hidden_sizes: Tuple[int, ...] = (64, 64)
+
+    # DQN hyperparams
+    gamma: float = 0.98
+    learning_rate: float = 1e-3
+    batch_size: int = 64
+    buffer_capacity: int = 25_000
+    warmup_steps: int = 800
+    target_update_interval: int = 250
+
+    # Exploration schedule (training)
+    epsilon_start: float = 1.0
+    epsilon_end: float = 0.05
+    epsilon_decay_steps: int = 4_000
+
+    # Training loop
+    train_steps: int = 7_500
+    eval_episodes: int = 25
+
+    # Synthetic env
+    env_max_steps: int = 32
+    env_max_abs_delta: float = 10.0
+    env_position_scale: float = 1.0
+    env_delta_drift_std: float = 0.60
+    env_transaction_cost: float = 0.02
+
+    # Repro
+    seed: int = 42
+
+
+def _utc_iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _model_dir() -> Path:
+    path = CACHE_CSV_DIR / "HedgerDQN"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _weights_path() -> Path:
+    return _model_dir() / f"{DQN_HEDGER_VERSION}.npz"
+
+
+def _meta_path() -> Path:
+    return _model_dir() / f"{DQN_HEDGER_VERSION}.json"
+
+
+class ReplayBuffer:
+    def __init__(self, capacity: int, state_dim: int, seed: int | None = None) -> None:
+        self.capacity = int(capacity)
+        self.state_dim = int(state_dim)
+        self._rng = np.random.default_rng(seed)
+
+        self._states = np.zeros((self.capacity, self.state_dim), dtype=np.float32)
+        self._next_states = np.zeros((self.capacity, self.state_dim), dtype=np.float32)
+        self._actions = np.zeros((self.capacity,), dtype=np.int64)
+        self._rewards = np.zeros((self.capacity,), dtype=np.float32)
+        self._dones = np.zeros((self.capacity,), dtype=np.float32)
+
+        self._idx = 0
+        self._size = 0
+
+    @property
+    def size(self) -> int:
+        return int(self._size)
+
+    def add(
+        self,
+        state: np.ndarray,
+        action: int,
+        reward: float,
+        next_state: np.ndarray,
+        done: bool,
+    ) -> None:
+        i = self._idx
+        self._states[i] = state
+        self._next_states[i] = next_state
+        self._actions[i] = int(action)
+        self._rewards[i] = float(reward)
+        self._dones[i] = 1.0 if bool(done) else 0.0
+
+        self._idx = (self._idx + 1) % self.capacity
+        self._size = min(self._size + 1, self.capacity)
+
+    def sample(self, batch_size: int) -> Dict[str, np.ndarray]:
+        if self._size <= 0:
+            raise ValueError("Cannot sample from empty buffer.")
+        n = min(int(batch_size), self._size)
+        idx = self._rng.integers(0, self._size, size=n)
+        return {
+            "states": self._states[idx],
+            "actions": self._actions[idx],
+            "rewards": self._rewards[idx],
+            "next_states": self._next_states[idx],
+            "dones": self._dones[idx],
+        }
+
+
+class Adam:
+    def __init__(
+        self,
+        params: Iterable[np.ndarray],
+        lr: float,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
+        eps: float = 1e-8,
+    ) -> None:
+        self.lr = float(lr)
+        self.beta1 = float(beta1)
+        self.beta2 = float(beta2)
+        self.eps = float(eps)
+
+        self._t = 0
+        self._m = [np.zeros_like(p, dtype=np.float32) for p in params]
+        self._v = [np.zeros_like(p, dtype=np.float32) for p in params]
+
+    def step(self, params: list[np.ndarray], grads: list[np.ndarray]) -> None:
+        self._t += 1
+        t = self._t
+        for i, (p, g) in enumerate(zip(params, grads)):
+            g = g.astype(np.float32, copy=False)
+            self._m[i] = self.beta1 * self._m[i] + (1.0 - self.beta1) * g
+            self._v[i] = self.beta2 * self._v[i] + (1.0 - self.beta2) * (g * g)
+            m_hat = self._m[i] / (1.0 - self.beta1**t)
+            v_hat = self._v[i] / (1.0 - self.beta2**t)
+            p -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+
+
+class NumpyMLP:
+    def __init__(self, layer_sizes: Tuple[int, ...], seed: int | None = None) -> None:
+        if len(layer_sizes) < 2:
+            raise ValueError("layer_sizes must include input and output sizes.")
+        self.layer_sizes = tuple(int(s) for s in layer_sizes)
+        rng = np.random.default_rng(seed)
+
+        self.weights: list[np.ndarray] = []
+        self.biases: list[np.ndarray] = []
+
+        for in_dim, out_dim in zip(self.layer_sizes[:-1], self.layer_sizes[1:]):
+            scale = np.sqrt(2.0 / max(in_dim, 1))
+            w = (rng.standard_normal((in_dim, out_dim)) * scale).astype(np.float32)
+            b = np.zeros((out_dim,), dtype=np.float32)
+            self.weights.append(w)
+            self.biases.append(b)
+
+    def copy(self) -> "NumpyMLP":
+        clone = NumpyMLP(self.layer_sizes, seed=0)
+        clone.weights = [w.copy() for w in self.weights]
+        clone.biases = [b.copy() for b in self.biases]
+        return clone
+
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        out, _ = self.forward(x, retain_cache=False)
+        return out
+
+    def forward(self, x: np.ndarray, retain_cache: bool) -> Tuple[np.ndarray, Dict[str, Any]]:
+        x2 = np.asarray(x, dtype=np.float32)
+        if x2.ndim == 1:
+            x2 = x2[None, :]
+
+        activations: list[np.ndarray] = [x2]
+        preacts: list[np.ndarray] = []
+
+        h = x2
+        last = len(self.weights) - 1
+        for i, (w, b) in enumerate(zip(self.weights, self.biases)):
+            z = h @ w + b
+            preacts.append(z)
+            if i != last:
+                h = np.maximum(z, 0.0)
+            else:
+                h = z
+            activations.append(h)
+
+        cache = {"activations": activations, "preacts": preacts} if retain_cache else {}
+        return h, cache
+
+    def backward(self, dout: np.ndarray, cache: Dict[str, Any]) -> Tuple[list[np.ndarray], list[np.ndarray]]:
+        activations: list[np.ndarray] = cache["activations"]
+        preacts: list[np.ndarray] = cache["preacts"]
+
+        dW: list[np.ndarray] = []
+        db: list[np.ndarray] = []
+
+        dh = dout.astype(np.float32, copy=False)
+        for i in reversed(range(len(self.weights))):
+            a_prev = activations[i]
+            z = preacts[i]
+
+            if i != len(self.weights) - 1:
+                dh = dh * (z > 0.0)
+
+            grad_w = a_prev.T @ dh
+            grad_b = dh.sum(axis=0)
+            dW.insert(0, grad_w)
+            db.insert(0, grad_b)
+
+            dh = dh @ self.weights[i].T
+
+        return dW, db
+
+    def params(self) -> list[np.ndarray]:
+        # weights + biases interleaved
+        out: list[np.ndarray] = []
+        for w, b in zip(self.weights, self.biases):
+            out.append(w)
+            out.append(b)
+        return out
+
+    def set_params(self, params: list[np.ndarray]) -> None:
+        if len(params) != 2 * len(self.weights):
+            raise ValueError("Invalid params length for this network.")
+        for i in range(len(self.weights)):
+            self.weights[i][...] = params[2 * i]
+            self.biases[i][...] = params[2 * i + 1]
 
 
 class DQNAgent:
-    def __init__(self, state_dim: int, n_actions: int, seed: int | None = None) -> None:
-        self.state_dim = state_dim
-        self.n_actions = n_actions
-        self.rng = np.random.default_rng(seed)
-        # simple linear approximator weights
-        self.weights = self.rng.normal(0, 0.1, size=(state_dim, n_actions))
+    """
+    Minimal DQN implementation (experience replay + target network).
 
-    def select_action(self, state: dict, epsilon: float = 0.1) -> int:
-        state_vec = np.array(list(state.values()), dtype=float)
-        if state_vec.shape[0] != self.state_dim:
-            state_vec = np.resize(state_vec, self.state_dim)
-        if self.rng.random() < epsilon:
-            return int(self.rng.integers(0, self.n_actions))
-        q_values = state_vec @ self.weights
-        return int(np.argmax(q_values))
+    Notes:
+    - Discrete action space fixed to 4 actions: hold / buy / sell / flatten.
+    - Numpy only, designed to run quickly inside Streamlit without heavy deps.
+    """
 
-    def load_dummy_weights_or_init(self) -> None:
-        # Placeholder: weights already initialized randomly.
-        return
+    def __init__(self, config: DQNConfig, n_actions: int = 4) -> None:
+        self.config = config
+        self.n_actions = int(n_actions)
+        self.state_dim = len(self.config.state_keys)
+        self._rng = np.random.default_rng(self.config.seed)
+
+        layer_sizes = (self.state_dim, *self.config.hidden_sizes, self.n_actions)
+        self.q_net = NumpyMLP(layer_sizes, seed=self.config.seed)
+        self.target_net = self.q_net.copy()
+        self.optimizer = Adam(self.q_net.params(), lr=self.config.learning_rate)
+
+        self._train_updates = 0
+
+    def encode_state(self, state: Dict[str, float] | np.ndarray) -> np.ndarray:
+        if isinstance(state, dict):
+            vals = np.array([float(state.get(k, 0.0) or 0.0) for k in self.config.state_keys], dtype=np.float32)
+        else:
+            vals = np.asarray(state, dtype=np.float32).reshape(-1)
+            if vals.shape[0] != self.state_dim:
+                raise ValueError(f"State dim mismatch: got {vals.shape[0]} expected {self.state_dim}.")
+
+        # Smooth bounded normalization (robust to live values > training range)
+        if self.state_dim >= 1:
+            vals[0] = np.tanh(vals[0] / max(self.config.delta_scale, 1e-6))
+        if self.state_dim >= 2:
+            vals[1] = np.tanh(vals[1] / max(self.config.position_scale, 1e-6))
+        return vals.astype(np.float32, copy=False)
+
+    def q_values(self, state: Dict[str, float] | np.ndarray) -> np.ndarray:
+        s = self.encode_state(state)
+        q = self.q_net.predict(s)
+        return q.reshape(-1).astype(np.float32, copy=False)
+
+    def select_action(self, state: Dict[str, float] | np.ndarray, epsilon: float) -> int:
+        if self._rng.random() < float(epsilon):
+            return int(self._rng.integers(0, self.n_actions))
+        q = self.q_values(state)
+        return int(np.argmax(q))
+
+    def update_target_hard(self) -> None:
+        self.target_net.set_params([p.copy() for p in self.q_net.params()])
+
+    def train_on_batch(self, batch: Dict[str, np.ndarray]) -> float:
+        states = np.asarray(batch["states"], dtype=np.float32)
+        actions = np.asarray(batch["actions"], dtype=np.int64)
+        rewards = np.asarray(batch["rewards"], dtype=np.float32)
+        next_states = np.asarray(batch["next_states"], dtype=np.float32)
+        dones = np.asarray(batch["dones"], dtype=np.float32)
+
+        # Q(s, a)
+        q_pred_all, cache = self.q_net.forward(states, retain_cache=True)
+        q_pred = q_pred_all[np.arange(actions.shape[0]), actions]
+
+        # target: r + gamma * max_a' Q_target(s', a')
+        q_next = self.target_net.predict(next_states)
+        max_q_next = np.max(q_next, axis=1)
+        q_target = rewards + self.config.gamma * (1.0 - dones) * max_q_next
+
+        td = (q_pred - q_target).astype(np.float32)
+        loss = float(np.mean(td * td))
+
+        # dLoss/dQ(s,a): 2*(q_pred-q_target)/N
+        dQ = np.zeros_like(q_pred_all, dtype=np.float32)
+        dQ[np.arange(actions.shape[0]), actions] = (2.0 / actions.shape[0]) * td
+
+        dW, db = self.q_net.backward(dQ, cache)
+
+        # Adam step on weights + biases (interleaved)
+        params = self.q_net.params()
+        grads: list[np.ndarray] = []
+        for gw, gb in zip(dW, db):
+            grads.append(gw)
+            grads.append(gb)
+        self.optimizer.step(params, grads)
+
+        self._train_updates += 1
+        return loss
+
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        arrays: Dict[str, np.ndarray] = {}
+        for i, (w, b) in enumerate(zip(self.q_net.weights, self.q_net.biases)):
+            arrays[f"W{i}"] = w
+            arrays[f"b{i}"] = b
+        np.savez_compressed(path, **arrays)
+
+    def load(self, path: Path) -> None:
+        data = np.load(path)
+        params: list[np.ndarray] = []
+        for i in range(len(self.q_net.weights)):
+            params.append(np.asarray(data[f"W{i}"], dtype=np.float32))
+            params.append(np.asarray(data[f"b{i}"], dtype=np.float32))
+        self.q_net.set_params(params)
+        self.update_target_hard()
+
+
+def _epsilon_at_step(cfg: DQNConfig, step: int) -> float:
+    if step <= 0:
+        return float(cfg.epsilon_start)
+    if cfg.epsilon_decay_steps <= 0:
+        return float(cfg.epsilon_end)
+    frac = min(max(step / float(cfg.epsilon_decay_steps), 0.0), 1.0)
+    return float(cfg.epsilon_start + frac * (cfg.epsilon_end - cfg.epsilon_start))
+
+
+def _eval_agent(agent: DQNAgent, env: SyntheticHedgingEnv, episodes: int) -> Dict[str, float]:
+    rewards: list[float] = []
+    abs_residual: list[float] = []
+    for _ in range(int(episodes)):
+        state = env.reset()
+        done = False
+        ep_r = 0.0
+        while not done:
+            action = agent.select_action(state, epsilon=0.0)
+            state, reward, done, info = env.step(action)
+            ep_r += float(reward)
+            abs_residual.append(abs(float(info.get("total_delta", 0.0))))
+        rewards.append(ep_r)
+    return {
+        "eval_avg_reward": float(np.mean(rewards)) if rewards else 0.0,
+        "eval_avg_abs_total_delta": float(np.mean(abs_residual)) if abs_residual else 0.0,
+    }
+
+
+def get_dqn_model_info() -> Dict[str, Any]:
+    weights_path = _weights_path()
+    meta_path = _meta_path()
+    info: Dict[str, Any] = {
+        "version": DQN_HEDGER_VERSION,
+        "weights_path": str(weights_path),
+        "meta_path": str(meta_path),
+        "weights_exists": weights_path.exists(),
+        "meta_exists": meta_path.exists(),
+    }
+    if meta_path.exists():
+        try:
+            info["meta"] = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            info["meta"] = {}
+    return info
+
+
+_CACHED_AGENT: DQNAgent | None = None
+_CACHED_META: Dict[str, Any] | None = None
+
+
+def load_or_train_dqn_model(
+    *,
+    config: DQNConfig | None = None,
+    force_retrain: bool = False,
+) -> Dict[str, Any]:
+    """
+    Loads the persisted DQN model if present; otherwise trains a default model and saves it.
+
+    Returns the metadata dict (also cached in-memory).
+    """
+
+    global _CACHED_AGENT, _CACHED_META
+    cfg = config or DQNConfig()
+
+    weights_path = _weights_path()
+    meta_path = _meta_path()
+
+    if not force_retrain and _CACHED_AGENT is not None and _CACHED_META is not None:
+        return dict(_CACHED_META)
+
+    agent = DQNAgent(cfg, n_actions=4)
+
+    if not force_retrain and weights_path.exists():
+        try:
+            agent.load(weights_path)
+            meta: Dict[str, Any] = {}
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                except Exception:
+                    meta = {}
+            meta = {
+                "version": DQN_HEDGER_VERSION,
+                "loaded_utc": _utc_iso_now(),
+                "config": asdict(cfg),
+                **(meta or {}),
+            }
+            _CACHED_AGENT = agent
+            _CACHED_META = meta
+            return dict(meta)
+        except Exception:
+            # fallthrough to retrain if corrupted/incompatible
+            pass
+
+    # Train on synthetic env
+    env = SyntheticHedgingEnv(
+        max_steps=cfg.env_max_steps,
+        max_abs_delta=cfg.env_max_abs_delta,
+        position_scale=cfg.env_position_scale,
+        delta_drift_std=cfg.env_delta_drift_std,
+        transaction_cost=cfg.env_transaction_cost,
+        seed=cfg.seed,
+    )
+
+    buffer = ReplayBuffer(cfg.buffer_capacity, state_dim=agent.state_dim, seed=cfg.seed)
+    state = env.reset(seed=cfg.seed)
+    done = False
+
+    losses: list[float] = []
+    rolling_abs_residual: list[float] = []
+    for step in range(int(cfg.train_steps)):
+        if done:
+            state = env.reset()
+            done = False
+
+        eps = _epsilon_at_step(cfg, step)
+        action = agent.select_action(state, epsilon=eps)
+        next_state, reward, done, info = env.step(action)
+
+        s_vec = agent.encode_state(state)
+        ns_vec = agent.encode_state(next_state)
+        buffer.add(s_vec, action, reward, ns_vec, done)
+
+        state = next_state
+        rolling_abs_residual.append(abs(float(info.get("total_delta", 0.0))))
+
+        if buffer.size >= int(cfg.warmup_steps):
+            batch = buffer.sample(cfg.batch_size)
+            loss = agent.train_on_batch(batch)
+            losses.append(loss)
+
+        if (step + 1) % int(cfg.target_update_interval) == 0:
+            agent.update_target_hard()
+
+    eval_metrics = _eval_agent(agent, env, episodes=cfg.eval_episodes)
+    meta = {
+        "version": DQN_HEDGER_VERSION,
+        "trained_utc": _utc_iso_now(),
+        "config": asdict(cfg),
+        "train_steps": int(cfg.train_steps),
+        "train_updates": int(agent._train_updates),
+        "train_avg_loss": float(np.mean(losses)) if losses else None,
+        "train_avg_abs_total_delta": float(np.mean(rolling_abs_residual)) if rolling_abs_residual else None,
+        **eval_metrics,
+    }
+
+    agent.save(weights_path)
+    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+    _CACHED_AGENT = agent
+    _CACHED_META = meta
+    return dict(meta)
+
+
+def _get_cached_agent(config: DQNConfig | None = None) -> Tuple[DQNAgent, Dict[str, Any]]:
+    global _CACHED_AGENT, _CACHED_META
+    if _CACHED_AGENT is None or _CACHED_META is None:
+        meta = load_or_train_dqn_model(config=config, force_retrain=False)
+        if _CACHED_AGENT is None:
+            raise RuntimeError("DQN model training/loading failed.")
+        _CACHED_META = meta
+    return _CACHED_AGENT, dict(_CACHED_META or {})
 
 
 def suggest_hedge_action(client: AlpacaHedgerClient, underlying_symbol: str) -> dict:
-    env = HedgingEnv(client=client, underlying_symbol=underlying_symbol, position_scale=1.0)
-    state = env.reset()
-    agent = DQNAgent(state_dim=len(state), n_actions=4)
-    agent.load_dummy_weights_or_init()
-    action = agent.select_action(state, epsilon=0.05)
+    """
+    Returns a hedge suggestion for the *underlying* (equity leg).
 
-    action_map = {
-        0: {"side": "none", "delta_qty": 0.0},
-        1: {"side": "buy", "delta_qty": +1.0},
-        2: {"side": "sell", "delta_qty": -1.0},
-        3: {"side": "flatten", "delta_qty": -state.get("equity_position", 0.0)},
-    }
-    mapped = action_map.get(action, {"side": "none", "delta_qty": 0.0})
+    Action space:
+    - 0: hold
+    - 1: buy +1 * position_scale
+    - 2: sell -1 * position_scale
+    - 3: flatten current equity hedge (trade -equity_position)
+    """
+
+    sym = (underlying_symbol or "").strip().upper()
+    env = HedgingEnv(client=client, underlying_symbol=sym, position_scale=1.0)
+    state = env.reset()
+
+    agent, meta = _get_cached_agent()
+    q_vals = agent.q_values(state)
+    action = int(np.argmax(q_vals))
+
+    equity_pos = float(state.get("equity_position", 0.0) or 0.0)
+    if action == 1:
+        delta_qty = +1.0
+        side = "buy"
+    elif action == 2:
+        delta_qty = -1.0
+        side = "sell"
+    elif action == 3:
+        delta_qty = -equity_pos
+        side = "flatten"
+    else:
+        delta_qty = 0.0
+        side = "none"
+
     return {
-        "underlying": (underlying_symbol or "").strip().upper(),
+        "underlying": sym,
         "action": action,
-        "side": mapped["side"],
-        "delta_qty": float(mapped["delta_qty"]),
-        "comment": "DQN hedge suggestion (basic)",
+        "side": side,
+        "delta_qty": float(delta_qty),
+        "q_values": [float(x) for x in q_vals.tolist()],
+        "model_version": DQN_HEDGER_VERSION,
+        "model_trained_utc": meta.get("trained_utc") or meta.get("loaded_utc"),
+        "comment": "DQN hedge suggestion (replay buffer + target network; synthetic training)",
         "state": state,
     }
 
 
-__all__ = ["DQNAgent", "suggest_hedge_action"]
+__all__ = [
+    "DQNConfig",
+    "DQNAgent",
+    "get_dqn_model_info",
+    "load_or_train_dqn_model",
+    "suggest_hedge_action",
+]
+

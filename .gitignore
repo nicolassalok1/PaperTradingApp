@@ -155,6 +155,7 @@ dmypy.json
 # Data and generated caches
 data/*
 database/*
+cache/HedgerDQN/
 
 # Pyre type checker
 .pyre/

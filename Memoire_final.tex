@@ -6,10 +6,13 @@
 \usepackage[french]{babel}
 \usepackage{lmodern}
 \usepackage{amsmath, amssymb, amsfonts}
+\usepackage{mathtools}
+\usepackage{amsthm}
 \usepackage{geometry}
 \usepackage{setspace}
 \usepackage{hyperref}
 \usepackage{enumitem}
+\usepackage{microtype}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,calc}
 \usepackage{url}
@@ -30,6 +33,19 @@
     citecolor=blue,
     urlcolor=blue
 }
+
+%================= Macros =====================
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\ee}{\mathrm{e}}
+\newcommand{\ii}{\mathrm{i}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\PP}{\mathbb{P}}
+\newcommand{\QQ}{\mathbb{Q}}
+\newcommand{\1}{\mathbf{1}}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
 
 %================= Figures (largeur A4) =======
 % Images : ne jamais d\'epasser la largeur du texte (A4 avec marges via geometry)
@@ -66,8 +82,8 @@
 
 %================= Titre ======================
 \title{\vspace{-2cm}%
-    \textbf{PaperTradingApp : Finance de march\'e, mod\'elisation de la volatilit\'e et gestion du risque}\\[0.3cm]
-    \large M\'emoire de synth\`ese --- notions th\'eoriques et mise en perspective
+    \textbf{PaperTradingApp : Pricing d'options, mod\'elisation de la volatilit\'e et gestion du risque}\\[0.3cm]
+    \large M\'emoire de Master --- synth\`ese th\'eorique et mise en perspective
 }
 \author{Pr\'enom Nom}
 \date{\today}
@@ -102,6 +118,12 @@
     \end{itemize}
     L'objectif est que le lecteur puisse constater une ma\^{i}trise explicative de chaque notion,
     ainsi qu'une capacit\'e \`a les articuler dans un cadre coh\'erent d'ing\'enierie quantitative.
+
+    \medskip
+    \textbf{Important :} le document est volontairement \emph{strictement th\'eorique} : aucun code,
+    aucun pseudo-code, et aucun d\'etail d'impl\'ementation. Lorsque des \'el\'ements empiriques
+    d\'ependraient de donn\'ees non fournies, on explicite une \emph{m\'ethode de validation} sans
+    avancer de r\'esultat chiffr\'e.
     \end{flushleft}
 
     \vfill
@@ -120,21 +142,87 @@
 \toprule
 \textbf{Notation} & \textbf{Description (conventions)} \\
 \midrule
+$\bigl(\Omega,\mathcal{F},(\mathcal{F}_t)_{t\in[0,T]},\PP\bigr)$ & Espace probabilis\'e filtr\'e (information disponible \`a l'instant $t$). \\
+$\QQ$ & Mesure risque--neutre (\'equivalente \`a $\PP$) lorsque l'absence d'arbitrage est satisfaite. \\
+$B_t$ & Num\'eraire (compte mon\'etaire) ; typiquement $B_t=\exp\!\bigl(\int_0^t r_u\,\dd u\bigr)$. \\
 $t\in[0,T]$ & Temps ; $T$ d\'esigne une maturit\'e ; $\Delta t$ un horizon. \\
 $S_t$ & Prix spot du sous-jacent ; $X_t=\ln S_t$ est le log-prix. \\
-$K$ & Strike ; $F(0,T)$ un prix forward (hors dividendes) \`a maturit\'e $T$. \\
-$r,q$ & Taux sans risque (capitalisation continue) et taux de dividende (ou portage) constants lorsque suppos\'es. \\
-$P(0,T)$ & Prix d'un z\'ero-coupon \`a $T$ ; $D(0,T)=P(0,T)$ facteur d'actualisation. \\
+$D_t$ / $q_t$ & Dividendes (processus) / taux de dividende (portage) dans des conventions simplifi\'ees. \\
+$r_t$ & Taux court (instantan\'e) ; $r$ d\'esigne un taux constant lorsque suppos\'e. \\
+$P(0,T)$ & Prix d'un z\'ero-coupon ; $D(0,T)=P(0,T)$ facteur d'actualisation. \\
+$f(0,T)$ & Taux forward instantan\'e : $f(0,T)=-\partial_T \ln P(0,T)$. \\
+$K$ & Strike ; $F(t,T)$ un prix forward \`a maturit\'e $T$ (convention selon dividendes/num\'eraire). \\
 $V(t,S)$ & Prix d'un d\'eriv\'e ; $C(t,S)$ (call) et $P(t,S)$ (put). Dans la partie taux, $P(0,T)$ d\'esigne un z\'ero-coupon. \\
 $\sigma$ & Volatilit\'e (ex. Black--Scholes) ; $\sigma_{\mathrm{imp}}$ vol implicite ; $\widehat\sigma$ vol r\'ealis\'ee. \\
+$(W_t)$ & Mouvement brownien standard (sous $\PP$ ou $\QQ$ selon le contexte). \\
 $(\Delta,\Gamma,\nu,\Theta,\rho_{\mathrm{IR}})$ & Greeks : delta, gamma, vega, theta et rho (sensibilit\'e au taux). \\
 $v_t$ & Variance instantan\'ee ; param\`etres Heston $(\kappa,\theta,\xi,\rho,v_0)$. \\
+$(\alpha,\beta,\rho,\nu)$ & Param\`etres SABR (niveau de vol, \'elasticit\'e, corr\'elation, vol de vol). \\
+$H$ & Exposant de Hurst (rough volatility : $H<\tfrac12$). \\
+$\lambda$ & Intensit\'e de sauts (Merton/Bates) ; loi des amplitudes selon le mod\`ele. \\
 $\mu,\Sigma,w$ & Rendements moyens, covariance, et poids d'allocation d'un portefeuille. \\
 $L$ & Variable de perte ; $\mathrm{VaR}_\alpha$ et $\mathrm{ES}_\alpha$ au niveau $\alpha$. \\
-$(\mathcal{S},\mathcal{A},P,r,\gamma)$ & MDP (RL) : \'etats, actions, \emph{transition} $P(s'|s,a)$, r\'ecompense et facteur d'actualisation $\gamma$ (sans lien avec le taux $r$). \\
+$(\mathcal{S},\mathcal{A},\mathcal{P},\mathcal{R},\gamma_{\mathrm{RL}})$ & MDP (couverture) : \'etats, actions, transitions $\mathcal{P}(s'|s,a)$, r\'ecompense $\mathcal{R}$ et facteur d'actualisation $\gamma_{\mathrm{RL}}$. \\
+$e,\,\mathcal{I}_e$ & Era (bloc temporel/r\'egime) et ensemble d'indices associ\'es ; $\rho_e$ d\'esigne une mesure calcul\'ee sur l'era $e$ (ex. une corr\'elation). \\
 \bottomrule
 \end{tabularx}
 \end{center}
+
+%================= Glossaire ==================
+\section*{Glossaire (termes cl\'es)}
+\addcontentsline{toc}{section}{Glossaire (termes cl\'es)}
+\begin{description}[style=nextline,leftmargin=2.8cm]
+  \item[Absence d'arbitrage] Propri\'et\'e d'un march\'e o\`u aucune strat\'egie auto-financ\'ee \`a co\^ut initial nul ne permet un gain certain avec une probabilit\'e strictement positive de gain strict.
+  \item[Mesure risque--neutre] Mesure $\QQ$ sous laquelle les prix actualis\'es des actifs (au num\'eraire choisi) sont des martingales ; elle permet la valorisation par esp\'erance conditionnelle.
+  \item[Smile / skew] D\'eformation de la volatilit\'e implicite en fonction du strike (et/ou de la maturit\'e), r\'ev\'elatrice d'asym\'etries, de queues et de dynamique de volatilité.
+  \item[Surface de vol] Fonction $(K,T)\mapsto \sigma_{\mathrm{imp}}(K,T)$ observ\'ee sur le march\'e ; elle doit satisfaire des contraintes d'absence d'arbitrage statique.
+  \item[Calibration] Probl\`eme inverse consistant \`a choisir des param\`etres de mod\`ele de sorte \`a reproduire des prix ou des volatilit\'es implicites de march\'e.
+  \item[Risque de mod\`ele] Risque li\'e \`a l'\'ecart entre le mod\`ele choisi et la dynamique r\'eelle ; distinct du risque de march\'e (mouvements des facteurs) et du risque de donn\'ees (qualit\'e/couverture des observations).
+  \item[Greeks] Sensibilit\'es locales du prix d'un d\'eriv\'e aux facteurs (spot, vol, taux, temps), outils centraux de couverture et d'attribution de risque.
+  \item[MDP (couverture)] Formalisation de la couverture comme d\'ecision s\'equentielle : l'\'etat r\'esume l'information disponible, l'action d\'efinit la r\'eallocation, la r\'ecompense p\'enalise co\^uts et risque.
+  \item[Era] Bloc temporel (ou r\'egime) utilis\'e pour structurer les donn\'ees et \'{e}valuer la stabilit\'e d'un signal dans le temps.
+  \item[Leakage] Fuite d'information (souvent temporelle) entre entra\^{i}nement et validation, menant \`a une surestimation de performance hors \'echantillon.
+  \item[OOF / stacking / ranking] OOF : pr\'edictions hors-fold (sur donn\'ees non vues) ; stacking : combinaison par meta-mod\`ele ; ranking : transformation monotone par rang (CDF empirique) pour stabiliser la distribution des scores.
+\end{description}
+
+%================= Figures & Tables ============
+\section*{Liste des figures et tables propos\'ees}
+\addcontentsline{toc}{section}{Liste des figures et tables propos\'ees}
+
+\subsection*{Figures propos\'ees}
+\begin{enumerate}[leftmargin=*,label=F\arabic*.]
+  \item Profils de payoff : call/put, straddle, strangle, butterfly, vertical spread, calendar spread.
+  \item Bornes et monotonicit\'e : prix d'option en fonction de $S$ et de $K$ (convexit\'e en strike).
+  \item Illustration du th\'eor\`eme de Breeden--Litzenberger (densit\'e risque--neutre \`a partir de $\partial_{KK}C$).
+  \item Smile/skew : exemple de coupes $(K\mapsto \sigma_{\mathrm{imp}}(K,T))$ et surface $(K,T)$.
+  \item Comparaison qualitative : Black--Scholes vs volatilité stochastique vs sauts (impact sur les queues).
+  \item Effet des param\`etres Heston $(\kappa,\theta,\xi,\rho,v_0)$ sur le smile (intuition).
+  \item SABR : r\^ole de $(\alpha,\beta,\rho,\nu)$ et domaine de validit\'e de l'approximation de Hagan.
+  \item Rough volatility : noyau de Volterra et impact de $H$ sur le skew court terme (qualitatif).
+  \item Calibration : sch\'ema conceptuel ``donn\'ees $\rightarrow$ surface $\rightarrow$ param\`etres $\rightarrow$ diagnostic''.
+  \item Courbe de taux : $P(0,T)$, $f(0,T)$ et d\'ecomposition Nelson--Siegel (niveau/pente/courbure).
+  \item Mesures de risque : sch\'ema VaR vs ES sur une distribution de pertes (conceptuel).
+  \item Allocation : fronti\`ere efficiente, contributions au risque (risk parity) et eigen-portfolios (PCA).
+  \item Couverture : erreur de delta-hedging (discr\'etisation, co\^uts, risque de mod\`ele) (conceptuel).
+  \item MDP de couverture : graphe \'etat--action--r\'ecompense et boucle de r\'etroaction.
+  \item R\'egimes : matrice de transition d'une cha\^ine de Markov et distribution stationnaire (conceptuel).
+  \item Validation temporelle : d\'ecoupage en fen\^etres (rolling/expanding) et distribution d'une m\'etrique par eras (conceptuel).
+\end{enumerate}
+
+\subsection*{Tables propos\'ees}
+\begin{enumerate}[leftmargin=*,label=T\arabic*.]
+  \item Synth\`ese des hypoth\`eses et param\`etres des mod\`eles : BS, Heston, SABR, Merton, Bates, rBergomi, Rough Heston, Kalman (\'etat-espace).
+  \item Comparaison des m\'ethodes de pricing : PDE, arbres, Monte Carlo, Fourier/FFT (avantages, limites, complexit\'e).
+  \item Greeks : d\'efinitions, interpr\'etations \'economiques et sensibilit\'es dominantes par produit.
+  \item Contraintes d'absence d'arbitrage statique sur une surface : butterfly/vertical/calendar et bornes asymptotiques.
+  \item Fonctions de perte de calibration : prix vs vol implicite, pond\'erations (vega), r\'egularisation et contraintes.
+  \item Courbe de taux : instruments (z\'ero-coupons, swaps), bootstrapping, interpolation (pi\`eges) et diagnostics.
+  \item Mesures de risque : VaR/ES, hypoth\`eses, m\'ethodes d'estimation et limites.
+  \item Allocation : Markowitz vs risk parity vs eigen-portfolios (hypoth\`eses, robustesse, sensibilit\'e \`a l'estimation).
+  \item RL pour la couverture : Q-learning vs DQN vs PPO (id\'ees, stabilit\'e, risques de sur-apprentissage, validation).
+  \item Mod\`eles de r\'egimes : d\'efinitions, estimation, interpr\'etation et limites (non-stationnarit\'e).
+  \item Pr\'ediction sous non-stationnarit\'e : risques de leakage, validation temporelle, m\'etriques par eras, et stabilisation (ensembles, post-traitements monotones).
+\end{enumerate}
 \newpage
 
 %================= Introduction générale ======
@@ -146,10 +234,10 @@ La finance de march\'e moderne repose sur trois piliers principaux : les \emph{p
 mesure risque--neutre, volatilit\'e locale/stochastique/rough), et les \emph{m\'ethodes num\'eriques}
 (arbres, PDE, Monte Carlo, transform\'ees de Fourier).
 
-Parall\`element, les m\'ethodes d'apprentissage (\emph{supervised learning}, r\'eduction dimensionnelle,
-apprentissage par renforcement) apportent des outils pour la calibration, l'approximation de surfaces,
-l'identification de r\'egimes et la d\'ecision s\'equentielle (par exemple pour la couverture sous co\^uts
-de transaction).
+Parall\`element, certaines approches d'\emph{approximation} et de \emph{d\'ecision s\'equentielle}
+compl\`etent l'arsenal classique : (i) des \textbf{surrogates} (r\'eseaux) pour acc\'el\'erer des cartes de prix/Greeks
+ou des it\'erations de calibration, et (ii) une formulation \textbf{MDP/RL} pour mod\'eliser la couverture
+sous contraintes (co\^uts de transaction, risque de mod\`ele, non-stationnarit\'e).
 
 Ce dossier a un double objectif :
 \begin{itemize}
@@ -159,12 +247,10 @@ Ce dossier a un double objectif :
 
 \bigskip
 
-Dans ce qui suit, la \textbf{Partie 1} d\'eveloppe les fondements de finance quantitative utiles au projet
-(pricing, volatilit\'e, couverture, courbes de taux, calibration). La \textbf{Partie 2} pr\'esente les notions
-d'apprentissage pertinentes pour la calibration/surrogates et la d\'ecision s\'equentielle. La \textbf{Partie 3}
-fait la synth\`ese du projet \emph{PaperTradingApp} sous la forme d'une cartographie des modules et des notions,
-afin de rendre explicite le lien entre th\'eorie et objectifs. La \textbf{Partie 4} conclut et ouvre sur des
-extensions naturelles. Enfin, la \textbf{Partie 5} rassemble la bibliographie et des ressources.
+Le fil directeur suit une progression naturelle : absence d'arbitrage $\rightarrow$ produits et payoffs
+$\rightarrow$ calcul stochastique $\rightarrow$ m\'ethodes de pricing $\rightarrow$ volatilit\'e implicite et surfaces
+$\rightarrow$ mod\`eles de volatilité et calibration $\rightarrow$ courbe de taux $\rightarrow$ gestion du risque et allocation
+$\rightarrow$ couverture et d\'ecision s\'equentielle $\rightarrow$ r\'egimes de volatilité $\rightarrow$ m\'ethodologie de validation.
 
 \newpage
 
@@ -222,9 +308,9 @@ et transitions Markov, diagnostic textuel et limites de l'assistance IA. \\
     arrow/.style={-Latex, thick}
 ]
 \node[box] (finance) {Partie 1\\Finance de march\'e};
-\node[box, right=of finance] (ml) {Partie 2\\Machine Learning};
-\node[box, below=of finance] (projects) {Partie 3\\Projets appliqu\'es};
-\node[box, right=of projects] (concl) {Partie 4\\Conclusion \&\\Ouverture};
+\node[box, right=of finance] (ml) {Partie 2\\D\'ecision\\(MDP/RL)};
+\node[box, below=of finance] (projects) {Partie 3\\Synth\`ese\\projet};
+\node[box, right=of projects] (concl) {Partie 4\\Conclusion\\\& ouverture};
 
 \draw[arrow] (finance) -- (projects);
 \draw[arrow] (ml) -- (projects);
@@ -232,22 +318,22 @@ et transitions Markov, diagnostic textuel et limites de l'assistance IA. \\
 
 \end{A4TikZ}
 
-\subsection*{Carte conceptuelle ML \& Finance}
+\subsection*{Carte conceptuelle : mod\'elisation, risque et d\'ecision}
 
 \begin{A4TikZ}[
     node distance=1.8cm,
     box/.style={rectangle, draw, rounded corners, minimum width=3.0cm, minimum height=0.8cm, align=center, font=\small},
     arrow/.style={-Latex, thin}
 ]
-\node[box] (sl) {Supervised\\Learning};
-\node[box, below=of sl] (ul) {Unsupervised\\Learning};
-\node[box, right=3.2cm of sl] (dl) {Deep\\Learning};
-\node[box, below=of dl] (rl) {Reinforcement\\Learning};
+\node[box] (sl) {Surrogates\\(approx.)};
+\node[box, below=of sl] (ul) {R\'egimes\\(Markov)};
+\node[box, right=3.2cm of sl] (dl) {Mod\`eles\\de vol};
+\node[box, below=of dl] (rl) {Couverture\\MDP/RL};
 
-\node[box, above left=2.0cm and 0.5cm of sl] (pricing) {Pricing\\dérivés};
+\node[box, above left=2.0cm and 0.5cm of sl] (pricing) {Pricing\\(PDE/MC/FFT)};
 \node[box, below left=2.0cm and 0.5cm of ul] (risk) {Gestion du\\risque};
 \node[box, right=3.5cm of dl] (vol) {Surfaces de\\volatilité};
-\node[box, below=2.0cm of rl] (trading) {Strat\'egies de\\trading RL};
+\node[box, below=2.0cm of rl] (trading) {D\'ecision\\s\'equentielle};
 
 \draw[arrow] (sl) -- (pricing);
 \draw[arrow] (ul) -- (risk);
@@ -266,6 +352,112 @@ et transitions Markov, diagnostic textuel et limites de l'assistance IA. \\
 %                 PARTIE 1 : FINANCE
 %==========================================================
 \section{Finance de march\'e}
+
+\subsection{Cadre g\'en\'eral et absence d'arbitrage}
+
+Cette sous-partie fixe le cadre math\'ematique de r\'ef\'erence : mod\'elisation probabiliste,
+actualisation, absence d'arbitrage et valorisation sous mesure risque--neutre. Il s'agit du socle
+sur lequel s'appuient le pricing, la calibration, la mesure des risques et la couverture.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{D\'efinitions : march\'e, information et strat\'egies}
+
+On consid\`ere un espace probabilis\'e filtr\'e $\bigl(\Omega,\mathcal{F},(\mathcal{F}_t)_{t\in[0,T]},\PP\bigr)$,
+o\`u $\mathcal{F}_t$ repr\'esente l'information disponible \`a la date $t$.
+Un \emph{march\'e} est mod\'elis\'e par un num\'eraire $B_t>0$ (compte mon\'etaire) et un vecteur de prix
+d'actifs risqu\'es $(S_t^1,\dots,S_t^d)$, adapt\'es \`a $(\mathcal{F}_t)$.
+
+\paragraph{Actualisation.}
+On dit qu'un processus $X_t$ est \emph{actualis\'e} par $B_t$ via $\widetilde X_t:=X_t/B_t$.
+L'intuition est que $B_t$ sert d'unit\'e de compte : tout prix est mesur\'e en ``unit\'es de num\'eraire''.
+
+\paragraph{Strat\'egies auto-financ\'ees.}
+Une strat\'egie de trading (simplifi\'ee) est un processus pr\'evisible $\phi_t=(\phi_t^1,\dots,\phi_t^d)$
+repr\'esentant les quantit\'es d'actifs d\'etenues, \'eventuellement compl\'et\'e par une position en num\'eraire.
+La valeur du portefeuille est $V_t=\sum_{i=1}^d \phi_t^i S_t^i + \psi_t B_t$.
+La condition \emph{auto-financ\'ee} formalise l'absence d'apports/retraits : toute variation de $V_t$ provient
+des variations de prix des actifs d\'etenus.
+
+\paragraph{Arbitrage.}
+Intuitivement, un arbitrage est une strat\'egie auto-financ\'ee qui ne co\^ute rien au d\'epart et qui ne peut
+pas perdre, tout en ayant une probabilit\'e strictement positive de gain strict. Selon les cadres, on utilise
+des notions plus fines (NA, NFLVR) pour traiter les limites de march\'es continus.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Intuition : num\'eraire, martingales et prix ``justes''}
+
+En l'absence d'arbitrage et sous hypoth\`eses techniques usuelles, il existe une mesure $\QQ$ telle que les
+prix \emph{actualis\'es} des actifs risqu\'es soient des martingales :
+\[
+\widetilde S_t^i=\frac{S_t^i}{B_t}
+\quad \text{est une martingale sous } \QQ,\qquad i=1,\dots,d.
+\]
+Cette propri\'et\'e encode l'id\'ee que, une fois mesur\'es dans la bonne unit\'e (le num\'eraire), les prix n'ont
+pas de tendance exploitable ``gratuitement''. Elle n'implique pas que les actifs soient sans risque, mais que
+le risque est compens\'e par le choix de la mesure $\QQ$ (changement de mesure).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{R\'esultat cl\'e : th\'eor\`eme fondamental et valorisation risque--neutre}
+
+\paragraph{Th\'eor\`eme fondamental (version informelle).}
+Sous des hypoth\`eses d'absence d'arbitrage (de type NFLVR) et de r\'egularit\'e, il existe une mesure $\QQ$
+\'equivalente \`a $\PP$ telle que les prix actualis\'es soient des martingales. R\'eciproquement, l'existence d'une
+telle mesure exclut l'arbitrage.
+
+\paragraph{Prix d'un payoff.}
+Pour un payoff $\Phi$ \`a maturit\'e $T$ (mesurable par rapport \`a $\mathcal{F}_T$), le \emph{prix} \`a la date $t$
+admet la repr\'esentation :
+\[
+V_t = B_t\, \E^{\QQ}\!\left[\frac{\Phi}{B_T}\,\middle|\,\mathcal{F}_t\right].
+\]
+Dans un march\'e \emph{complet}, la mesure $\QQ$ est unique et le prix est unique. Dans un march\'e \emph{incomplet}
+(typiquement d\`es que l'on introduit de la volatilité stochastique non r\'epliquable, des sauts, ou des co\^uts),
+il existe plusieurs mesures martingales : la formule reste un principe, mais le choix de $\QQ$ (ou, \'equivalemment,
+la sp\'ecification du mod\`ele) devient une hypoth\`ese de mod\'elisation.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Actualisation, dividendes et forwards : r\^ole des taux}
+
+\paragraph{Dividendes et portage.}
+Si le sous-jacent verse un dividende continu au taux $q$ (cas simplifi\'e), l'absence d'arbitrage conduit \`a la relation
+de portage pour le forward europ\'een :
+\[
+F(0,T)=S_0\,\ee^{(r-q)T},
+\]
+et plus g\'en\'eralement $F(0,T)=S_0\,\exp\!\bigl(\int_0^T (r_u-q_u)\,\dd u\bigr)$ si $r_u,q_u$ sont d\'eterministes.
+Lorsque les taux sont stochastiques, le prix d\'epend du num\'eraire choisi (mesure \`a terme, mesure associ\'ee au z\'ero-coupon),
+ce qui souligne l'importance d'une courbe de taux coh\'erente et d'une convention d'actualisation explicite.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Trois familles de risques : march\'e, mod\`ele, donn\'ees}
+
+\paragraph{Risque de march\'e.}
+Risque li\'e \`a l'\'evolution des facteurs (spot, volatilité, taux, corr\'elations) : m\^eme avec un mod\`ele parfait,
+les PnL fluctuent.
+
+\paragraph{Risque de mod\`ele.}
+Risque li\'e aux hypoth\`eses (log-normalit\'e, absence de sauts, markovianit\'e, forme de smile dynamics, etc.).
+Il se manifeste notamment par des erreurs de couverture (hedging error) et des instabilit\'es de calibration.
+
+\paragraph{Risque de donn\'ees.}
+Risque li\'e \`a la qualit\'e des observations : microstructure, quotes non synchrones, bid--ask, erreurs de
+nettoyage, maturit\'es manquantes. Il affecte directement les surfaces, les courbes et la calibration.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Limites et pr\'ecautions}
+
+Le cadre ``arbitrage-free'' suppose des march\'es frictionless et des strat\'egies admissibles. En pratique,
+la couverture est discr\`ete, co\^uteuse, soumise \`a des contraintes (liquidit\'e, marges), et les march\'es peuvent
+\^etre incomplets. Une cons\'equence centrale est que le \emph{pricing} est ins\'eparable d'une gouvernance des
+hypoth\`eses : choix du num\'eraire, conventions de dividendes, s\'election de mod\`ele et protocole de validation.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Lien avec le projet \emph{PaperTradingApp}}
+
+Sans d\'ecrire d'impl\'ementation, le projet mobilise ce cadre pour : (i) d\'efinir une valorisation coh\'erente
+par actualisation et absence d'arbitrage, (ii) relier prix, surface de volatilité et densit\'e risque--neutre,
+(iii) interpr\'eter les \'ecarts entre mod\`eles comme du risque de mod\`ele, (iv) distinguer la variabilit\'e
+des PnL due aux facteurs (risque de march\'e) de celle due aux erreurs de donn\'ees et de calibration.
 
 \subsection{Produits d\'eriv\'es - Options}
 
@@ -386,18 +578,17 @@ pour la fonction caractéristique, inversion de Fourier) est fournie en annexe.
 
 Le modèle rBergomi repose sur un mouvement brownien fractionnaire de paramètre de Hurst
 $H < \tfrac{1}{2}$, conduisant à une dynamique de variance à mémoire longue de type Volterra.
-Il permet de reproduire avec précision le skew de volatilité à court terme, en particulier sur
-indices actions.
+Il est motivé par la g\'eom\'etrie du skew \`a court terme observ\'ee sur les march\'es actions.
 
 Les éléments clés sont :
 \begin{itemize}
   \item définition du fractional Brownian motion $B^H$,
   \item représentation de Mandelbrot--Van Ness,
-  \item simulation numérique (schéma de Davies--Harte),
   \item lien avec les SDE de type Volterra et la variance rough.
 \end{itemize}
 
-Les dérivations détaillées, ainsi que les liens avec le modèle rBergomi, sont présentés en annexe.
+Les d\'etails (construction du fBM, noyaux, choix de sch\'emas) peuvent \^etre ajout\'es en annexe ; on renvoie sinon \`a la litt\'erature
+sur la rough volatility pour les d\'erivations compl\`etes.
 
 %------------------------------------------------
 \paragraph{Rôle structurel des options vanilles.}
@@ -1359,13 +1550,17 @@ La dépendance à la corrélation est immédiate :
 
 
 
+\subsubsection{Lien avec le projet \emph{PaperTradingApp}}
+
+Cette partie correspond au socle ``produits'' : elle sert \`a (i) d\'efinir les payoffs (vanilles et exotiques) manipul\'es
+par la plateforme, (ii) lire des profils de risque (lin\'earit\'e, convexit\'e, exposition aux queues), et (iii) analyser des
+strat\'egies simples (spreads, wings, straddles) en termes de sensibilit\'es et de sc\'enarios. Le lien avec le projet n'est pas
+une impl\'ementation, mais une exigence de coh\'erence : une strat\'egie n'a de sens que rapport\'ee \`a un payoff et \`a des bornes
+absence d'arbitrage (parit\'es, monotonicit\'es, convexit\'e), puis \`a un mod\`ele de dynamique (volatilité, sauts) discut\'e plus loin.
+
 \subsection{Pricing des options}
 
 \subsubsection{Variation quadratique des processus}
-
-\noindent
-\textbf{Ressource vidéo complémentaire :}\\
-\url{https://www.youtube.com/watch?v=aimS3f5V44U&t=14s}
 
 \bigskip
 
@@ -1528,10 +1723,6 @@ On obtient rigoureusement :
 
 
 \subsubsection{Lemme d'It\^{o} (d\'erivation ``for dummies'' rigoureuse)}
-
-\noindent
-\textbf{Ressource vid\'eo compl\'ementaire :}\\
-\url{https://www.youtube.com/watch?v=3FovlxLVI88}
 
 \bigskip
 
@@ -2030,6 +2221,96 @@ d_{1,2} =
 \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Arbres binomiaux (Cox--Ross--Rubinstein) : exercice et convergence}
+
+\paragraph{Principe.}
+Un arbre binomial approxime l'\'evolution de $S_t$ par une marche \`a pas discrets : sur un pas $\Delta t$,
+le sous-jacent passe de $S$ \`a $uS$ (``up'') ou $dS$ (``down''). Le sch\'ema recombinent CRR choisit classiquement
+\[
+u=\ee^{\sigma\sqrt{\Delta t}},\qquad d=\ee^{-\sigma\sqrt{\Delta t}}=\frac{1}{u}.
+\]
+Sous l'absence d'arbitrage et en pr\'esence d'un portage $(r-q)$, la probabilit\'e risque--neutre est
+\[
+p=\frac{\ee^{(r-q)\Delta t}-d}{u-d},
+\]
+et la valeur se calcule par r\'ecurrence :
+\[
+V(t,S)=\ee^{-r\Delta t}\Bigl(p\,V(t+\Delta t,uS)+(1-p)\,V(t+\Delta t,dS)\Bigr),
+\]
+avec condition terminale $V(T,S)=\Phi(S)$.
+
+\paragraph{Exercice anticip\'e (options am\'ericaines).}
+Pour une option am\'ericaine, le principe est une comparaison \emph{valeur d'exercice} vs \emph{valeur de continuation} :
+\[
+V(t,S)=\max\bigl(\Phi_{\text{ex}}(S),\;V_{\text{cont}}(t,S)\bigr),
+\]
+ce qui met en \'evidence la fronti\`ere d'exercice (free boundary) et justifie les algorithmes d'induction arri\`ere.
+
+\paragraph{Convergence et limites.}
+Sous des hypoth\`eses usuelles, le prix CRR converge vers Black--Scholes quand $\Delta t\to 0$ (th\'eor\`eme de Donsker,
+convergence faible vers le brownien g\'eom\'etrique). Les limites sont bien connues : complexit\'e qui cro\^it avec le nombre
+de facteurs, sensibilit\'e aux hypoth\`eses (dividendes, taux), et traitement non trivial des barri\`eres/path-dependence
+(m\^eme si des extensions existent).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Monte Carlo : estimateurs, erreur et r\'eduction de variance}
+
+\paragraph{Estimateur.}
+Dans un cadre risque--neutre, le prix d'un payoff europ\'een $\Phi(S_T)$ s'\'ecrit
+$V_0=\ee^{-rT}\E^{\QQ}[\Phi(S_T)]$. Monte Carlo approxime cette esp\'erance par
+\[
+\widehat V_0=\ee^{-rT}\frac{1}{N}\sum_{n=1}^N \Phi\!\left(S_T^{(n)}\right),
+\]
+o\`u $S_T^{(n)}$ sont des trajectoires simul\'ees sous $\QQ$.
+
+\paragraph{Erreur statistique.}
+Par le th\'eor\`eme central limite, $\sqrt{N}(\widehat V_0-V_0)$ converge en loi vers une gaussienne de variance
+$\mathrm{Var}^{\QQ}(\Phi(S_T))$, d'o\`u une erreur typiquement en $\mathcal{O}(N^{-1/2})$. Une erreur suppl\'ementaire
+provient de la discr\'etisation en temps lorsqu'on simule une EDS (biais en $\Delta t$).
+
+\paragraph{R\'eduction de variance.}
+On peut r\'eduire la variance \`a $N$ fix\'e via : variables antith\'etiques, \emph{control variates}
+(par exemple utiliser une option \`a prix ferm\'e comme contr\^ole), importance sampling, stratification ou quasi-MC.
+Ces techniques modifient l'estimateur sans changer la quantit\'e cibl\'ee.
+
+\paragraph{Greeks.}
+Les sensibilit\'es se calculent par diff\'erenciation (pathwise), par \emph{likelihood ratio} (score function), ou par
+diff\'erences finies (\emph{bump and revalue}). Les payoffs non lisses (digital, barri\`eres) demandent des pr\'ecautions :
+approximation liss\'ee ou estimateurs adapt\'es.
+
+\paragraph{Limites.}
+Monte Carlo est naturellement adapt\'e aux payoffs path-dependent et \`a la grande dimension, mais il est lent sur des
+quantit\'es rares (queues) et sur des options \`a exercice anticip\'e : pour ces derni\`eres, des m\'ethodes comme le
+Least-Squares Monte Carlo (LSMC) introduisent une r\'egression et un risque d'approximation.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Fonctions caract\'eristiques, inversion de Fourier et FFT (Carr--Madan)}
+
+\paragraph{Id\'ee.}
+Lorsque la fonction caract\'eristique du log-prix est connue,
+$\phi_T(u)=\E[\ee^{\ii u \ln S_T}]$, on peut repr\'esenter des prix europ\'eens par inversion de Fourier.
+L'avantage est de remplacer des int\'egrales difficiles par des int\'egrales oscillantes contr\^ol\'ees, voire par une FFT.
+
+\paragraph{Cadre Carr--Madan.}
+Carr et Madan introduisent un \emph{damping} pour rendre la transform\'ee int\'egrable : en notant $k=\ln K$ et
+$c_\alpha(k)=\ee^{\alpha k}C(k)$ avec $\alpha>0$, la transform\'ee de $c_\alpha$ s'exprime explicitement en fonction de $\phi_T$.
+Une discr\'etisation sur une grille de fr\'equences permet ensuite de calculer simultan\'ement de nombreux prix de strikes par FFT.
+
+\paragraph{Choix du damping et stabilit\'e num\'erique.}
+Le choix de $\alpha$ contr\^ole l'int\'egrabilit\'e et la stabilit\'e : trop faible, l'int\'egrale diverge ; trop fort,
+on amplifie des erreurs num\'eriques. D'autres sources d'erreur proviennent de la troncature, de l'aliasing et des pas de grille.
+Une validation th\'eorique consiste \`a contr\^oler la convergence en augmentant les bornes d'int\'egration et en raffinant les grilles.
+
+\paragraph{Port\'ee.}
+Les m\'ethodes de Fourier/FFT sont particuli\`erement adapt\'ees aux mod\`eles \`a structure affine (Heston, Bates) et aux mod\`eles \`a sauts.
+Elles ciblent principalement des payoffs europ\'eens ; les extensions \`a l'am\'ericain ou \`a des exotiques requi\`erent des techniques suppl\'ementaires.
+
+\paragraph{Lien avec le projet \emph{PaperTradingApp}.}
+Dans le projet, l'int\'er\^et th\'eorique de ces m\'ethodes est double : (i) disposer d'une famille de pricers coh\'erents entre mod\`eles (diffusion,
+volatilité stochastique, sauts) via la m\^eme grammaire ``fonction caract\'eristique + inversion'', et (ii) comparer les compromis pr\'ecision/co\^ut
+entre PDE, arbres, Monte Carlo et Fourier, sans d\'ependre d'une impl\'ementation particuli\`ere.
+
+\noindent
 \subsubsection{Mod\`ele de Heston et pricing semi--analytique}
 
 On consid\`ere d\'esormais le mod\`ele de Heston, dans lequel le sous--jacent $S_t$ et
@@ -2252,6 +2533,28 @@ minimisation analogue au cas Heston :
   des schémas Monte Carlo rapides.
 \end{itemize}
 
+\paragraph{Surrogates (r\'eseaux) pour acc\'el\'erer la calibration.}
+Dans de nombreux mod\`eles, le goulot d'\'etranglement est le \emph{co\^ut} d'\'evaluation de la carte
+$(K,T)\mapsto C_{\theta}(K,T)$ (ou de $\sigma_{\mathrm{mod}}(K,T;\theta)$) \`a chaque it\'eration d'optimisation.
+L'id\'ee d'un \textbf{surrogate} est de construire une approximation rapide
+\[
+(K,T,\theta)\;\longmapsto\; \widehat C(K,T;\theta)
+\quad \text{ou} \quad
+(K,T,\theta)\;\longmapsto\;\widehat\sigma_{\mathrm{imp}}(K,T;\theta),
+\]
+par apprentissage supervis\'e sur des donn\'ees synth\'etiques g\'en\'er\'ees par le mod\`ele lui-m\^eme.
+Le fondement th\'eorique est l'approximation universelle : sous des hypoth\`eses de r\'egularit\'e,
+un r\'eseau suffisamment riche peut approximer une fonction continue sur un compact.
+
+\paragraph{Int\'er\^et, limites et validation.}
+Un surrogate peut servir \`a (i) initialiser une calibration (warm start), (ii) explorer rapidement
+la sensibilit\'e \`a des param\`etres, (iii) d\'eployer des diagnostics en quasi temps r\'eel. En revanche,
+les risques sont conceptuellement clairs : biais d'approximation, extrapolation hors du domaine d'apprentissage,
+et possible violation d'absence d'arbitrage. Une bonne pratique th\'eorique est d'imposer des \emph{contraintes}
+(par exemple convexit\'e en $K$) ou de projeter l'approximation sur un ensemble arbitrage-free, et de valider
+sur un jeu out-of-sample en contr\^olant (a) l'erreur de prix/vol, (b) la stabilit\'e des param\`etres obtenus,
+et (c) la robustesse \`a des perturbations de donn\'ees (stress, bid--ask, maturit\'es manquantes).
+
 
 \subsubsection{Mod\`eles avanc\'es : SABR et \'Equations de Volterra}
 
@@ -2330,9 +2633,18 @@ Les mod\`eles rough permettent de reproduire fid\`element :
   \item les d\'eformations fines de la surface de vol.
 \end{itemize}
 
-Les d\'erivations compl\`etes (repr\'esentation de Mandelbrot--Van Ness, construction Davies--Harte,
-kernels de Volterra, et liens avec les mod\`eles rough) sont pr\'esent\'ees en annexe.
+Les d\'etails de construction du mouvement brownien fractionnaire, des noyaux de Volterra et des sch\'emas de simulation
+peuvent \^etre rel\'egu\'es en annexes (ou \`a la litt\'erature) ; on se limite ici aux d\'efinitions, \`a l'intuition et aux implications
+pour la g\'eom\'etrie court terme du smile.
 
+
+\subsubsection{Lien avec le projet \emph{PaperTradingApp}}
+
+Le projet s'appuie sur ces briques pour articuler : (i) un pricing ``de r\'ef\'erence'' (Black--Scholes) qui sert de point de comparaison,
+(ii) des m\'ethodes num\'eriques (arbres, Monte Carlo, Fourier) n\'ecessaires d\`es que l'on traite des exotiques, des exercices anticip\'es
+ou des mod\`eles non r\'esolubles en forme ferm\'ee, et (iii) un continuum entre \emph{prix} et \emph{surface} via l'inversion en volatilité implicite.
+Le lien essentiel avec la plateforme est la capacit\'e \`a justifier le choix d'une m\'ethode (pr\'ecision, co\^ut, hypoth\`eses) et \`a contr\^oler
+les erreurs (discr\'etisation, troncature, instabilit\'e de calibration) de mani\`ere th\'eorique.
 
 \subsection{Hedging et Greeks}
 
@@ -2522,6 +2834,50 @@ d_{1,2}
 Cette dérivation illustre que la formule de Black--Scholes provient directement
 du principe fondamental : \emph{un portefeuille delta--hedgé ne doit pas permettre d’arbitrage}.
 
+\subsubsection{Couverture et d\'ecision s\'equentielle : erreurs, co\^uts et formulation MDP}
+
+\paragraph{Erreurs de couverture (discr\'etisation et risque de mod\`ele).}
+Dans Black--Scholes frictionless, une couverture continue en delta r\'eplique le payoff. En pratique, la couverture est
+\emph{discr\`ete} et le mod\`ele est \emph{approximatif}. L'erreur de couverture \`a maturit\'e peut se d\'efinir comme
+\[
+\varepsilon_T := V_T^{\text{couvert}} - \Phi(S_T),
+\]
+et s'interpr\`ete comme la partie non r\'epliqu\'ee (variance r\'ealis\'ee diff\'erente de la variance mod\`ele, sauts,
+volatilité stochastique, smile dynamics). Un message cl\'e est que l'exposition \`a la convexit\'e ($\Gamma$) rend la
+couverture sensible \`a la variation quadratique r\'eelle du sous-jacent.
+
+\paragraph{Smile dynamics et couverture multi-Greeks.}
+Hedger seulement le delta suppose implicitement que la dynamique de volatilité est ``int\'egr\'ee'' dans le mod\`ele.
+D\`es que l'on observe un smile/skew, la question de la dynamique du smile devient centrale (hypoth\`eses du type
+``sticky strike'' vs ``sticky delta''). Dans un cadre incomplet, une couverture plus riche vise \`a g\'erer des
+expositions $\Delta/\Gamma/\nu$ en combinant sous-jacent et options/liquidit\'es, au prix d'un risque r\'esiduel
+et d'une d\'ependance au mod\`ele.
+
+\paragraph{Co\^uts de transaction.}
+Les co\^uts (bid--ask, impact) rendent la couverture plus ``inertielle'' : un ajustement fr\'equent r\'eduit le risque
+mais augmente les co\^uts. Th\'eoriquement, cela se traduit par un compromis \`a optimiser, et par une modification de la
+valeur ``r\'epliquante'' (par exemple via des corrections effectives de volatilité dans certains cadres id\'ealis\'es).
+
+\paragraph{Formulation MDP du hedging.}
+On peut formaliser la couverture comme un \emph{Markov Decision Process} : l'\'etat $s_t$ r\'esume l'information utile
+(temps restant, spot, indicateurs de volatilité, position et Greeks), l'action $a_t$ d\'efinit l'ajustement de portefeuille,
+et la r\'ecompense p\'enalise simultan\'ement l'erreur et les co\^uts, par exemple sous la forme
+\[
+R_{t\to t+\Delta}(s_t,a_t) \;=\; \mathrm{PnL}_{t\to t+\Delta} \;-\; \text{co\^uts} \;-\; \lambda_{\mathrm{risk}}\,\text{risque}.
+\]
+Cette \'ecriture rend explicite le compromis \emph{risque/co\^ut} et la non-stationnarit\'e (changements de r\'egime, d\'eformation du smile).
+
+\paragraph{Ouverture RL et validation.}
+Des algorithmes de RL (Q-learning, DQN, PPO) peuvent alors approximer une politique de couverture. Au niveau th\'eorique, la convergence
+est bien comprise dans le cas tabulaire sous hypoth\`eses fortes ; avec approximation de fonctions, la stabilit\'e devient une question
+centrale (sur-apprentissage, d\'erives de distribution, non-stationnarit\'e). Une validation rigoureuse doit \^etre out-of-sample,
+inclure des stress tests (spot/vol/taux), et rapporter la sensibilit\'e aux co\^uts et \`a la qualit\'e des donn\'ees.
+
+\paragraph{Lien avec le projet \emph{PaperTradingApp}.}
+Cette formalisation relie directement : (i) les Greeks et erreurs de couverture, (ii) les contraintes de march\'e (co\^uts, liquidit\'e),
+et (iii) une boucle de d\'ecision s\'equentielle. Elle fournit un cadre conceptuel pour comparer une couverture ``r\`egle'' (delta/vega)
+\`a une couverture issue d'une politique optimis\'ee, sans pr\'esumer de r\'esultats empiriques.
+
 \subsection{Taux \& courbes de taux}
 
 \subsubsection{Taux z\'ero--coupon et courbe des taux}
@@ -2680,6 +3036,57 @@ flottant ou dérivés (IRS, cap/floor, swaption, CMS, etc.).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Param\'etrisation Nelson--Siegel : niveau, pente, courbure}
+
+\paragraph{Objectif.}
+Le bootstrapping fournit des facteurs $P(0,T_k)$ sur des maturit\'es discr\`etes. Pour interpoler et surtout \emph{extrapoler}
+de fa\c{c}on lisse et interpr\'etable, on utilise souvent des familles param\'etriques. Le mod\`ele de Nelson--Siegel (NS) est un standard
+car il d\'ecompose la courbe en composantes ``niveau/pente/courbure''.
+
+\paragraph{Forme (taux z\'ero).}
+Une \'ecriture courante du taux z\'ero continu $y(0,T)$ est :
+\[
+y(0,T)
+=
+\beta_0
+
++
+\beta_1\,
+\frac{1-\ee^{-T/\tau}}{T/\tau}
+
++
+\beta_2\,
+\left(
+\frac{1-\ee^{-T/\tau}}{T/\tau}
+- \ee^{-T/\tau}
+\right),
+\]
+o\`u $\tau>0$ contr\^ole la vitesse de d\'ecroissance des facteurs.
+
+\paragraph{Interpr\'etation.}
+\begin{itemize}
+  \item $\beta_0$ (\textbf{niveau}) gouverne le niveau de long terme (quand $T\to\infty$).
+  \item $\beta_1$ (\textbf{pente}) affecte surtout le court terme ; son effet d\'ecroit avec $T$.
+  \item $\beta_2$ (\textbf{courbure}) cr\'ee une bosse \`a maturit\'e interm\'ediaire, pilot\'ee par $\tau$.
+\end{itemize}
+La version Svensson ajoute un deuxi\`eme couple $(\beta_3,\tau_2)$ pour plus de flexibilit\'e.
+
+\paragraph{Calibration et limites.}
+La calibration se fait en minimisant une erreur entre prix observ\'es (ou taux) et ceux impliqu\'es par $P(0,T)$, avec pond\'erations
+refl\'etant liquidit\'e et maturit\'e. Les limites sont connues : (i) flexibilit\'e restreinte face \`a des courbes tr\`es non monotones,
+(ii) risque de produire des forwards instantan\'es non plausibles (par exemple fortement n\'egatifs) selon les param\`etres,
+(iii) d\'ependance \`a la convention de calibration (prix vs taux). Une v\'erification d'absence d'arbitrage (monotonie des $P(0,T)$,
+raisonnabilit\'e de $f(0,T)$) est indispensable.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Lien avec le projet \emph{PaperTradingApp}}
+
+La courbe de taux est un ingr\'edient transversal : elle intervient dans l'actualisation, dans les forwards et donc dans la d\'efinition
+de la moneyness et des variables de changement de num\'eraire. Dans le projet, elle est mobilis\'ee (au niveau conceptuel) pour garantir
+la coh\'erence ``prix $\leftrightarrow$ taux $\leftrightarrow$ forwards'' et pour \'eviter des incoh\'erences d'absence d'arbitrage li\'ees \`a une interpolation
+mal choisie. Elle sert aussi de base \`a des stress tests de taux et \`a des analyses de sensibilit\'e ($\rho_{\mathrm{IR}}$).
+
 \subsection{Forwards, Futures et Swaps}
 
 Les produits linéaires (forwards, futures, swaps) sont fondamentaux en finance
@@ -2762,6 +3169,14 @@ d’instruments plus complexes (swaption, cap/floor, CMS, etc.).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Lien avec le projet \emph{PaperTradingApp}}
+
+M\^eme dans un projet centr\'e options, ces instruments lin\'eaires structurent le \emph{portage} : ils clarifient les relations
+spot/forward, les conventions de taux et l'actualisation. Ils fournissent donc le cadre conceptuel pour : (i) d\'efinir une moneyness
+coh\'erente (via $F(t,T)$), (ii) relier les payoffs \`a des prix forward dans les formules, et (iii) proposer des stress tests
+sur les taux (et leur impact sur prix/Greeks) sans ambig\"uit\'e de convention.
+
+\iffalse % Hors p\'erim\`etre principal : section retir\'ee du rendu final
 \subsection{Cr\'edit}
 
 La valorisation des instruments de cr\'edit repose sur la notion de risque de
@@ -2864,7 +3279,8 @@ Les CDS sont essentiels pour :
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Ouverture : mod\`eles avanc\'es en finance quantitative}
+\fi
+\subsection{Mod\`eles de volatilit\'e avanc\'es : rough, sauts et filtrage}
 
 Cette section a pour objectif d’esquisser quelques directions modernes en finance
 quantitative, sans chercher \`a d\'evelopper les d\'erivations compl\`etes, qui sont
@@ -2902,7 +3318,7 @@ v_t =
 
 Ces mod\`eles permettent :
 \begin{itemize}
-  \item de capturer avec une grande pr\'ecision le skew de short maturity,
+  \item de reproduire un skew de court terme marqu\'e (stylized fact largement document\'e),
   \item de d\'ecrire une structure de corr\'elation temporelle cohérente,
   \item d’expliquer certains ph\'enom\`enes de la microstructure.
 \end{itemize}
@@ -2955,6 +3371,85 @@ Ces deux mod\`eles sont des outils incontournables pour reproduire des surfaces
 de volatilité de marché de façon flexible et stable.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Diffusions \`a sauts : Merton et Bates}
+
+\paragraph{Motivation.}
+Les smiles et wings de volatilité, en particulier \`a tr\`es courte maturit\'e, traduisent souvent des probabilit\'es
+de queues plus \'elev\'ees que celles induites par des diffusions continues. Une mani\`ere classique d'introduire
+des queues plus lourdes et des discontinuit\'es est d'ajouter un processus de sauts (compound Poisson).
+
+\paragraph{Mod\`ele de Merton (jump--diffusion).}
+Sous $\QQ$ et dans une convention \`a dividende continu $q$, on \'ecrit typiquement :
+\[
+\frac{\dd S_t}{S_{t^-}}
+
+=
+(r-q-\lambda\kappa_J)\,\dd t
++
+\sigma\,\dd W_t
++
+(J-1)\,\dd N_t,
+\]
+o\`u $N_t$ est un Poisson d'intensit\'e $\lambda$, $J>0$ le multiplicateur de saut, et
+$\kappa_J := \E[J-1]$ (sous $\QQ$) assure la correction de drift (martingalit\'e de $S_t\,\ee^{-\int_0^t (r_u-q_u)\dd u}$).
+Un choix standard est $\ln J \sim \mathcal{N}(\mu_J,\delta_J^2)$.
+
+\paragraph{Cons\'equence sur le pricing.}
+Le log-prix est somme d'une partie gaussienne et d'une partie compound Poisson ; la fonction caract\'eristique
+de $\ln S_T$ s'\'ecrit explicitement, ce qui rend les m\'ethodes de Fourier naturelles. Une repr\'esentation classique
+exprime aussi le prix comme une \emph{moyenne} (sur le nombre de sauts) de prix Black--Scholes \`a param\`etres ajust\'es,
+ce qui illustre l'impact des sauts sur la courbure des wings.
+
+\paragraph{Mod\`ele de Bates (Heston + sauts).}
+Le mod\`ele de Bates combine volatilité stochastique (Heston) et sauts :
+\[
+\frac{\dd S_t}{S_{t^-}}
+= (r-q-\lambda\kappa_J)\,\dd t + \sqrt{v_t}\,\dd W_t^{(1)} + (J-1)\,\dd N_t,
+\qquad
+\dd v_t = \kappa(\theta-v_t)\,\dd t + \xi\sqrt{v_t}\,\dd W_t^{(2)},
+\]
+avec $\mathrm{corr}(\dd W_t^{(1)},\dd W_t^{(2)})=\rho\,\dd t$.
+Intuitivement, $v_t$ explique la persistance de volatilité et le skew ``diffusif'', tandis que les sauts pilotent
+les queues et l'accentuation du smile \`a court terme.
+
+\paragraph{Calibration et limites.}
+La calibration vise \`a identifier $(\lambda,\mu_J,\delta_J)$ conjointement aux param\`etres de volatilité.
+En pratique, l'identifiabilit\'e est d\'elicate : certaines combinaisons de $(\xi,\rho,v_0)$ et de param\`etres de sauts
+peuvent produire des smiles proches. Il est donc naturel d'utiliser des pond\'erations (vega), des contraintes
+(bornes, conditions de positivité) et des diagnostics de stabilit\'e (sensibilit\'e, out-of-sample).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Filtrage : mod\`eles en espace d'\'etat et filtre de Kalman}
+
+\paragraph{Id\'ee.}
+De nombreuses quantit\'es pertinentes (volatilité instantan\'ee, variance latente, niveau de bruit) ne sont pas observables
+directement. Les \emph{mod\`eles en espace d'\'etat} s\'eparent une dynamique latente (\'etat) et une \'equation d'observation
+(mesures bruit\'ees), puis utilisent un filtre pour estimer l'\'etat conditionnellement aux observations.
+
+\paragraph{Cadre lin\'eaire gaussien.}
+Dans sa forme standard, on postule :
+\[
+x_{t+1} = A x_t + w_t,
+\qquad
+y_t = H x_t + v_t,
+\]
+o\`u $(w_t)$ et $(v_t)$ sont gaussiens centr\'es, de covariances $Q$ et $R$, ind\'ependants. Le \textbf{filtre de Kalman}
+fournit alors l'estimateur optimal (au sens des moindres carr\'es) de $x_t$ sachant $(y_0,\dots,y_t)$, avec une r\'ecurrence
+sur la moyenne conditionnelle et sa covariance.
+
+\paragraph{Extensions et limites.}
+Pour des dynamiques non lin\'eaires (volatilité stochastique, contraintes de positivité), on recourt \`a des extensions
+(EKF/UKF) ou \`a des filtres particulaires. Les limites principales viennent de la non-gaussianit\'e (queues, sauts),
+de la non-stationnarit\'e (r\'egimes), et du risque de mod\`ele : un filtre est un outil d'estimation conditionnelle,
+pas une preuve de validit\'e du mod\`ele.
+
+\paragraph{Lien avec le projet \emph{PaperTradingApp}.}
+Un filtrage de type Kalman s'interpr\`ete comme une brique th\'eorique d'estimation d'\'etats latents (variance/volatilité)
+et de lissage, utilisable pour : (i) produire des s\'eries de volatilité plus robustes que des estimateurs bruts,
+(ii) fournir des entr\'ees d'\'etat pour des analyses de r\'egimes ou des politiques de couverture, (iii) quantifier
+une incertitude d'estimation via la covariance filtr\'ee.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Perspectives}
 
 Les mod\`eles modernes combinent :
@@ -2968,17 +3463,24 @@ Les mod\`eles modernes combinent :
 
 La recherche actuelle explore des structures hybrides (Heston--Volterra,
 rough Heston, SABR--Volterra) et des méthodes numériques accélérées (FFT,
-hybrid schemes, neural SDE).
+hybrid schemes, quadratures rapides).
 
-Ces diff\'erentes directions permettent de construire des modèles capables de 
-capturer l’ensemble des effets observés sur le marché : skew dynamique,
-correlation smiles, effets de microstructure et mémoire longue.
+Ces diff\'erentes directions visent \`a construire des mod\`eles plus expressifs, susceptibles de mieux prendre en compte
+plusieurs effets empiriques : skew dynamique, d\'eformations fines de smile, et ph\'enom\`enes de m\'emoire.
 
 
 
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Lien avec le projet \emph{PaperTradingApp}}
+
+Cette section fournit le panorama des mod\`eles effectivement pertinents pour une plateforme d'options : (i) mod\`eles affines (Heston) pour
+leur tractabilit\'e via fonctions caract\'eristiques, (ii) mod\`eles \`a sauts (Merton/Bates) pour traiter des queues et de la dynamique court terme,
+(iii) mod\`eles \`a m\'emoire (Volterra/rough) pour la g\'eom\'etrie du smile \`a court terme, et (iv) outils d'estimation (Kalman) pour relier variables
+latentes et observations bruit\'ees. Le projet vise \`a comparer ces cadres, \`a discuter leurs hypoth\`eses et limites, et \`a articuler mod\`eles et
+surfaces de march\'e dans une logique de calibration et de gestion du risque.
+
 \subsection{Gestion du risque de portefeuille et allocation}
 
 La valorisation (\emph{pricing}) et la mod\'elisation de la volatilit\'e n'ont de sens op\'erationnel que si elles
@@ -3061,12 +3563,257 @@ lecture factorielle des risques : les grandes valeurs propres correspondent aux 
 \emph{eigen-portfolios} exploitent ces vecteurs propres pour construire des portefeuilles align\'es sur des facteurs
 ou, \`a l'inverse, moins expos\'es au facteur principal.
 
+\subsubsection{Lien avec le projet \emph{PaperTradingApp}}
+
+Le projet mobilise ces notions pour rendre \emph{mesurable} et \emph{attribuable} le risque : expositions brutes/nettes, PnL r\'ealis\'e vs latent,
+drawdowns, VaR/ES, et principes d'allocation (Markowitz, risk parity, d\'ecomposition factorielle). L'objectif est de relier les briques de pricing
+et de calibration \`a des d\'ecisions de portefeuille (taille de position, limites, r\'e\'equilibrage) dans un langage quantitatif coh\'erent.
+
+\subsection{R\'egimes et analytics de volatilit\'e}
+
+L'analyse de volatilité ne se limite pas \`a une surface implicite. Dans une perspective de gestion du risque et de
+d\'ecision, on s'int\'eresse \`a la \textbf{volatilité r\'ealis\'ee}, \`a des diagnostics de \textbf{retour \`a la moyenne},
+et \`a des mod\`eles de \textbf{r\'egimes} capables de capturer des changements de dynamique (calme/crise, compression/expansion de vol).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Volatilit\'e r\'ealis\'ee : d\'efinitions, annualisation, biais}
+
+\paragraph{D\'efinition (variance r\'ealis\'ee).}
+Soit une partition $t=t_0<\dots<t_n=t+\Delta$ et des rendements log
+$r_i=\ln(S_{t_i}/S_{t_{i-1}})$. La \emph{variance r\'ealis\'ee} sur $[t,t+\Delta]$ est
+\[
+\mathrm{RV}_{t,t+\Delta}=\sum_{i=1}^n r_i^2.
+\]
+Sous des hypoth\`eses de diffusion continue, $\mathrm{RV}$ converge (quand la maille tend vers $0$) vers la \emph{variation quadratique}
+du log-prix, et constitue un estimateur naturel de la variance int\'egr\'ee.
+
+\paragraph{Annualisation.}
+Une volatilité annualis\'ee (sur une fen\^etre) est souvent d\'efinie par $\widehat\sigma=\sqrt{\mathrm{RV}}\times\sqrt{A}$,
+o\`u $A$ d\'epend de la convention (nombre de jours de bourse, etc.). Le point cl\'e est que l'annualisation est une convention
+et doit \^etre coh\'erente avec les maturit\'es d'options et la courbe de taux.
+
+\paragraph{Biais et pi\`eges.}
+En pratique, des ph\'enom\`enes de microstructure (bid--ask bounce, non-synchronisme), des heures de cotation, et des sauts
+peuvent biaiser $\mathrm{RV}$. Le choix de la fr\'equence et de la fen\^etre r\'esulte d'un compromis biais/variance ; on peut
+compl\'eter par des estimateurs robustes (r\'ealis\'ee bipower, trimming) selon l'objectif.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Retour \`a la moyenne : diagnostics et interpr\'etation}
+
+\paragraph{Intuition.}
+De nombreux indicateurs de volatilité (implicite/realized) montrent une tendance \`a revenir vers un niveau ``normal'' \`a horizon
+de quelques semaines \`a quelques mois. Ce ph\'enom\`ene motive des dynamiques de type OU/CIR pour $v_t$ ou $\sigma_t$.
+
+\paragraph{R\'esultat cl\'e (OU discretis\'e).}
+Pour un processus d'Ornstein--Uhlenbeck $\dd x_t=\kappa(\theta-x_t)\dd t + \eta\,\dd W_t$, la discr\'etisation \`a pas $\Delta$ donne :
+\[
+x_{t+\Delta}-\theta = \ee^{-\kappa\Delta}(x_t-\theta) + \text{bruit}.
+\]
+On en d\'eduit une notion de \emph{demi-vie} $t_{1/2}=\ln 2/\kappa$ : horizon \`a partir duquel l'\'ecart \`a $\theta$ est divis\'e par deux en moyenne.
+
+\paragraph{Limites.}
+Les diagnostics de mean reversion sont sensibles \`a la non-stationnarit\'e, aux changements de r\'egime, et \`a la d\'efinition
+de la volatilité (r\'ealis\'ee, implicite, filtr\'ee). Une conclusion robuste exige des tests sur plusieurs horizons, et des stress
+sur les choix de fen\^etre et d'\'echantillonnage.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Cha\^ines de Markov de r\'egimes : matrice de transition et lecture probabiliste}
+
+\paragraph{D\'efinition.}
+On introduit une variable latente $Z_t\in\{1,\dots,m\}$ (r\'egime) telle que
+\[
+\PP(Z_{t+\Delta}=j \mid Z_t=i)=\Pi_{ij},
+\]
+o\`u $\Pi$ est une matrice de transition (lignes sommant \`a $1$). Conditionnellement au r\'egime, les observations (rendements, volatilité)
+suivent une loi param\'etr\'ee (par exemple gaussienne avec variance r\'egime-d\'ependante).
+
+\paragraph{R\'esultat cl\'e (stationnarit\'e).}
+Si la cha\^ine est ergodique, il existe une distribution stationnaire $\pi$ telle que $\pi^\top \Pi=\pi^\top$ ; elle fournit la proportion
+de temps de long terme pass\'ee dans chaque r\'egime (interpr\'etation probabiliste du ``climat'' de march\'e).
+
+\paragraph{Limites.}
+Les r\'egimes sont une \emph{discr\'etisation} : le choix de $m$ et de l'\'equation d'observation peut induire de l'instabilit\'e et de la
+sur-param\'etrisation. La validation doit inclure des tests hors \'echantillon, des contraintes d'interpr\'etabilit\'e (r\'egimes stables),
+et des analyses de sensibilit\'e aux donn\'ees.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Lien avec le projet \emph{PaperTradingApp}}
+
+Ces outils fournissent un langage commun pour : (i) contextualiser les smiles (r\'egimes de stress vs de compression),
+(ii) moduler des limites de risque (VaR/ES, drawdowns) en fonction d'un r\'egime, (iii) proposer des diagnostics de mean reversion sur la
+volatilité r\'ealis\'ee/implicite, et (iv) d\'efinir des \'etats synth\'etiques utilisables dans une formulation MDP de la couverture
+(\`a d\'efaut d'hypoth\`eses stationnaires fortes).
+
 %==========================================================
-%                 PARTIE 2 : MACHINE LEARNING
+%                 PARTIE 2 : APPRENTISSAGE \& D\'ECISION
 %==========================================================
-\section{Machine Learning}
+\section{Apprentissage supervis\'e sous non-stationnarit\'e : validation, leakage et robustesse}
+
+Cette partie introduit des notions de \emph{m\'ethodologie quantitative} issues de l'apprentissage supervis\'e, particuli\`erement utiles
+lorsque les donn\'ees sont structur\'ees dans le temps et potentiellement \emph{non-stationnaires}. Dans un contexte de pr\'ediction en production
+ou de comp\'etition structur\'ee en p\'eriodes (\emph{eras}), les enjeux ne sont pas uniquement la performance moyenne, mais la \textbf{stabilit\'e}
+du signal et la \textbf{pr\'evention des biais} (en particulier le \emph{leakage}).
+
+\subsection{Cadre : apprentissage supervis\'e et g\'en\'eralisation}
+
+\subsubsection{D\'efinitions}
+On observe un ensemble annot\'e $\{(x_i,y_i)\}_{i=1}^n$ o\`u $x_i\in\mathcal{X}$ (vecteur de variables explicatives) et $y_i\in\mathcal{Y}$ (cible).
+Un mod\`ele param\'etr\'e $f_\theta:\mathcal{X}\to\mathcal{Y}$ est ajust\'e en minimisant une perte empirique
+\[
+\widehat\theta\in\argmin_{\theta}\ \frac{1}{n}\sum_{i=1}^n \ell\bigl(y_i,f_\theta(x_i)\bigr).
+\]
+La question centrale est la \textbf{g\'en\'eralisation} : les performances sur des donn\'ees futures (ou hors \'echantillon) seront-elles coh\'erentes
+avec celles observ\'ees sur l'\'echantillon d'apprentissage ?
+
+\subsubsection{Intuition : biais--variance et non-stationnarit\'e}
+Le compromis biais--variance fournit une lecture utile : un mod\`ele trop flexible sur-ajuste le bruit (variance forte), un mod\`ele trop rigide
+manque le signal (biais fort). La non-stationnarit\'e (changement de r\'egime, d\'erive de distribution) complique encore l'analyse : la distribution
+des $(x,y)$ peut varier avec le temps, ce qui rend les estimations i.i.d.\ (\"echantillon al\'eatoire) inad\'equates.
+
+\subsection{Eras, r\'egimes et \emph{leakage} : risques sp\'ecifiques}
+
+\subsubsection{D\'efinition d'une structure en eras}
+On suppose que les observations sont regroup\'ees par p\'eriodes $e\in\{1,\dots,E\}$ (``eras''), chaque era correspondant \`a un bloc temporel
+ou \`a un sous-ensemble relativement homog\`ene. On note $\mathcal{I}_e$ l'ensemble des indices appartenant \`a l'era $e$.
+Cette structure impose une \'evaluation \emph{par p\'eriode} : un mod\`ele utile doit produire un signal \textbf{r\'ep\'etable} au fil des eras.
+
+\subsubsection{Leakage : d\'efinition et cons\'equences}
+On appelle \emph{leakage} toute utilisation, directe ou indirecte, d'une information indisponible au moment r\'eel de la pr\'ediction
+(information ``future'', fuite entre train et validation, pr\'etraitements calcul\'es sur un ensemble trop large).
+
+\paragraph{Cons\'equence.}
+Le leakage conduit \`a une performance hors \'echantillon artificiellement optimiste : l'\'evaluation mesure alors une capacit\'e \`a exploiter une fuite,
+pas \`a g\'en\'eraliser. Dans les donn\'ees temporelles, le leakage est souvent plus subtil qu'un simple doublon : il peut provenir d'un choix de split,
+d'une s\'election de variables, ou d'une normalisation utilisant des statistiques calcul\'ees ``dans le futur''.
+
+\subsubsection{R\'esultat cl\'e (principe de validation temporelle)}
+Pour obtenir une estimation non biais\'ee de performance, la validation doit respecter la causalit\'e : les ensembles d'entra\^{i}nement doivent \^etre
+ant\'erieurs (ou, \`a minima, disjoints et sans information partag\'ee) par rapport aux ensembles de validation. Ce principe se formalise par des d\'ecoupages
+par blocs temporels :
+\begin{itemize}
+  \item \textbf{fen\^etre croissante (expanding window)} : on entra\^{i}ne sur le pass\'e, on valide sur un bloc futur ;
+  \item \textbf{fen\^etre glissante (rolling window)} : on entra\^{i}ne sur une fen\^etre r\'ecente, on valide juste apr\`es.
+\end{itemize}
+Le choix refl\`ete un compromis : stabilit\'e (beaucoup de donn\'ees) versus pertinence (r\'ecence du r\'egime).
+
+\paragraph{Holdout final et risque d'optimisation.}
+En pratique, on r\'eserve un dernier bloc temporel (\emph{holdout}) comme \textbf{test final}, consult\'e le plus tard possible.
+Le consulter it\'erativement pour choisir variables ou hyperparam\`etres le transforme en ensemble de d\'eveloppement et r\'eintroduit un biais
+(\"optimisation sur le test\"). Une validation prudente multiplie les fen\^etres et contr\^ole l'\'ecart entre performances sur CV temporelle et sur holdout.
+
+\subsection{M\'etriques de performance par era : corr\'elation et stabilit\'e}
+
+\subsubsection{Corr\'elation de Pearson par era}
+Une m\'etrique fr\'equente dans les probl\`emes de pr\'ediction ``faible signal'' est la corr\'elation entre pr\'ediction $\widehat y$ et cible $y$,
+calcul\'ee \emph{au sein de chaque era}. Pour une era $e$ de taille $n_e$, avec $\{\widehat y_i\}_{i\in\mathcal{I}_e}$ et $\{y_i\}_{i\in\mathcal{I}_e}$,
+\[
+\rho_e(\widehat y,y)=
+\frac{\sum_{i\in\mathcal{I}_e}(\widehat y_i-\overline{\widehat y}_e)(y_i-\overline y_e)}
+{\sqrt{\sum_{i\in\mathcal{I}_e}(\widehat y_i-\overline{\widehat y}_e)^2}\sqrt{\sum_{i\in\mathcal{I}_e}(y_i-\overline y_e)^2}}.
+\]
+On obtient une s\'erie $\{\rho_e\}_{e=1}^E$, dont l'analyse renseigne sur la stabilit\'e inter-eras.
+
+\subsubsection{Agr\'egation : moyenne, dispersion, ratio type Sharpe}
+On r\'esume souvent la s\'erie par sa moyenne et sa dispersion :
+\[
+\mu = \frac{1}{E}\sum_{e=1}^E\rho_e,
+\qquad
+\sigma = \sqrt{\frac{1}{E-1}\sum_{e=1}^E(\rho_e-\mu)^2},
+\qquad
+\mathrm{SR}_{\rho}=\frac{\mu}{\sigma}.
+\]
+Le ratio $\mathrm{SR}_{\rho}$ (analogue \`a un Sharpe) mesure un compromis ``niveau'' versus ``stabilit\'e'' : un signal faible mais r\'egulier peut \^etre
+pr\'ef\'erable \`a un signal moyen plus \'elev\'e mais instable.
+
+\subsubsection{Limites}
+La corr\'elation de Pearson est sensible aux non-lin\'earit\'es et aux queues ; elle peut varier fortement si la taille $n_e$ est faible.
+Une validation robuste doit donc (i) analyser les distributions de $\rho_e$ (asym\'etries, outliers), (ii) r\'ep\'eter sur plusieurs p\'eriodes,
+et (iii) compl\'eter par des tests de stress (changements de r\'egime, d\'erive de features).
+
+\subsection{R\'eduction de dimension et s\'election de variables}
+
+\subsubsection{Filtre de valeurs manquantes}
+Pour une variable $f$, on note le ratio de valeurs manquantes
+\[
+\mathrm{NA}(f)=\frac{\#\{i: x_{i,f}\ \text{manquant}\}}{n}.
+\]
+Un filtre $\mathrm{NA}(f)\le \tau$ est un contr\^ole simple visant \`a supprimer des variables trop instables.
+
+\subsubsection{Score univari\'e par association \`a la cible}
+Une s\'election univari\'ee consiste \`a calculer un score $s(f)$ (corr\'elation, information mutuelle approxim\'ee, etc.) et \`a retenir les top-$K$
+variables. L'intuition est de limiter le bruit et le co\^ut de calcul en conservant des variables portant un signal ``individuel''.
+
+\paragraph{Limites.}
+Un filtre univari\'e ignore les interactions et la redondance entre variables ; il peut aussi sur-ajuster si le score est calcul\'e en ``regardant''
+la validation (leakage de s\'election). Une pratique robuste consiste \`a figer la s\'election sur une p\'eriode d'entra\^{i}nement, ou \`a la r\'e\'evaluer
+par fold de validation temporelle.
+
+\subsection{Mod\`eles et r\'egularisation (vue th\'eorique)}
+
+\subsubsection{Gradient boosting sur arbres (GBDT)}
+Le gradient boosting construit un mod\`ele additif
+\[
+\widehat y(x)=\sum_{t=1}^T \eta\, f_t(x),
+\]
+o\`u chaque $f_t$ est un arbre de d\'ecision (faible apprenant) et $\eta$ un pas d'apprentissage. L'id\'ee est d'ajouter it\'erativement des arbres
+qui corrigent les erreurs des pr\'edictions pr\'ec\'edentes (descente de gradient dans l'espace des fonctions).
+La complexit\'e est contr\^ol\'ee par des param\`etres de profondeur/feuilles, des \'echantillonnages (lignes/variables) et de la r\'egularisation.
+
+\paragraph{Arr\^et anticip\'e (early stopping).}
+L'arr\^et anticip\'e consiste \`a interrompre l'apprentissage lorsque la performance sur validation n'am\'eliore plus : il agit comme une forme
+de r\'egularisation (on \'evite d'ajouter des composantes qui n'apprennent que le bruit) et r\'eduit le co\^ut de calcul.
+Dans un cadre structur\'e en eras, il est coh\'erent de surveiller une m\'etrique align\'ee avec l'objectif de stabilit\'e (par exemple une corr\'elation agr\'eg\'ee par eras).
+
+\subsubsection{Ridge (r\'egression lin\'eaire r\'egularis\'ee)}
+La Ridge minimise
+\[
+\min_{w\in\R^p}\ \frac{1}{n}\|y-Xw\|_2^2 + \alpha\|w\|_2^2,
+\]
+avec $\alpha\ge 0$. Elle est utile comme baseline stable, et comme ``meta-mod\`ele'' pour combiner des pr\'edictions (stacking) lorsque la validation est stricte.
+
+\subsubsection{R\'eseaux (MLP) : principe et risques}
+Un perceptron multi-couches (MLP) approxime une fonction non-lin\'eaire par compositions affines + activations. Il est expressif, mais sensible \`a la
+normalisation, \`a la r\'egularisation, et au risque de sur-apprentissage si le protocole temporel n'est pas rigoureux.
+
+\subsection{Ensembles, OOF et post-traitements monotones}
+
+\subsubsection{Ensembles : r\'eduction de variance}
+L'agr\'egation de plusieurs mod\`eles ``semblables'' (initialisations diff\'erentes, sous-\'echantillonnages) par moyenne
+\[
+\widehat y^{ens}(x)=\frac{1}{M}\sum_{m=1}^M \widehat y^{(m)}(x)
+\]
+r\'eduit typiquement la variance et stabilise la performance par era, au prix d'un co\^ut de calcul plus \'elev\'e.
+
+\subsubsection{OOF et stacking : prudence m\'ethodologique}
+Le stacking consiste \`a apprendre un combinateur sur des pr\'edictions \emph{out-of-fold} (OOF), produites par des mod\`eles de base sur des donn\'ees non vues
+lors de leur entra\^{i}nement. Le point critique est que le meta-mod\`ele doit \^etre valid\'e avec le m\^eme soin temporel, faute de quoi il sur-ajuste
+la validation.
+
+\subsubsection{Ranking (transform\'ee par CDF empirique)}
+Un post-traitement fr\'equent est la transformation par rang (CDF empirique) : si $r_i$ est le rang de $\widehat y_i$ parmi $N$ observations,
+\[
+\widehat y_i'=\frac{r_i}{N}.
+\]
+Cette transformation impose une distribution marginale uniforme (stabilit\'e d'\'echelle). Elle pr\'eserve l'ordre (donc la corr\'elation de rang),
+mais modifie en g\'en\'eral la corr\'elation lin\'eaire ; son int\'er\^et est surtout de limiter des effets de d\'erive de distribution et d'outliers.
+
+\subsubsection{Contr\^oles de coh\'erence (sanity checks)}
+Avant d'utiliser un mod\`ele pour produire des d\'ecisions, des contr\^oles de coh\'erence limitent les erreurs grossi\`eres : (i) absence de valeurs manquantes
+dans les sorties, (ii) coh\'erence des dimensions (m\^emes variables qu'en entra\^{i}nement), (iii) d\'etection d'effondrement de distribution (scores constants,
+valeurs extr\^emes), et (iv) tra\c{c}abilit\'e des versions de donn\'ees et d'hypoth\`eses.
+
+\subsection{Lien avec le projet \emph{PaperTradingApp}}
+
+Ces notions apparaissent dans le projet \`a deux niveaux : (i) comme \textbf{m\'ethodologie} de validation pour toute brique ``apprenante''
+(surrogates de pricing/calibration, classification de r\'egimes, diagnostics de volatilité), et (ii) comme \textbf{garde-fous} contre l'illusion de
+performance (leakage temporel, sur-ajustement d'hyperparam\`etres, d\'erive de donn\'ees). Elles compl\`etent les chapitres de finance quantitative :
+un bon mod\`ele de smile ou de r\'egime n'est pas seulement expressif, il doit aussi \^etre \emph{robuste} et \emph{test\'e} hors \'echantillon selon
+un protocole coh\'erent avec la temporalit\'e des donn\'ees de march\'e.
+
+\section{D\'ecision s\'equentielle : MDP et apprentissage par renforcement}
 
 %----------------------------------------------------------
+\iffalse % Hors p\'erim\`etre : ML g\'en\'eral (conserv\'e hors rendu final)
 \subsection{Supervised Learning}
 
 Le \emph{supervised learning} consiste à apprendre une fonction
@@ -3563,12 +4310,13 @@ Ce sont les modèles sous-jacents à DALL·E 2, Stable Diffusion, Imagen.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\fi
 \subsection{Reinforcement Learning}
 
 Le Reinforcement Learning (RL) étudie l’interaction entre un agent et un
 environnement.  
 À chaque étape, l’agent observe un état $s_t$, choisit une action $a_t$, reçoit
-une récompense $r_t$, et l’environnement évolue selon une dynamique inconnue.
+une récompense $\mathcal{R}_t$, et l’environnement évolue selon une dynamique inconnue.
 L’objectif est de maximiser la récompense cumulée.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -3577,15 +4325,15 @@ L’objectif est de maximiser la récompense cumulée.
 Un processus de décision est modélisé par un MDP
 (Markov Decision Process) :
 \[
-(\mathcal{S},\mathcal{A},P,r,\gamma),
+(\mathcal{S},\mathcal{A},\mathcal{P},\mathcal{R},\gamma_{\mathrm{RL}}),
 \]
 où
 \begin{itemize}
   \item $\mathcal{S}$ : espace des états,
   \item $\mathcal{A}$ : espace des actions,
-  \item $P(s'|s,a)$ : dynamique (transition),
-  \item $r(s,a)$ : récompense immédiate,
-  \item $\gamma \in (0,1)$ : facteur d’escompte.
+  \item $\mathcal{P}(s'|s,a)$ : dynamique (transition),
+  \item $\mathcal{R}(s,a)$ : récompense immédiate,
+  \item $\gamma_{\mathrm{RL}} \in (0,1)$ : facteur d’escompte (sans lien avec les taux $r_t$).
 \end{itemize}
 
 La politique $\pi(a|s)$ définit le comportement de l’agent.
@@ -3597,8 +4345,8 @@ La \textbf{valeur d’une politique} $\pi$ est :
 \[
 V^\pi(s) = 
 \mathbb{E}_\pi\!\left[
-\sum_{t=0}^\infty \gamma^t r(s_t,a_t)
-\,\bigg|\, s_0 = s
+ \sum_{t=0}^\infty \gamma_{\mathrm{RL}}^t \mathcal{R}(s_t,a_t)
+ \,\bigg|\, s_0 = s
 \right].
 \]
 
@@ -3607,8 +4355,8 @@ La \textbf{valeur d’état-action} :
 Q^\pi(s,a)
 =
 \mathbb{E}_\pi\!\left[
-\sum_{t=0}^\infty \gamma^t r(s_t,a_t)
-\,\bigg|\, s_0=s, a_0=a
+ \sum_{t=0}^\infty \gamma_{\mathrm{RL}}^t \mathcal{R}(s_t,a_t)
+ \,\bigg|\, s_0=s, a_0=a
 \right].
 \]
 
@@ -3617,15 +4365,15 @@ Les équations de Bellman caractérisent ces valeurs :
 V^\pi(s)
 = 
 \sum_{a} \pi(a|s)
-\sum_{s'} P(s'|s,a)\bigl(
-r(s,a) + \gamma V^\pi(s')
-\bigr),
+\sum_{s'} \mathcal{P}(s'|s,a)\bigl(
+ \mathcal{R}(s,a) + \gamma_{\mathrm{RL}} V^\pi(s')
+ \bigr),
 \]
 \[
 Q^\pi(s,a)
 =
-r(s,a) + \gamma 
-\sum_{s'} P(s'|s,a)
+ \mathcal{R}(s,a) + \gamma_{\mathrm{RL}} 
+\sum_{s'} \mathcal{P}(s'|s,a)
 \sum_{a'} \pi(a'|s') Q^\pi(s',a').
 \]
 
@@ -3639,7 +4387,7 @@ V^\*(s) = \max_{a} Q^\*(s,a).
 
 Le MC estime la valeur par \emph{retours échantillonnés} :
 \[
-G_t = \sum_{k=0}^\infty \gamma^k r_{t+k}.
+G_t = \sum_{k=0}^\infty \gamma_{\mathrm{RL}}^k \mathcal{R}_{t+k}.
 \]
 
 Mise à jour :
@@ -3660,17 +4408,17 @@ Méthodes :
 Les méthodes TD mettent à jour la valeur à partir d'une seule transition :
 \[
 V(s_t) \leftarrow V(s_t)
-+ \alpha \bigl( r_t + \gamma V(s_{t+1}) - V(s_t) \bigr).
++ \alpha \bigl( \mathcal{R}_t + \gamma_{\mathrm{RL}} V(s_{t+1}) - V(s_t) \bigr).
 \]
 
 \paragraph{TD(0).}
 \[
-\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t).
+\delta_t = \mathcal{R}_t + \gamma_{\mathrm{RL}} V(s_{t+1}) - V(s_t).
 \]
 
 \paragraph{TD($n$)-step.}
 \[
-G_t^{(n)} = \sum_{k=0}^{n-1} \gamma^k r_{t+k} + \gamma^n V(s_{t+n}).
+G_t^{(n)} = \sum_{k=0}^{n-1} \gamma_{\mathrm{RL}}^k \mathcal{R}_{t+k} + \gamma_{\mathrm{RL}}^n V(s_{t+n}).
 \]
 
 \paragraph{TD($\lambda$).}
@@ -3686,8 +4434,8 @@ Q(s_t,a_t)
 Q(s_t,a_t)
 + \alpha
 \bigl(
-r_t 
-+ \gamma Q(s_{t+1},a_{t+1})
+\mathcal{R}_t 
++ \gamma_{\mathrm{RL}} Q(s_{t+1},a_{t+1})
 - Q(s_t,a_t)
 \bigr).
 \]
@@ -3699,7 +4447,7 @@ Q(s_t,a_t)
 Q(s_t,a_t)
 +
 \alpha\left(
-r_t + \gamma \sum_{a'} \pi(a'|s_{t+1}) Q(s_{t+1},a')
+\mathcal{R}_t + \gamma_{\mathrm{RL}} \sum_{a'} \pi(a'|s_{t+1}) Q(s_{t+1},a')
 - Q(s_t,a_t)
 \right).
 \]
@@ -3711,8 +4459,8 @@ Q(s_t,a_t)
 Q(s_t,a_t)
 +
 \alpha\bigl(
-r_t 
-+ \gamma \max_{a'} Q(s_{t+1},a')
+\mathcal{R}_t 
++ \gamma_{\mathrm{RL}} \max_{a'} Q(s_{t+1},a')
 - Q(s_t,a_t)
 \bigr).
 \]
@@ -3741,7 +4489,7 @@ Mise à jour TD :
 \theta \leftarrow \theta 
 + \alpha\, \delta_t \, \nabla_\theta V(s_t;\theta),
 \qquad
-\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t).
+\delta_t = \mathcal{R}_t + \gamma_{\mathrm{RL}} V(s_{t+1}) - V(s_t).
 \]
 
 Bases :
@@ -3785,13 +4533,14 @@ L^{\mathrm{PPO}}(\theta)
 =
 \mathbb{E}\Big[
 \min\big(
-r_t(\theta)\,\hat A_t,\,
-\mathrm{clip}(r_t(\theta),1-\epsilon,1+\epsilon)\hat A_t
+\omega_t(\theta)\,\hat A_t,\,
+\mathrm{clip}(\omega_t(\theta),1-\epsilon,1+\epsilon)\hat A_t
 \big)
 \Big].
 \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\iffalse % Hors p\'erim\`etre : non requis (et trop ``proc\'edural'') pour ce m\'emoire
 \subsubsection{Algorithmes évolutionnaires}
 
 Les algorithmes évolutionnaires optimisent une population de politiques :
@@ -3802,6 +4551,7 @@ Les algorithmes évolutionnaires optimisent une population de politiques :
 
 Ils sont utilisés en Deep RL pour explorer de grands espaces de politiques
 et éviter les minima locaux.
+\fi
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \paragraph{Synthèse.}
@@ -3812,12 +4562,87 @@ Le RL combine :
   \item apprentissage d’actions optimales (SARSA, Q-Learning),
   \item optimisation directe de politiques (Policy Gradient, Actor--Critic, PPO),
   \item approximation de fonctions (Deep RL),
-  \item méthodes globales (algorithmes évolutionnaires).
+  \item compromis exploration/exploitation et stabilit\'e d'apprentissage.
 \end{itemize}
 
 Ces techniques sont essentielles pour les stratégies séquentielles,
 l’optimisation de portefeuilles, la gestion dynamique du risque,
 et les modèles décisionnels non paramétriques.
+
+\section{M\'ethodologie ``plateforme'' (sans technique) : responsabilit\'es, tra\c{c}abilit\'e et validation}
+
+Ce chapitre d\'ecrit une \emph{m\'ethodologie d'ing\'enierie quantitative} : comment organiser un projet de valorisation,
+de calibration et de gestion du risque de fa\c{c}on coh\'erente, audit\-able et r\'ep\'etable, sans entrer dans des choix
+techniques. L'enjeu est de rendre explicites les hypoth\`eses et les limites, et de proposer des crit\`eres de validation
+adapt\'es \`a des donn\'ees de march\'e imparfaites et \`a des mod\`eles incomplets.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{D\'efinitions : ``briques'' quantitatives et responsabilit\'es}
+
+\paragraph{Briques conceptuelles.}
+On distingue classiquement : (i) \textbf{donn\'ees} (quotes, courbes, conventions), (ii) \textbf{mod\`eles} (dynamique sous-jacente, param\`etres),
+(iii) \textbf{m\'ethodes} (PDE, arbres, Monte Carlo, Fourier), (iv) \textbf{d\'ecision} (couverture, allocation, limites), (v) \textbf{reporting}
+(PnL, expositions, diagnostics). Une s\'eparation claire de ces responsabilit\'es (analogue \`a une architecture conceptuelle type MVC)
+limite les couplages implicites : un changement de convention (taux, dividendes) ou de mod\`ele (Heston $\rightarrow$ Bates) doit avoir un impact
+localis\'e et tra\c{c}able.
+
+\paragraph{Hypoth\`ese et gouvernance.}
+Une \emph{hypoth\`ese} est un objet explicite : choix de num\'eraire, choix de mesure, conventions de dividendes, param\'etrisation d'une surface,
+fonction de perte de calibration, et r\`egles de gestion du risque. La gouvernance consiste \`a documenter ces hypoth\`eses, \`a contr\^oler leur
+coh\'erence (absence d'arbitrage statique), et \`a en mesurer la sensibilit\'e.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Intuition : tra\c{c}abilit\'e et reproductibilit\'e comme r\'eduction du risque de mod\`ele}
+
+Dans un environnement non stationnaire, la question n'est pas seulement ``quel est le bon mod\`ele ?'', mais aussi
+``quelles sont les cons\'equences d'un choix d'hypoth\`ese ?''. La tra\c{c}abilit\'e (donn\'ees utilis\'ees, param\`etres calibr\'es,
+pond\'erations, contraintes) permet d'expliquer un PnL, de diagnostiquer une instabilit\'e (donn\'ees vs mod\`ele), et d'\'eviter des erreurs
+de type ``m\^emes entr\'ees, sorties diff\'erentes''. Elle est donc une composante directe de la ma\^{i}trise du risque de mod\`ele.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{R\'esultat cl\'e : analyse de sensibilit\'e et stress tests}
+
+Un sch\'ema minimal formalise l'impact des incertitudes :
+\[
+\text{Sorties} = g(\text{donn\'ees},\text{hypoth\`eses}),
+\]
+et, \`a premier ordre, une perturbation $(\delta x,\delta\theta)$ induit
+\[
+\delta g \approx \nabla_x g \cdot \delta x + \nabla_\theta g \cdot \delta\theta.
+\]
+Cette d\'ecomposition justifie th\'eoriquement : (i) les \textbf{analyses de sensibilit\'e} (Greeks, sensibilit\'e \`a la courbe, \`a la surface),
+et (ii) les \textbf{stress tests} (sc\'enarios sur spot/vol/taux, d\'eformation de smile, widening de bid--ask). Elle rappelle aussi que
+la stabilit\'e d'une calibration n'est pas une question d'optimisation seulement, mais de conditionnement du probl\`eme inverse.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Crit\`eres de validation : out-of-sample, stabilit\'e, coh\'erence}
+
+\paragraph{Validation out-of-sample.}
+Pour un mod\`ele de volatilité, la validation consiste \`a tester la capacit\'e \`a reproduire des quotes hors \'echantillon (autres dates,
+autres maturit\'es) et \`a stabiliser des param\`etres. Pour une surface interpol\'ee, on v\'erifie l'absence d'arbitrage (butterfly/calendar)
+après interpolation et sous stress.
+
+\paragraph{Validation de couverture.}
+Sans r\'esultats empiriques fournis, on formalise la validation par un protocole : simuler/observer un sous-jacent, appliquer une strat\'egie
+de couverture \`a fr\'equence donn\'ee, et \'etudier la distribution de l'erreur de couverture (moyenne, variance, queues) sous co\^uts de transaction.
+
+\paragraph{Contr\^oles et coh\'erence.}
+Exemples de contr\^oles conceptuels : respect des parit\'es (call--put), bornes et monotonicit\'es, coh\'erence taux/forward,
+stabilit\'e des param\`etres \`a l'\'echelle journali\`ere, et coh\'erence entre vol r\'ealis\'ee (historique) et vol implicite (march\'e).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Limites}
+
+Une ``plateforme'' ne supprime pas l'incertitude : elle l'organise. La non-stationnarit\'e, la raret\'e d'observations extr\^emes, et les effets de microstructure
+limitent la port\'ee des validations. L'objectif est donc la robustesse (sensibilit\'e contr\^ol\'ee), l'explicabilit\'e (attribution, diagnostics) et
+la discipline de mod\'elisation (hypoth\`eses document\'ees, stress tests syst\'ematiques).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Lien avec le projet \emph{PaperTradingApp}}
+
+Le projet s'inscrit dans cette logique : articuler pricing, calibration, courbe de taux, risque et couverture dans un cadre coh\'erent, en rendant explicites
+les hypoth\`eses (conventions, mod\`eles, surfaces) et en proposant des crit\`eres de validation (out-of-sample, stress, sensibilit\'e) compatibles avec un
+contexte de paper trading o\`u l'objectif est l'apprentissage et la ma\^{i}trise explicative des briques quantitatives.
 
 
 
@@ -3960,22 +4785,21 @@ Plusieurs directions naturelles s’ouvrent à la suite de ce travail :
 
 \begin{itemize}
   \item \textbf{Qualit\'e des donn\'ees et microstructure} :
-        mod\'eliser explicitement bid--ask, slippage, latences et synchronisation spot/options, et mesurer l'impact sur
-        calibration, backtests et risque.
+        mod\'eliser explicitement bid--ask, co\^uts de transaction et non-synchronisme spot/options, et mesurer l'impact sur
+        surfaces, calibration, backtests et risque.
   \item \textbf{Volatilité rugueuse et SDE de Volterra} : 
         extension non markovienne des mod\`eles de variance, offrant une 
-        calibration très fidèle aux smiles courts et une meilleure modélisation
-        de la mémoire longue.
+        flexibilit\'e accrue pour ajuster des smiles courts (selon les donn\'ees et la pond\'eration),
+        et une mod\'elisation explicite de la m\'emoire longue.
   \item \textbf{Modèles multi-facteurs et modélisation affine avancée} :
         dynamiques jointes des variances, taux et spreads, incluant corr\'elations
         stochastiques.
-  \item \textbf{Méthodes numériques haute performance} : 
-        Monte Carlo GPU, solveurs FFT optimisés, simulateurs rough vol,
-        schémas hybrides et méthodes quantiques naissantes.
-  \item \textbf{Apprentissage profond pour le pricing} :
-        réseaux neuraux pour l’approximation de surfaces de vol, 
-        solveurs de PDE par réseaux PINN, autoencoders génératifs pour 
-        l’apprentissage de distributions de prix.
+  \item \textbf{Acc\'el\'eration num\'erique et stabilit\'e} :
+        r\'eduction de variance, sch\'emas de discr\'etisation stables, FFT (Carr--Madan) et approximations markoviennes
+        des mod\`eles \`a m\'emoire.
+  \item \textbf{Surrogates pour le pricing et la calibration} :
+        approximations supervis\'ees de cartes $(K,T,\theta)\mapsto C$ ou $\sigma_{\mathrm{imp}}$, utilisables pour initialiser
+        des calibrations et acc\'el\'erer des diagnostics, sous contraintes arbitrage-free.
   \item \textbf{Reinforcement Learning pour la gestion dynamique du risque} :
         agents apprenant des stratégies de hedging optimales 
         (delta-gamma-vega), optimisation de portefeuilles, ou exécution optimale.
@@ -3997,19 +4821,164 @@ Cette synthèse met en évidence l’interconnexion entre :
 
 L’objectif est de fournir une vision cohérente et moderne des outils quantitatifs
 utilisables en finance de marché.  
-Les annexes rassemblent les dérivations complètes (Heston, SABR, Volterra, fBM)
-pour servir de base à des travaux plus avancés.
+Les annexes rassemblent des compl\'ements (Heston, SABR, Rough Heston, m\'ethodes Fourier/PDE) pour servir de base \`a des travaux plus avanc\'es.
 
 
 %==========================================================
 %                 PARTIE 5 : BIBLIOGRAPHIE
 %==========================================================
-\section{Bibliographie et ressources}
+\section{Bibliographie comment\'ee (ouvrages et articles)}
 
-Cette bibliographie regroupe les ouvrages, articles et ressources vidéos
-mobilisés dans le cadre de ce document. Elle est organisée par thématique pour
-faciliter les références croisées entre finance quantitative, machine learning,
-deep learning, reinforcement learning et mathématiques appliquées.
+Cette bibliographie est \emph{align\'ee avec le contenu du m\'emoire}. Chaque r\'ef\'erence est accompagn\'ee d'un bref commentaire indiquant
+ce qu'elle apporte (cadre th\'eorique, mod\`ele, m\'ethode) et \`a quels chapitres elle se rattache. Elle n'a pas vocation \`a \^etre exhaustive.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Absence d'arbitrage, mesures martingales, calcul stochastique}
+
+\begin{description}[style=nextline,leftmargin=2.8cm]
+  \item[\textbf{Björk, T. (2009).}] \emph{Arbitrage Theory in Continuous Time}.\\
+  R\'ef\'erence structurante sur l'absence d'arbitrage, les changements de num\'eraire et les mesures martingales (cadre du pricing risque--neutre).
+
+  \item[\textbf{Delbaen, F., Schachermayer, W. (2006).}] \emph{The Mathematics of Arbitrage}.\\
+  Traitement approfondi du th\'eor\`eme fondamental de l'asset pricing (NFLVR) et de ses hypoth\`eses techniques (chapitre A).
+
+  \item[\textbf{Shreve, S. (2004).}] \emph{Stochastic Calculus for Finance II}.\\
+  D\'eveloppe It\^o, Girsanov, Feynman--Kac et les PDE de pricing ; utile pour relier dynamique sous-jacente et valorisation (chapitre C).
+\end{description}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Options, pricing et m\'ethodes num\'eriques (arbres, MC, Fourier)}
+
+\begin{description}[style=nextline,leftmargin=2.8cm]
+  \item[\textbf{Hull, J. (2022).}] \emph{Options, Futures, and Other Derivatives}.\\
+  Panorama des produits, parit\'es, bornes, et introduction aux pricers (BS, arbres, MC) (chapitres B--D, H).
+
+  \item[\textbf{Cox, J., Ross, S., Rubinstein, M. (1979).}] \emph{Option Pricing: A Simplified Approach}.\\
+  Article fondateur des arbres binomiaux CRR et de leur logique risque--neutre (chapitre D).
+
+  \item[\textbf{Glasserman, P. (2004).}] \emph{Monte Carlo Methods in Financial Engineering}.\\
+  Ouvrage de r\'ef\'erence pour estimateurs, r\'eduction de variance et Greeks Monte Carlo (chapitre D).
+
+  \item[\textbf{Longstaff, F., Schwartz, E. (2001).}] \emph{Valuing American Options by Simulation}.\\
+  M\'ethode LSMC : r\'egression pour l'exercice anticip\'e (am\'ericaines) ; utile pour comprendre l'approximation et ses biais (chapitre D).
+
+  \item[\textbf{Carr, P., Madan, D. (1999).}] \emph{Option Valuation Using the Fast Fourier Transform}.\\
+  Cadre Carr--Madan : damping, transform\'ee et FFT pour prix europ\'eens \`a partir de $\phi_T$ (chapitres D, F ; annexe F).
+
+  \item[\textbf{Lewis, A. (2001).}] \emph{A Simple Option Formula for General Jump-Diffusion and Other Exponential L\'evy Processes}.\\
+  Repr\'esentations Fourier g\'en\'erales en pr\'esence de sauts ; utile pour Merton/Bates (chapitre F).
+\end{description}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Volatilit\'e implicite, surfaces et arbitrage statique}
+
+\begin{description}[style=nextline,leftmargin=2.8cm]
+  \item[\textbf{Gatheral, J. (2006).}] \emph{The Volatility Surface: A Practitioner's Guide}.\\
+  R\'ef\'erence sur smile/skew, param\'etrisations (moneyness), et contraintes d'arbitrage statique (chapitre E).
+
+  \item[\textbf{Breeden, D., Litzenberger, R. (1978).}] \emph{Prices of State-Contingent Claims Implicit in Option Prices}.\\
+  R\'esultat central liant $\partial_{KK}C$ \`a la densit\'e risque--neutre (chapitre E).
+
+  \item[\textbf{Gatheral, J., Jacquier, A. (2014).}] \emph{Arbitrage-free SVI volatility surfaces}.\\
+  Conditions d'absence d'arbitrage (butterfly/calendar) pour SVI ; utile si l'on veut une surface param\'etrique robuste (chapitre E, annexes propos\'ees).
+\end{description}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Mod\`eles de volatilit\'e : Heston, SABR, rough, sauts}
+
+\begin{description}[style=nextline,leftmargin=2.8cm]
+  \item[\textbf{Heston, S. (1993).}] \emph{A Closed-Form Solution for Options with Stochastic Volatility}.\\
+  Mod\`ele affine de r\'ef\'erence ; fonction caract\'eristique et pricing semi-analytique (chapitre F ; annexe A).
+
+  \item[\textbf{Hagan, P., Kumar, D., Lesniewski, A., Woodward, D. (2002).}] \emph{Managing Smile Risk}.\\
+  Formule asymptotique SABR (Hagan) et interpr\'etation des param\`etres ; standard de calibration (chapitre F ; annexe D).
+
+  \item[\textbf{Merton, R. (1976).}] \emph{Option pricing when underlying stock returns are discontinuous}.\\
+  Jump--diffusion de Merton : motivation (queues) et pricing (chapitre F).
+
+  \item[\textbf{Bates, D. (1996).}] \emph{Jumps and stochastic volatility: exchange rate processes implicit in option prices}.\\
+  Combinaison volatilité stochastique + sauts (Bates) ; utile pour smiles courts et wings (chapitre F).
+
+  \item[\textbf{Gatheral, J., Jaisson, T., Rosenbaum, M. (2018).}] \emph{Volatility is rough}.\\
+  Motivation rough volatility (Hurst $<1/2$) et cons\'equences sur le skew court terme (chapitre F).
+
+  \item[\textbf{Bayer, C., Friz, P., Gatheral, J. (2016).}] \emph{Pricing under rough volatility}.\\
+  Questions num\'eriques et mod\'elisation associ\'ees \`a la rough volatility (chapitre F, annexe E).
+
+  \item[\textbf{El Euch, O., Rosenbaum, M. (2019).}] \emph{The characteristic function of rough Heston models}.\\
+  Rough Heston : cadre Volterra, fonction caract\'eristique et pricing (chapitre F ; annexe E).
+\end{description}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Courbe de taux et param\'etrisations}
+
+\begin{description}[style=nextline,leftmargin=2.8cm]
+  \item[\textbf{Brigo, D., Mercurio, F. (2006).}] \emph{Interest Rate Models: Theory and Practice}.\\
+  Cadre complet pour taux, discounting, bootstrapping et mod\`eles de taux (chapitre H).
+
+  \item[\textbf{Nelson, C., Siegel, A. (1987).}] \emph{Parsimonious Modeling of Yield Curves}.\\
+  Mod\`ele Nelson--Siegel : d\'ecomposition niveau/pente/courbure (chapitre H).
+
+  \item[\textbf{Svensson, L. (1994).}] \emph{Estimating and Interpreting Forward Interest Rates}.\\
+  Extension Svensson (plus flexible) et lecture \'economique des composantes (chapitre H).
+\end{description}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Gestion du risque, VaR/ES, allocation}
+
+\begin{description}[style=nextline,leftmargin=2.8cm]
+  \item[\textbf{Artzner, P., Delbaen, F., Eber, J.-M., Heath, D. (1999).}] \emph{Coherent Measures of Risk}.\\
+  Cadre axiomatique de coh\'erence (subadditivit\'e, etc.) ; utile pour discuter VaR vs ES (chapitre I).
+
+  \item[\textbf{McNeil, A., Frey, R., Embrechts, P. (2015).}] \emph{Quantitative Risk Management}.\\
+  R\'ef\'erence sur mod\'elisation des queues, VaR/ES, backtesting et d\'ependance (chapitre I).
+
+  \item[\textbf{Markowitz, H. (1952).}] \emph{Portfolio Selection}.\\
+  Texte fondateur de la moyenne--variance et de la fronti\`ere efficiente (chapitre I).
+
+  \item[\textbf{Ledoit, O., Wolf, M. (2004).}] \emph{A well-conditioned estimator for large-dimensional covariance matrices}.\\
+  Shrinkage de covariance : r\'egularisation essentielle pour stabiliser Markowitz et risk parity (chapitre I).
+\end{description}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Filtrage, r\'egimes et d\'ecision s\'equentielle (MDP/RL)}
+
+\begin{description}[style=nextline,leftmargin=2.8cm]
+  \item[\textbf{Kalman, R. (1960).}] \emph{A New Approach to Linear Filtering and Prediction Problems}.\\
+  Filtre de Kalman : estimation r\'ecursive d'\'etats latents en cadre lin\'eaire gaussien (chapitre F).
+
+  \item[\textbf{Durbin, J., Koopman, S. (2012).}] \emph{Time Series Analysis by State Space Methods}.\\
+  Approche moderne \'etat-espace, lissage (RTS), estimation par vraisemblance (chapitres F, K).
+
+  \item[\textbf{Hamilton, J. (1989).}] \emph{A new approach to the economic analysis of nonstationary time series and the business cycle}.\\
+  Mod\`eles de r\'egimes (Markov switching) ; utile pour la lecture probabiliste des phases de march\'e (chapitre K).
+
+  \item[\textbf{Sutton, R., Barto, A. (2018).}] \emph{Reinforcement Learning: An Introduction}.\\
+  R\'ef\'erence g\'en\'erale sur MDP, Bellman, MC/TD et Q-learning (chapitre J).
+
+  \item[\textbf{Bertsekas, D. (2012).}] \emph{Dynamic Programming and Optimal Control}.\\
+  Point de vue contr\^ole/DP compl\'ementaire, utile pour relier couverture et optimisation (chapitre J).
+
+  \item[\textbf{Mnih, V. et al. (2015).}] \emph{Human-level control through deep reinforcement learning}.\\
+  DQN : approximation de $Q$ par r\'eseau et stabilisation (experience replay, targets) (chapitre J).
+
+  \item[\textbf{Schulman, J. et al. (2017).}] \emph{Proximal Policy Optimization Algorithms}.\\
+  PPO : stabilisation des policy gradients via clipping (chapitre J).
+\end{description}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Pistes d'annexes (au-del\`a de celles incluses)}
+
+\begin{itemize}
+  \item \textbf{Arbitrage de surface} : d\'erivation d\'etaill\'ee des contraintes butterfly/calendar et conditions SVI arbitrage-free.
+  \item \textbf{Bates} : fonction caract\'eristique et formule Carr--Madan (mise en parall\`ele avec Heston).
+  \item \textbf{Kalman} : r\'ecursions filtre/lisseur (RTS) et log-vraisemblance pour calibration de param\`etres latents.
+  \item \textbf{R\'egimes} : estimation EM d'un Markov switching gaussien, filtres (probabilit\'es a posteriori) et limites.
+  \item \textbf{Risque} : backtesting VaR/ES (tests de couverture) et sensibilit\'e \`a la non-stationnarit\'e.
+  \item \textbf{Couverture} : d\'erivation d'une approximation de l'erreur de delta-hedging en fonction de $\Gamma$ et de la variance r\'ealis\'ee.
+\end{itemize}
+
+\iffalse % Ancienne bibliographie (ressources g\'en\'eralistes) conserv\'ee hors rendu final
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Finance quantitative}
@@ -4205,6 +5174,7 @@ Chaîne YouTube \emph{Reinforcement Learning — by the Book} :
 \end{itemize}
 
 
+\fi
 %==========================================================
 %                 ANNEXES
 %==========================================================
@@ -4663,96 +5633,43 @@ Tout est maintenant en fonction de
 \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{3. Proc\'edure num\'erique en pratique}
+\subsection*{3. Principes num\'eriques (sans pseudo-code)}
 
-\paragraph{Choix num\'eriques.}  
-On fixe :
-\begin{itemize}
-  \item un damping $\alpha>0$ (souvent $1$ ou $1.5$) ;
-  \item une borne sup\'erieure $V_{\max}>0$ pour l’int\'egrale en $v$ ;
-  \item un pas $\Delta v = V_{\max}/N$ avec $N$ suffisamment grand (par ex. $N=2^{10}$ ou $2^{12}$).
-\end{itemize}
-
-\paragraph{Grille en $v$.}  
-On prend une grille
+\paragraph{Rappel de la formule.}
+Dans le cadre de Carr--Madan, on utilise un call damp\'e et l'on \'evalue une int\'egrale oscillante sur $v\in\R_+$ :
 \[
-v_n = n\,\Delta v,\qquad n=1,\dots,N.
+C(K,T)
+=
+\frac{\ee^{-\alpha k}}{\pi}\int_0^{+\infty}\Re\!\left(\ee^{-\ii v k}\,\psi_T(v)\right)\dd v,
+\qquad
+k=\ln K,
+\]
+o\`u $\psi_T(v)$ d\'epend de la fonction caract\'eristique $\varphi_T(u)$ du log-prix \`a maturit\'e $T$ \'evalu\'ee en
+\[
+u(v)=v-\ii(\alpha+1).
 \]
 
-\paragraph{Calcul de l’int\'egrande.}  
-Pour chaque $n=1,\dots,N$ :
-\begin{enumerate}
-  \item Poser
-  \[
-  u_n := v_n - i(\alpha+1).
-  \]
-  \item Calculer
-  \[
-  d_n = d(u_n) = \sqrt{(\rho\xi i u_n - \kappa)^2 + \xi^2(u_n^2+i u_n)},
-  \]
-  \[
-  g_n = g(u_n) = 
-        \frac{\kappa - \rho\xi i u_n - d_n}
-             {\kappa - \rho\xi i u_n + d_n}.
-  \]
-  \item Calculer
-  \[
-  D_n = D(T,u_n)
-      = \frac{\kappa - \rho\xi i u_n - d_n}{\xi^2}
-        \frac{1 - e^{-d_n T}}{1 - g_n e^{-d_n T}},
-  \]
-  \[
-  C_n = C(T,u_n)
-      = i u_n r T
-      + \frac{\kappa\theta}{\xi^2}
-        \left[
-          (\kappa - \rho\xi i u_n - d_n)T
-          - 2\ln\!\left(\frac{1 - g_n e^{-d_n T}}{1 - g_n}\right)
-        \right].
-  \]
-  \item En d\'eduire la fonction caract\'eristique
-  \[
-  \varphi_T(u_n) = \exp\big(C_n + D_n v_0 + i u_n \ln S_0\big).
-  \]
-  \item Calculer
-  \[
-  \psi_T(v_n)
-  = \frac{e^{-rT}}{(\alpha+iv_n)(\alpha+1+iv_n)}\,\varphi_T(u_n).
-  \]
-  \item Calculer l’int\'egrande r\'eelle
-  \[
-  f_n := \Re\big( e^{-i v_n k}\,\psi_T(v_n) \big).
-  \]
-\end{enumerate}
+\paragraph{Choix du damping et int\'egrabilit\'e.}
+Le param\`etre $\alpha>0$ assure l'int\'egrabilit\'e de la transform\'ee (contr\^ole des queues en $K$). Le choix est un compromis :
+un $\alpha$ trop faible peut conduire \`a une int\'egrale mal conditionn\'ee ; un $\alpha$ trop grand amplifie certaines erreurs num\'eriques.
 
-\paragraph{Quadrature (r\`egle des trap\`ezes).}
-On approche l’int\'egrale par
-\[
-\int_0^{V_{\max}} \Re\big(e^{-ivk}\psi_T(v)\big)\,dv
-\;\approx\;
-\sum_{n=1}^{N} w_n f_n\,\Delta v,
-\]
-avec les poids
-\[
-w_1 = w_N = \tfrac12,\qquad w_n=1\ \text{pour}\ 2\le n\le N-1.
-\]
+\paragraph{Troncature, discr\'etisation et diagnostics.}
+Num\'eriquement, l'int\'egrale est tronqu\'ee \`a $[0,V_{\max}]$ et approch\'ee par quadrature sur une grille $v_n=n\,\Delta v$.
+Les erreurs proviennent (i) de la troncature (choix de $V_{\max}$), (ii) de la discr\'etisation ($\Delta v$), et (iii) de l'oscillation.
+Une validation th\'eorique consiste \`a v\'erifier la stabilit\'e du prix lorsque l'on augmente $V_{\max}$ et que l'on raffine $\Delta v$,
+et \`a croiser avec une m\'ethode ind\'ependante (Monte Carlo ou PDE) sur quelques points de grille.
 
-\paragraph{Prix final.}
-Le prix approximatif de la call est
-\[
-\boxed{\displaystyle
-C(K,T) \approx
-\frac{e^{-\alpha k}}{\pi}
-\sum_{n=1}^N w_n f_n\,\Delta v.
-}
-\]
+\paragraph{Branche complexe et stabilit\'e.}
+Dans Heston (et Bates), l'\'evaluation de $\varphi_T(u)$ requiert des racines carr\'ees et logarithmes complexes. Le choix de branche
+et la continuit\'e en $u$ conditionnent la stabilit\'e num\'erique ; en pratique, on impose une convention coh\'erente sur la racine
+et l'on surveille les discontinuit\'es.
 
-Si l’on veut des prix pour une grille de strikes $K_j=e^{k_j}$, on r\'ep\`ete
-ce calcul pour chaque $k_j$ (ou on passe \`a la version FFT de Carr--Madan
-avec grille uniforme en $k$).
+\paragraph{Version FFT.}
+La version FFT de Carr--Madan s'appuie sur une grille uniforme en fr\'equence $v$ et une grille uniforme en log-strike $k$,
+avec une relation de type $\Delta v\,\Delta k = 2\pi/N$. Elle permet d'obtenir un ensemble de prix sur une grille de strikes en un seul
+calcul, au prix d'effets d'aliasing et de fen\^etrage \`a contr\^oler (choix du domaine et des pas).
 
-
-
+\iffalse % Annexes B--C d\'etaillent des sch\'emas num\'eriques ; retir\'ees pour respecter ``z\'ero pseudo-code''
 \subsection*{Annexe B - Mouvement brownien fractionnaire (Davies--Harte)}
 \addcontentsline{toc}{section}{Annexe B - fBM et Rough Volatility}
 
@@ -6132,6 +7049,7 @@ se branche dans la construction de la variance et du prix.
 
 
 
+\fi
 \subsection*{Annexe D - Mod\`ele SABR (expansion asymptotique)}
 \addcontentsline{toc}{section}{Annexe D - Mod\`ele SABR}
 
@@ -6337,16 +7255,11 @@ utilise les Riccati fractionnaires ci-dessus.
 
 La simulation directe du rough Heston est coûteuse car la convolution Volterra
 est de complexité naïve $\mathcal{O}(n^2)$.  
-Bayer, Friz et Gatheral (2016) proposent le \emph{Hybrid scheme} :
-
-\begin{itemize}
-  \item séparation du noyau en partie singulière + partie régulière,
-  \item simulation exacte du fBM par Davies--Harte,
-  \item approximation rapide de la convolution via FFT,
-  \item simulation forward du log--prix via Euler--Maruyama.
-\end{itemize}
-
-Ce schéma permet des simulations rapides et stables du rough Heston.
+Bayer, Friz et Gatheral (2016) proposent une approche \emph{hybride} qui combine
+une d\'ecomposition du noyau (partie singuli\`ere vs r\'eguli\`ere) et une acc\'el\'eration des convolutions,
+afin de r\'eduire le co\^ut de calcul sur une grille. Le point essentiel (au niveau th\'eorique) est la gestion
+de la non-markovianit\'e : l'\'etat d\'epend d'un historique, ce qui impose des sch\'emas sp\'ecialis\'es pour obtenir
+des trajectoires utilisables en pricing/greeks.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection*{E.7. Calibration}
@@ -6368,9 +7281,12 @@ où $\theta = (H,\eta,\kappa,\theta,\xi,\rho,v_0)$.
 Le paramètre clé est le Hurst $H$ :
 
 \begin{itemize}
-  \item $H<0.5$ $\Rightarrow$ skew de court terme très réaliste,  
-  \item le modèle Rough Heston capture toute la géométrie empirique du smile,
-  \item calibration souvent supérieure à Heston classique sur toute maturité.
+  \item $H<0.5$ est la signature ``rough'' : il accentue la g\'eom\'etrie court terme du smile (motivation empirique).
+  \item La structure Volterra augmente l'expressivit\'e par rapport \`a Heston classique, au prix d'une calibration
+        et d'une validation plus d\'elicates (instabilit\'e, sur-ajustement possible).
+  \item Sans donn\'ees fournies ici, une comparaison ``Rough Heston vs Heston'' doit \^etre pos\'ee comme un protocole :
+        calibration in-sample sur une date, puis test out-of-sample sur d'autres dates/maturit\'es, avec contr\^oles
+        de stabilit\'e des param\`etres et de violation d'arbitrage statique.
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -6383,8 +7299,10 @@ Le Rough Heston combine :
   \item réalisme empirique, notamment sur le skew court terme.
 \end{itemize}
 
-Il constitue aujourd’hui l’un des modèles les plus avancés pour le pricing
-d’options equity et la modélisation de surfaces de volatilité.
+Il constitue un cadre avanc\'e pour le pricing d'options equity et la mod\'elisation de surfaces de volatilit\'e.
+
+Plus g\'en\'eralement, c'est un cadre avanc\'e (structure affine + m\'emoire) dont la pertinence pratique doit \^etre
+\'evalu\'ee par des diagnostics de calibration et de couverture, en tenant compte des co\^uts et du risque de mod\`ele.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section*{Annexe F — M\'ethodes num\'eriques (FFT, Crank--Nicolson)}
@@ -6470,5 +7388,49 @@ caract\'eristique explicite (Heston, Merton, Variance Gamma, etc.).
         d’options en un seul appel de Fourier, particulièrement bien adaptées aux
         mod\`eles de type affine.
 \end{itemize}
+
+\section*{Annexe G --- Projet annexe : pipeline de pr\'ediction tabulaire structur\'e par eras (cas Numerai)}
+\addcontentsline{toc}{section}{Annexe G --- Projet annexe : pipeline Numerai}
+
+\subsection*{Objectif et positionnement}
+Cette annexe pr\'esente, au niveau conceptuel (sans code), un \emph{pipeline} de pr\'ediction tabulaire structur\'e par p\'eriodes (``eras'') tel
+qu'on en rencontre dans certains tournois de pr\'evision (cas Numerai). L'int\'er\^et est m\'ethodologique : (i) g\'erer une non-stationnarit\'e
+explicite, (ii) \'eviter le \emph{leakage} temporel, et (iii) privil\'egier la stabilit\'e du signal plut\^ot qu'une performance moyenne illusoire.
+
+\subsection*{Donn\'ees : entra\^{i}nement vs pr\'ediction}
+On dispose conceptuellement de deux ensembles :
+\begin{itemize}
+  \item un jeu d'\textbf{entra\^{i}nement} contenant des variables explicatives $x$ et une cible $y$ ;
+  \item un jeu \textbf{``live''} contenant les variables $x$ \`a pr\'edire (sans $y$).
+\end{itemize}
+Les observations sont regroup\'ees en eras $e=1,\dots,E$, permettant une \'evaluation et une validation \emph{par blocs temporels}.
+
+\subsection*{Cha\^{i}ne end-to-end (vue macro)}
+Le pipeline peut \^etre r\'esum\'e par les \'etapes suivantes :
+\begin{enumerate}[leftmargin=*, itemsep=3pt]
+  \item \textbf{Contr\^oles de coh\'erence} : variables disponibles, valeurs manquantes, d\'erive grossi\`ere de distribution.
+  \item \textbf{R\'eduction de dimension} : filtre de valeurs manquantes puis s\'election (par score) des variables les plus informatives.
+  \item \textbf{D\'ecoupage temporel} : validation par blocs d'eras (rolling/expanding) et r\'eservation d'un holdout final.
+  \item \textbf{Entra\^{i}nement} : ajustement d'un mod\`ele (ex.\ GBDT) sur chaque split, avec r\'egularisation et arr\^et anticip\'e.
+  \item \textbf{Pr\'edictions hors-fold (OOF)} : construction de pr\'edictions sur les parties non vues pour estimer la performance hors \'echantillon.
+  \item \textbf{\'Evaluation} : calcul d'une m\'etrique par era (ex.\ corr\'elation), puis agr\'egation (moyenne, dispersion, ratio type Sharpe).
+  \item \textbf{Ensembles} : agr\'egation de plusieurs mod\`eles (moyenne) et, si justifi\'e, combinaison via meta-mod\`ele (stacking) sous validation stricte.
+  \item \textbf{Post-traitement} : transformation monotone (ranking) pour stabiliser l'\'echelle et limiter l'impact d'outliers.
+  \item \textbf{Production} : g\'en\'eration des pr\'edictions sur le jeu live dans le format standard attendu par la plateforme.
+\end{enumerate}
+
+\subsection*{Choix m\'ethodologiques : justification et limites}
+\begin{itemize}
+  \item \textbf{S\'election univari\'ee (score)} : efficace pour ma\^{i}triser le bruit et la dimension, mais ignore interactions ; elle doit \^etre compatible avec la validation temporelle (sinon leakage).
+  \item \textbf{M\'etrique par era} : la stabilit\'e inter-eras est centrale en non-stationnarit\'e ; une moyenne seule peut masquer des inversions de signal.
+  \item \textbf{Ensembles} : r\'eduisent la variance et l'instabilit\'e, au prix d'un co\^ut de calcul accru.
+  \item \textbf{Ranking} : stabilise la distribution des scores ; il ne cr\'ee pas de signal et doit \^etre valid\'e (effet possible sur corr\'elation lin\'eaire).
+\end{itemize}
+
+\subsection*{Lien avec le m\'emoire}
+Ce projet annexe illustre les principes d\'evelopp\'es au chapitre sur l'apprentissage supervis\'e sous non-stationnarit\'e
+(\emph{validation temporelle, leakage, m\'etriques par p\'eriode, ensembles et post-traitements monotones}). Dans le contexte de
+\emph{PaperTradingApp}, ces principes cadrent la validation de briques apprenantes (surrogates, r\'egimes, diagnostics) et compl\`etent les exigences
+de tra\c{c}abilit\'e et de gouvernance des hypoth\`eses discut\'ees dans la partie m\'ethodologie.
 
 \end{document}
