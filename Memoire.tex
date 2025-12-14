@@ -13,6 +13,10 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,calc}
 \usepackage{url}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
 
 \geometry{margin=2.3cm}
 \setstretch{1.15}
@@ -27,8 +31,8 @@
 
 %================= Titre ======================
 \title{\vspace{-2cm}%
-    \textbf{Finance de March\'e, Mod\'elisation Stochastique et Machine Learning}\\[0.3cm]
-    \large Dossier de synth\`ese et projets appliqu\'es
+    \textbf{PaperTradingApp : Finance de march\'e, mod\'elisation de la volatilit\'e et gestion du risque}\\[0.3cm]
+    \large M\'emoire de synth\`ese --- notions th\'eoriques et mise en perspective
 }
 \author{Pr\'enom Nom}
 \date{\today}
@@ -40,20 +44,29 @@
     \centering
     \vspace*{2cm}
     {\Large Programme / \'Ecole}\\[0.7cm]
-    {\huge \bfseries Finance Quantitative \& Machine Learning\\[0.3cm]
-    Dossier de synth\`ese}\\[2cm]
+    {\huge \bfseries PaperTradingApp\\[0.3cm]
+    Plateforme de paper trading d'options : synth\`ese th\'eorique}\\[2cm]
     {\large Pr\'enom Nom}\\[0.5cm]
     {\large Ann\'ee universitaire 20XX--20XX}\\[3cm]
 
     \vfill
     \begin{flushleft}
-    \textbf{Résumé :}\\[0.2cm]
-    Ce document pr\'esente une synth\`ese structur\'ee de notions de finance de
-    march\'e, de calcul stochastique, de mod\'elisation de la volatilité, de 
-    finance de taux, de cr\'edit, ainsi que des principaux concepts de Machine 
-    Learning (supervis\'e, non supervis\'e, deep learning, reinforcement learning).
-    Il s’appuie sur des r\'esultats th\'eoriques rigoureux et des projets
-    appliqu\'es (sandbox de trading d’options, pipeline Numerai, Reverse Heston).
+    \textbf{R\'esum\'e :}\\[0.2cm]
+    Ce m\'emoire pr\'esente une synth\`ese structur\'ee des notions th\'eoriques mobilis\'ees
+    par une plateforme de \emph{paper trading} d'options. Il couvre :
+    \begin{itemize}
+      \item les produits d\'eriv\'es (options vanilles et exotiques) et leurs profils de risque ;
+      \item le pricing (Black--Scholes, arbres, Monte Carlo, m\'ethodes de Fourier) et les Greeks ;
+      \item la volatilit\'e implicite, les surfaces de volatilit\'e et la calibration de mod\`eles
+            (Heston, SABR, mod\`eles \`a m\'emoire de type Volterra/rough, diffusions \`a sauts) ;
+      \item la construction de courbes de taux (facteurs d'actualisation, forwards, bootstrapping,
+            param\'etrisation Nelson--Siegel) ;
+      \item la gestion du risque et du portefeuille (PnL, drawdowns, VaR/ES, allocation) ;
+      \item l'analyse de r\'egimes de volatilit\'e (vol r\'ealis\'ee, mean reversion, cha\^ines de Markov),
+            et une ouverture sur des approches d'apprentissage (surrogates, couverture sous forme MDP).
+    \end{itemize}
+    L'objectif est que le lecteur puisse constater une ma\^{i}trise explicative de chaque notion,
+    ainsi qu'une capacit\'e \`a les articuler dans un cadre coh\'erent d'ing\'enierie quantitative.
     \end{flushleft}
 
     \vfill
@@ -67,36 +80,73 @@
 \section*{Introduction g\'en\'erale}
 \addcontentsline{toc}{section}{Introduction g\'en\'erale}
 
-La finance de march\'e moderne repose sur trois piliers principaux : les 
-\emph{mod\`eles stochastiques} (mouvements browniens, EDS, volatilité locale 
-ou stochastique), les \emph{produits} (options vanilles, exotiques, dérivés de 
-taux, produits de cr\'edit), et les \emph{m\'ethodes num\'eriques} (Monte Carlo, 
-PDE, transformées de Fourier).
+La finance de march\'e moderne repose sur trois piliers principaux : les \emph{produits}
+(options vanilles et exotiques, instruments de taux), les \emph{mod\`eles} (processus stochastiques,
+mesure risque--neutre, volatilit\'e locale/stochastique/rough), et les \emph{m\'ethodes num\'eriques}
+(arbres, PDE, Monte Carlo, transform\'ees de Fourier).
 
-Parallèlement, le \emph{Machine Learning} fournit un ensemble d’outils 
-algorithmiques permettant de traiter des volumes de données importants, 
-d’extraire des facteurs latents et d’apprendre des stratégies de décision 
-optimales. Ces techniques sont aujourd’hui au cœur de la recherche appliquée 
-en finance de march\'e : pr\'ediction de signaux, calibration non param\'etrique,
-approximation de surfaces de volatilité, optimisation de portefeuilles et 
-Reinforcement Learning pour le hedging.
+Parall\`element, les m\'ethodes d'apprentissage (\emph{supervised learning}, r\'eduction dimensionnelle,
+apprentissage par renforcement) apportent des outils pour la calibration, l'approximation de surfaces,
+l'identification de r\'egimes et la d\'ecision s\'equentielle (par exemple pour la couverture sous co\^uts
+de transaction).
 
 Ce dossier a un double objectif :
 \begin{itemize}
-  \item exposer de mani\`ere structurée les notions fondamentales de finance 
-        quantitative et de Machine Learning,
-  \item illustrer leur mise en œuvre au travers de projets concrets.
+  \item exposer de mani\`ere structur\'ee les notions fondamentales mobilis\'ees par le projet ;
+  \item relier ces notions \`a un cas d'usage coh\'erent : une plateforme de paper trading d'options.
 \end{itemize}
 
 \bigskip
 
-Dans ce qui suit, la \textbf{Partie 1} est consacrée à la finance de march\'e 
-(pricing, courbes de taux, cr\'edit, mod\`eles avancés).  
-La \textbf{Partie 2} d\'eveloppe les concepts de Machine Learning.  
-La \textbf{Partie 3} pr\'esente des projets appliqu\'es.  
-La \textbf{Partie 4} fournit une conclusion et des pistes d’ouverture.  
-Enfin, la \textbf{Partie 5} rassemble la bibliographie et les ressources associées.
+Dans ce qui suit, la \textbf{Partie 1} d\'eveloppe les fondements de finance quantitative utiles au projet
+(pricing, volatilit\'e, couverture, courbes de taux, calibration). La \textbf{Partie 2} pr\'esente les notions
+d'apprentissage pertinentes pour la calibration/surrogates et la d\'ecision s\'equentielle. La \textbf{Partie 3}
+fait la synth\`ese du projet \emph{PaperTradingApp} sous la forme d'une cartographie des modules et des notions,
+afin de rendre explicite le lien entre th\'eorie et objectifs. La \textbf{Partie 4} conclut et ouvre sur des
+extensions naturelles. Enfin, la \textbf{Partie 5} rassemble la bibliographie et des ressources.
 
+\newpage
+
+%================= Cartographie du projet ======
+\section*{Cartographie du projet PaperTradingApp}
+\addcontentsline{toc}{section}{Cartographie du projet PaperTradingApp}
+
+\subsection*{Positionnement}
+Ce m\'emoire est structur\'e comme une \emph{preuve de compr\'ehension} : pour chaque fonctionnalit\'e majeure de la
+plateforme, on identifie les notions th\'eoriques sous-jacentes et on explique comment elles s'articulent.
+L'objectif n'est pas de d\'etailler une impl\'ementation, mais de pr\'esenter un cadre conceptuel rigoureux et
+coh\'erent.
+
+\subsection*{Correspondance ``modules \texorpdfstring{$\leftrightarrow$}{<->} notions''}
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+\textbf{Module (onglet)} & \textbf{Notions th\'eoriques mobilis\'ees} \\
+\midrule
+Options & Payoffs, parit\'es, smile/skew, vol implicite, Greeks, pricing (BS, arbres, MC, Fourier), exotiques. \\
+Calibration avanc\'ee & Probl\`eme inverse, fonctions de perte, contraintes, identifiabilit\'e, r\'egularisation,
+surfaces de vol, mod\`eles affines (Heston), SABR, mod\`eles \`a m\'emoire (Volterra/rough), diffusions \`a sauts,
+surrogates par apprentissage. \\
+Yield Curve & Z\'ero-coupons, facteurs d'actualisation, taux forwards, bootstrapping, interpolation/extrapolation,
+param\'etrisations (Nelson--Siegel), coh\'erence absence d'arbitrage. \\
+Hedging Systems & Couverture delta/gamma/vega, erreurs de couverture, co\^uts de transaction, contr\^ole stochastique,
+formulation MDP et apprentissage par renforcement (DQN/PPO) pour la d\'ecision s\'equentielle. \\
+Portefeuille \& risque & Valorisation, expositions, PnL r\'ealis\'e/non r\'ealis\'e, attribution, drawdowns,
+VaR/ES, stress tests, allocation (Markowitz, risk parity, eigen-portfolios). \\
+Trading & Logique d'ex\'ecution (ordres, slippage), strat\'egies simples (DCA/grid), backtesting et mesures de performance. \\
+Bots \& Assistant & Strat\'egies de volatilité (straddle, IV crush), vol r\'ealis\'ee, mean reversion, r\'egimes
+et transitions Markov, diagnostic textuel et limites de l'assistance IA. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection*{Plan de r\'edaction recommand\'e (niveau ``m\'emoire'')}
+\begin{itemize}
+  \item Partie 1 : th\'eorie des produits, du pricing et de la volatilit\'e ; puis courbes de taux et gestion du risque.
+  \item Partie 2 : apprentissage utile (surrogates pour calibration, r\'egimes, MDP/RL pour couverture).
+  \item Partie 3 : synth\`ese par modules (objectif, hypoth\`eses, limites, liens vers les chapitres th\'eoriques).
+  \item Conclusion : limites (donn\'ees, hypoth\`eses de mod\`ele, co\^uts, robustesse) et pistes d'am\'elioration.
+\end{itemize}
 \newpage
 
 %================= Figures TikZ globales ======
@@ -272,8 +322,7 @@ où $P_1$ et $P_2$ s’expriment comme des intégrales de Fourier faisant interv
 la fonction caractéristique du log--prix.
 
 La dérivation complète de cette formule (changement de mesure, résolution de l’ODE
-pour la fonction caractéristique, inversion de Fourier) est fournie en annexe
-\emph{(voir les fichiers \texttt{Heston implé.tex} et \texttt{Heston feuille.tex})}.
+pour la fonction caractéristique, inversion de Fourier) est fournie en annexe.
 
 %------------------------------------------------
 \paragraph{Volatilité rugueuse et modèle rBergomi.}
@@ -2039,8 +2088,7 @@ des arguments complexes diff\'erents (voir la d\'erivation classique de Heston).
 
 \noindent
 \textit{Remarque.} La d\'erivation compl\`ete des expressions ferm\'ees de $C(u,t)$, $D(u,t)$
-et des int\'egrales de pricing est fournie en annexe
-(voir les fichiers \texttt{Heston impl\'e.tex} et \texttt{Heston feuille.tex}). 
+et des int\'egrales de pricing est fournie en annexe. 
 Elle repose sur la r\'esolution explicite des EDO de Riccati et sur l'utilisation 
 de la transform\'ee de Fourier invers\'ee.
 
@@ -2896,6 +2944,89 @@ correlation smiles, effets de microstructure et mémoire longue.
 
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{1.8. Gestion du risque de portefeuille et allocation}
+
+La valorisation (\emph{pricing}) et la mod\'elisation de la volatilit\'e n'ont de sens op\'erationnel que si elles
+s'int\`egrent dans un cadre de gestion du risque. Dans une plateforme de trading, ce cadre se traduit par :
+(i) une mesure claire des expositions, (ii) une d\'ecomposition du PnL, (iii) des limites et alertes, et
+(iv) des r\`egles d'allocation et de r\'e\'equilibrage coh\'erentes avec le profil de risque.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{1.8.1. PnL, expositions et drawdowns}
+
+On distingue typiquement :
+\begin{itemize}
+  \item le \textbf{PnL r\'ealis\'e} (positions ferm\'ees) et le \textbf{PnL latent} (mark-to-market),
+  \item l'\textbf{exposition brute} (somme des valeurs absolues) et l'\textbf{exposition nette} (somme sign\'ee),
+  \item des sensibilit\'es de premier ordre (\textbf{delta}) et de second ordre (\textbf{gamma}) lorsque le portefeuille
+        contient des options.
+\end{itemize}
+
+Le \textbf{drawdown} mesure la perte relative depuis un plus-haut historique :
+\[
+\mathrm{DD}(t)=\frac{V_t-\max_{u\le t}V_u}{\max_{u\le t}V_u},
+\qquad
+\mathrm{MDD}=\min_t \mathrm{DD}(t),
+\]
+où $V_t$ est la valeur du portefeuille. Le drawdown est une mesure intuitive de risque ``v\'ecu'' et compl\`ete utilement
+des mesures bas\'ees sur la variance.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{1.8.2. Value-at-Risk (VaR) et Expected Shortfall (ES)}
+
+Pour un horizon $\Delta t$ et un niveau de confiance $\alpha\in(0,1)$, la \textbf{VaR} est d\'efinie comme un quantile
+de la distribution des pertes $L$ :
+\[
+\mathrm{VaR}_\alpha(L)=\inf\{\ell\in\mathbb{R}:\mathbb{P}(L\le \ell)\ge \alpha\}.
+\]
+
+L'\textbf{Expected Shortfall} (ES) ou \emph{Conditional VaR} est l'esp\'erance des pertes au-del\`a de la VaR :
+\[
+\mathrm{ES}_\alpha(L)=\mathbb{E}\big[L\mid L\ge \mathrm{VaR}_\alpha(L)\big].
+\]
+
+La VaR est simple \`a communiquer mais n'est pas toujours coh\'erente au sens d'Artzner et al. (elle peut violer la
+subadditivit\'e). L'ES corrige ce point et est souvent pr\'ef\'er\'ee pour piloter des limites de risque.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{1.8.3. Allocation moyenne--variance (Markowitz)}
+
+Dans le cadre moyenne--variance, on mod\'elise les rendements d'un vecteur d'actifs $R\in\mathbb{R}^n$ par sa moyenne
+$\mu$ et sa matrice de covariance $\Sigma$. L'allocation (poids) $w\in\mathbb{R}^n$ est choisie pour :
+\begin{itemize}
+  \item minimiser la variance pour un rendement cible,
+  \item ou maximiser un ratio de Sharpe sous contraintes (poids positifs, somme \`a 1, etc.).
+\end{itemize}
+
+Le probl\`eme ``minimum variance'' (sans contrainte de signe) admet une solution ferm\'ee :
+\[
+w^\star \propto \Sigma^{-1}\mathbf{1},\qquad
+\mathbf{1}=(1,\dots,1)^\top.
+\]
+En pratique, on impose des contraintes r\'ealistes et on r\'egularise $\Sigma$ (estimation bruit\'ee, fen\^etre courte,
+actifs corr\'el\'es).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{1.8.4. Risk parity et contributions au risque}
+
+Le \emph{risk parity} vise une allocation o\`u chaque actif contribue \`a parts \'egales au risque du portefeuille.
+Pour une volatilité de portefeuille $\sigma_P=\sqrt{w^\top\Sigma w}$, la contribution marginale au risque est
+$\partial\sigma_P/\partial w_i = (\Sigma w)_i/\sigma_P$, et la contribution totale de l'actif $i$ est
+\[
+\mathrm{RC}_i = w_i \frac{(\Sigma w)_i}{\sigma_P}.
+\]
+Le risk parity cherche $\mathrm{RC}_i=\sigma_P/n$ pour tous $i$ (sous contraintes de signe/somme), ce qui d\'efinit un
+probl\`eme non lin\'eaire r\'esolu num\'eriquement.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{1.8.5. PCA et eigen-portfolios}
+
+La d\'ecomposition spectrale $\Sigma = Q\Lambda Q^\top$ (valeurs propres $\Lambda$, vecteurs propres $Q$) fournit une
+lecture factorielle des risques : les grandes valeurs propres correspondent aux facteurs dominants. Les
+\emph{eigen-portfolios} exploitent ces vecteurs propres pour construire des portefeuilles align\'es sur des facteurs
+ou, \`a l'inverse, moins expos\'es au facteur principal.
+
 %==========================================================
 %                 PARTIE 2 : MACHINE LEARNING
 %==========================================================
@@ -3660,27 +3791,113 @@ et les modèles décisionnels non paramétriques.
 %==========================================================
 %                 PARTIE 3 : PROJETS PERSONNELS
 %==========================================================
-\section{3. Projets personnels}
+\section{3. Projet : PaperTradingApp}
+
+Cette partie synth\'etise le projet \emph{PaperTradingApp} en explicitant le lien entre les modules fonctionnels d'une
+plateforme de paper trading d'options et les notions th\'eoriques pr\'esent\'ees dans les parties pr\'ec\'edentes.
+L'enjeu est double : (i) montrer que chaque brique fonctionnelle repose sur des hypoth\`eses de mod\`ele identifiables,
+et (ii) rendre claires les limites (donn\'ees, non-stationnarit\'e, co\^uts, risque de mod\`ele).
 
 %----------------------------------------------------------
-\subsection{3.1. Sandbox de trading d'options}
+\subsection{3.1. Objectifs, p\'erim\`etre et hypoth\`eses}
 
-Prototype de plateforme permettant de tester des strat\'egies sur options vanilles et exotiques :\n\begin{itemize}\n  \item g\'en\'eration de payoffs param\'etrables (vanilles, barri\`eres, baskets) ;\n  \item pricing via formules ferm\'ees (Black--Scholes, Heston) et Monte Carlo ;\n  \item suivi des Greeks en temps r\'eel pour construire des portefeuilles delta/gamma neutres ;\n  \item backtests sur donn\'ees historiques avec gestion du PnL et du risque.\n\end{itemize}\n\n\subsection{3.2. Pipeline Numerai}\n\nCha\`ine compl\`ete de mod\'elisation pour la comp\'etition Numerai :\n\begin{itemize}\n  \item ingestion et nettoyage des features, normalisation par \"era\" ;\n  \item entra\^inement de mod\`eles ensemblistes (LightGBM/XGBoost) et r\'egularisation ;\n  \item validation croisée temporelle, suivi du sharpe et du corr sur \"live\" ;\n  \item packaging des pr\'edictions et automatisation de la soumission.\n\end{itemize}\n\n\subsection{3.3. Reverse Heston Model}\n\nExploration inverse du mod\`ele de Heston :\n\begin{itemize}\n  \item calibration sur surfaces de vol impl\'icite\'e pour extraire $(\kappa,\theta,\xi,\rho,v_0)$ ;\n  \item simulation forward des trajectoires $(S_t,v_t)$ et stress-tests ;\n  \item comparaison aux variantes rough / Volterra pour capturer le skew court terme ;\n  \item impl\'ementation num\'erique (FFT Carr--Madan) et sensibilit\'es (Greeks).\n\end{itemize}\n
+Le projet vise \`a fournir un environnement unifi\'e permettant :
+\begin{itemize}
+  \item d'explorer des \textbf{strat\'egies options} (vanilles et structures simples) ;
+  \item de construire une \textbf{lecture coh\'erente des surfaces de volatilit\'e} et de les relier \`a des mod\`eles ;
+  \item de comparer des \textbf{m\'ethodes de pricing} (ferm\'ees, semi-ferm\'ees, num\'eriques) et d'en analyser les biais ;
+  \item de suivre des \textbf{expositions} (Greeks) et des \textbf{m\'etriques de risque} au niveau portefeuille ;
+  \item d'\'etudier des \textbf{r\'egimes de volatilit\'e} et des heuristiques (mean reversion, Markov) utiles \`a la d\'ecision.
+\end{itemize}
+
+\subsection{3.2. Donn\'ees de march\'e : qualit\'e, horizons et coh\'erence}
+
+La qualit\'e des conclusions d\'epend directement de la qualit\'e des donn\'ees : traitements des valeurs manquantes,
+coh\'erence des dates de maturit\'e, gestion des \emph{corporate actions}, granularit\'e (intraday vs daily), et choix de
+l'horizon (pricing instantan\'e vs backtest historique). Le m\'emoire insiste sur les \textbf{sources de biais} :
+\begin{itemize}
+  \item non-synchronisation des quotes (spot vs options),
+  \item microstructure et effets de bid--ask,
+  \item d\'erives de r\'egime (\emph{non-stationarity}) dans la volatilité et les corr\'elations.
+\end{itemize}
+
+\subsection{3.3. Options : pricing, volatilit\'e implicite et surfaces}
+
+Le module ``Options'' s'appuie sur :
+\begin{itemize}
+  \item la d\'efinition rigoureuse des payoffs et des conventions (discounting, dividendes),
+  \item l'inversion prix $\leftrightarrow$ volatilit\'e (\emph{implied volatility}),
+  \item la construction et la visualisation de surfaces (maturit\'e/strike ou maturit\'e/log-moneyness),
+  \item la discussion des \textbf{arbitrages statiques} (monotonie, convexit\'e, calendar).
+\end{itemize}
+
+\subsection{3.4. Calibration avanc\'ee : du smile au mod\`ele}
+
+La calibration est un probl\`eme inverse : \`a partir d'une surface observ\'ee, on cherche des param\`etres $\theta$
+minimisant une erreur (en prix ou en vol implicite). Un sch\'ema g\'en\'erique est :
+\[
+\theta^\star=\arg\min_{\theta\in\Theta}\sum_{i} w_i\,
+\bigl( \sigma^{\text{mkt}}_i-\sigma^{\text{mod}}_i(\theta)\bigr)^2,
+\]
+avec pond\'erations $w_i$ et contraintes $\Theta$ (bornes, conditions de Feller, etc.).
+Les mod\`eles discut\'es incluent les structures affines (Heston), les param\'etrisations asymptotiques (SABR),
+les mod\`eles \`a m\'emoire (Volterra/rough) et les diffusions \`a sauts (Merton/Bates). Pour acc\'el\'erer le pricing,
+on recourt aux fonctions caract\'eristiques et aux m\'ethodes de Fourier (Carr--Madan/FFT).
+Une extension naturelle est l'utilisation de \textbf{surrogates} (r\'eseaux) pour approximer la carte
+surface $\mapsto$ param\`etres, afin d'obtenir des initialisations robustes.
+
+\subsection{3.5. Courbe des taux : discounting, forwards, param\'etrisation}
+
+La courbe z\'ero-coupon fournit le lien entre taux, discount factors et taux forwards. Le module ``Yield Curve'' met en
+sc\`ene (i) la conversion yield $\leftrightarrow$ discount factor, (ii) l'interpolation/extrapolation, (iii) le
+bootstrapping, et (iv) des formes param\'etriques (Nelson--Siegel) permettant une repr\'esentation lisse et interpr\'etable
+(niveau, pente, courbure).
+
+\subsection{3.6. Couverture : Greeks, erreur de hedging, d\'ecision s\'equentielle}
+
+La couverture (delta/gamma/vega) se comprend comme un compromis entre erreur de r\'eplication et co\^uts de transaction.
+Le projet met en regard :
+\begin{itemize}
+  \item une couverture ``classique'' issue de la th\'eorie Black--Scholes,
+  \item des extensions sous volatilit\'e stochastique (greeks locaux vs greeks de mod\`ele),
+  \item une formulation \`a base de \textbf{MDP} o\`u l'action est un ajustement de couverture et la r\'ecompense p\'enalise
+        une exposition r\'esiduelle et/ou des co\^uts.
+\end{itemize}
+
+\subsection{3.7. Portefeuille \& risque : m\'etriques, attribution, allocation}
+
+Au niveau portefeuille, le projet articule :
+\begin{itemize}
+  \item mesures de risque (expositions brutes/nettes, drawdowns, VaR/ES),
+  \item d\'ecomposition du PnL (r\'ealis\'e, latent, par symbole),
+  \item allocations de r\'ef\'erence (Markowitz, risk parity, eigen-portfolios) et questions d'estimation de covariance.
+\end{itemize}
+
+\subsection{3.8. Strat\'egies et r\'egimes de volatilité : straddle, IV crush, Markov}
+
+Le module ``Bots'' sert de laboratoire d'id\'ees : straddle (sensibilit\'e \`a la vol), \emph{IV crush} (choc de vol
+implicite autour d'\'ev\'enements), r\'egimes de vol r\'ealis\'ee (percentiles), diagnostics de mean reversion via
+r\'egressions, et cha\^ines de Markov sur r\'egimes discrets (matrice de transition, probabilit\'es conditionnelles).
+
+\subsection{3.9. Assistance et limites}
+
+Un assistant textuel peut aider \`a synth\'etiser un \'etat de portefeuille, mais ne remplace ni un mod\`ele ni une
+proc\'edure de contr\^ole : biais d'interpr\'etation, incertitudes non quantifi\'ees, et risques de sur-confiance. Le
+m\'emoire insiste sur la n\'ecessit\'e d'encadrer ces outils par des r\`egles de prudence (validation, tra\c{c}abilit\'e,
+absence d'action non contr\^ol\'ee).
 
 %==========================================================
 %                 PARTIE 4 : CONCLUSION
 %==========================================================
 \section{4. Conclusion et ouverture}
 
-Ce document a parcouru les fondements de la finance quantitative moderne : 
-pricing d’options, dynamique stochastique, mod\'elisation de la volatilité, 
-construction de courbes, instruments de taux, cr\'edit, ainsi que les
-m\'ethodes fondamentales de Machine Learning (supervis\'e, non supervis\'e,
-deep learning, reinforcement learning).
+Ce document a parcouru les fondements de la finance quantitative moderne en prenant pour fil conducteur le projet
+\emph{PaperTradingApp} : produits d\'eriv\'es, mod\'elisation stochastique, pricing et Greeks, volatilit\'e implicite et
+calibration, construction de courbe de taux, gestion du risque et allocation, ainsi qu'une ouverture vers des outils
+d'apprentissage utiles \`a la calibration (surrogates) et \`a la d\'ecision s\'equentielle (MDP/RL).
 
-L’ensemble constitue une base conceptuelle solide pour aborder des mod\`eles
-plus avancés ou des applications orientées recherche, en particulier en
-finance de march\'e.
+L’ensemble constitue une base conceptuelle solide pour analyser un syst\`eme de trading d\'eriv\'es de bout en bout :
+donn\'ees, hypoth\`eses de mod\`eles, incertitudes, limites num\'eriques et contr\^oles de risque.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{4.1. Synthèse}
@@ -3688,19 +3905,18 @@ finance de march\'e.
 Les points suivants peuvent \^etre retenus :
 
 \begin{itemize}
-  \item Les produits dérivés (vanilles, barrières, exotiques) s’analysent via 
-        les EDS, la mesure risque--neutre et les méthodes numériques (Monte Carlo,
-        PDE, Fourier).
-  \item Les Greeks permettent une gestion fine des expositions directionnelles,
-        de convexité et de volatilité.
-  \item Les mod\`eles de volatilité (Black--Scholes, Heston, SABR, rough volatility)
-        traduisent des régimes de marché variés et sont calibrés sur la surface
-        de volatilité implicite.
-  \item Les courbes de taux et l’analyse des spreads (...IRS, CDS...) reposent
-        sur des principes d’absence d’arbitrage (bootstrapping, hazard rate).
-  \item Le Machine Learning fournit un cadre robuste pour la pr\'evision, 
-        l’extraction de facteurs latents, la réduction dimensionnelle, 
-        l’identification de régimes, et l’apprentissage de politiques optimales.
+  \item Les produits d\'eriv\'es (vanilles et exotiques) s’analysent via la mesure risque--neutre, les EDS et des
+        m\'ethodes num\'eriques (arbres, PDE, Monte Carlo, Fourier/FFT).
+  \item Les Greeks structurent la lecture du risque et la couverture (delta/gamma/vega), et permettent d’anticiper les
+        erreurs de hedging sous co\^uts de transaction et risque de mod\`ele.
+  \item Les surfaces de volatilit\'e implicite r\'esument l'information options ; la calibration relie cette surface \`a des
+        mod\`eles (Heston, SABR, rough/Volterra, sauts) et met en \'evidence les compromis de param\'etrisation.
+  \item La courbe de taux (discounting/forwards) est un ingr\'edient transversal : coh\'erence absence d’arbitrage,
+        choix d'interpolation/extrapolation, param\'etrisations lisses (Nelson--Siegel).
+  \item La gestion du risque au niveau portefeuille n\'ecessite des indicateurs actionnables (PnL, drawdowns, VaR/ES),
+        ainsi que des r\`egles d'allocation (\`a la Markowitz, risk parity, eigen-portfolios).
+  \item L'apprentissage apporte des outils compl\'ementaires : surrogates pour acc\'el\'erer la calibration et formulation
+        MDP/RL pour des probl\`emes de d\'ecision s\'equentielle (couverture, rebalancement).
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -3709,6 +3925,9 @@ Les points suivants peuvent \^etre retenus :
 Plusieurs directions naturelles s’ouvrent à la suite de ce travail :
 
 \begin{itemize}
+  \item \textbf{Qualit\'e des donn\'ees et microstructure} :
+        mod\'eliser explicitement bid--ask, slippage, latences et synchronisation spot/options, et mesurer l'impact sur
+        calibration, backtests et risque.
   \item \textbf{Volatilité rugueuse et SDE de Volterra} : 
         extension non markovienne des mod\`eles de variance, offrant une 
         calibration très fidèle aux smiles courts et une meilleure modélisation
@@ -3726,8 +3945,8 @@ Plusieurs directions naturelles s’ouvrent à la suite de ce travail :
   \item \textbf{Reinforcement Learning pour la gestion dynamique du risque} :
         agents apprenant des stratégies de hedging optimales 
         (delta-gamma-vega), optimisation de portefeuilles, ou exécution optimale.
-  \item \textbf{Intégration des modèles rough / Heston / SABR dans la sandbox} :
-        expérimentation pratique, calibration dataset réel, analyses out-of-sample.
+  \item \textbf{Validation out-of-sample et contr\^ole de risque de mod\`ele} :
+        protocoles de validation, stress tests, r\'egularisation, et mesure de la stabilit\'e des param\`etres calibr\'es.
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -3772,6 +3991,34 @@ deep learning, reinforcement learning et mathématiques appliquées.
         Ouvrage fondamental sur le smile, les Greeks, les stratégies de trading
         et l’arbitrage.
 
+  \item \textbf{Gatheral, J.}  
+        \emph{The Volatility Surface: A Practitioner’s Guide}.  
+        Référence sur la surface de volatilité, le smile/skew, les conditions d’arbitrage statique et les paramétrisations.
+
+  \item \textbf{Heston, S.} (1993).  
+        \emph{A Closed-Form Solution for Options with Stochastic Volatility}.  
+        Article fondateur sur la volatilité stochastique affine et le pricing via fonction caractéristique.
+
+  \item \textbf{Carr, P., Madan, D.} (1999).  
+        \emph{Option Valuation Using the Fast Fourier Transform}.  
+        Méthode FFT (type Carr--Madan) pour valoriser rapidement des options européennes sur une grille de strikes.
+
+  \item \textbf{Hagan, P., Kumar, D., Lesniewski, A., Woodward, D.} (2002).  
+        \emph{Managing Smile Risk}.  
+        Formule asymptotique SABR et interprétation des paramètres (alpha, beta, rho, nu).
+
+  \item \textbf{Glasserman, P.}  
+        \emph{Monte Carlo Methods in Financial Engineering}.  
+        Ouvrage de référence sur Monte Carlo, réduction de variance et applications au pricing/greeks.
+
+  \item \textbf{Markowitz, H.} (1952).  
+        \emph{Portfolio Selection}.  
+        Texte fondateur de l’allocation moyenne--variance et de la frontière efficiente.
+
+  \item \textbf{Artzner, P., Delbaen, F., Eber, J.-M., Heath, D.} (1999).  
+        \emph{Coherent Measures of Risk}.  
+        Cadre axiomatique des mesures de risque (subadditivité, homogénéité, monotonicité, invariance par translation).
+
   \item \textbf{Bouchaud, J.-P., Potters, M.}  
         \emph{Theory of Financial Risk and Derivative Pricing}.  
         Approche statistique et empirique de la volatilité, du risque et des
@@ -3806,11 +4053,11 @@ deep learning, reinforcement learning et mathématiques appliquées.
   \item \textbf{Hanson, G.}  
         \emph{Modern C++ for Finance}.  
 
-  \item \textbf{Hilpisch, Y.}  
-        \emph{Python for Algorithmic Trading}.  
+  \item \textbf{Lopez de Prado, M.}  
+        \emph{Advances in Financial Machine Learning}.  
 
-  \item \textbf{Nag, B.}  
-        \emph{Stochastic Finance with Python}.  
+  \item \textbf{Chan, E.}  
+        \emph{Algorithmic Trading: Winning Strategies and Their Rationale}.  
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -3853,8 +4100,11 @@ deep learning, reinforcement learning et mathématiques appliquées.
   \item \textbf{Tunstall, von Werra, Wolf}.  
         \emph{NLP with Transformers}.  
 
-  \item \textbf{Géron, A.}  
-        \emph{Hands-On Machine Learning with Python}.  
+  \item \textbf{Bishop, C.}  
+        \emph{Pattern Recognition and Machine Learning}.  
+
+  \item \textbf{Hastie, T., Tibshirani, R., Friedman, J.}  
+        \emph{The Elements of Statistical Learning}.  
 
   \item \textbf{Kirill Eremenko}.  
         \emph{Hands-On Machine Learning with C++}.  
