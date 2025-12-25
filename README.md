@@ -123,7 +123,21 @@ This structure is now validated and clean.
 
 ---
 
-## 5. Deploy on Streamlit Community Cloud (streamlit.io)
+## 5. Local configuration (Alpaca keys)
+
+Set Alpaca credentials in `.env` for local dev:
+```
+APCA_API_KEY_ID=your_key_id
+APCA_API_SECRET_KEY=your_secret_key
+APCA_API_BASE_URL=https://paper-api.alpaca.markets
+```
+
+Alternatively, copy `.streamlit/secrets_template.toml` to `.streamlit/secrets.toml`
+and fill the same keys. For live trading, use `https://api.alpaca.markets`.
+
+---
+
+## 6. Deploy on Streamlit Community Cloud (streamlit.io)
 
 - **Main file path**: `streamlit_app.py`
 - **Python**: set by `runtime.txt`

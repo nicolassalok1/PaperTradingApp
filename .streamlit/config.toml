@@ -5,3 +5,12 @@ backgroundColor="#0E1117"
 secondaryBackgroundColor="#20232A"
 textColor="#FFFFFF"
 font="sans serif"
+
+[browser]
+gatherUsageStats=false
+
+[logger]
+level="error"
+
+[server]
+showEmailPrompt=false
