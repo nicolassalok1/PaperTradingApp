@@ -15,7 +15,11 @@ import pandas as pd
 from types import SimpleNamespace
 
 from app.controller import options_controller as oc
-from app.vue.components.options.plot_limits import MAX_CHART_WIDTH_PX, limit_figure_width
+from app.vue.components.options.plot_limits import (
+    MAX_CHART_WIDTH_PX,
+    limit_figure_width,
+    mark_full_width,
+)
 from app.vue.components.options import ui_helpers as opt_ui
 from app.vue.state.options_context import get_option_context
 from app.controller.options_controller import floor_n
@@ -294,8 +298,16 @@ def render_figures_grid(figs):
     """
     if not figs:
         return
-    for i in range(0, len(figs), 2):
-        pair = [f for f in figs[i : i + 2] if f is not None]
+
+    wide_figs = [f for f in figs if getattr(f, "_codex_full_width", False)]
+    normal_figs = [f for f in figs if f not in wide_figs]
+
+    for fig in wide_figs:
+        st.pyplot(fig, clear_figure=True)
+        plt.close(fig)
+
+    for i in range(0, len(normal_figs), 2):
+        pair = [f for f in normal_figs[i : i + 2] if f is not None]
         if not pair:
             continue
         cols = st.columns(len(pair), gap="small")
@@ -319,7 +331,7 @@ def build_close_with_strike_fig(close_series, ticker: str, strike: float | None)
         ax.set_title(f"Clôtures {tkr} (strike)")
         ax.legend(loc="best")
         fig.autofmt_xdate()
-        return fig
+        return mark_full_width(fig)
     except Exception:
         return None
 
@@ -401,6 +413,7 @@ __all__ = [
     "load_shared_close_series",
     "render_static_line_chart",
     "render_figures_grid",
+    "mark_full_width",
     "limit_figure_width",
     "build_close_with_strike_fig",
     "show_and_close",

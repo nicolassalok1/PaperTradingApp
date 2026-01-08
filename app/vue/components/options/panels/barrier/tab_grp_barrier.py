@@ -113,6 +113,7 @@ def render_tab_grp_barrier():
         ax_ts.set_title(f"Clôtures {hist_tkr} (strike/barrière)")
         ax_ts.legend(loc="best")
         fig_ts.autofmt_xdate()
+        mark_full_width(fig_ts)
         figs.append(fig_ts)
     else:
         st.info(

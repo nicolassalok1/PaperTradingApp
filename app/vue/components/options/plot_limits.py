@@ -14,6 +14,8 @@ def limit_figure_width(fig: mpl_fig.Figure, max_width_px: float = MAX_CHART_WIDT
     Scale down a matplotlib figure so its rendered width does not exceed max_width_px.
     Preserves aspect ratio by scaling height proportionally.
     """
+    if getattr(fig, "_codex_full_width", False):
+        return fig
     try:
         dpi = float(fig.get_dpi() or 100.0)
         max_width_in = float(max_width_px) / dpi
@@ -31,6 +33,15 @@ def limit_plotly_width(fig, max_width_px: float = MAX_CHART_WIDTH_PX):
     """Apply a max width to Plotly figures in-place and return the figure."""
     try:
         fig.update_layout(width=float(max_width_px))
+    except Exception:
+        pass
+    return fig
+
+
+def mark_full_width(fig):
+    """Mark a matplotlib figure as allowed to render full viewport width."""
+    try:
+        setattr(fig, "_codex_full_width", True)
     except Exception:
         pass
     return fig

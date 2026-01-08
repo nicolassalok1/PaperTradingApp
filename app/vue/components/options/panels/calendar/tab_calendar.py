@@ -115,6 +115,7 @@ def render_tab_calendar():
         ax_ts.set_title(f"Clôtures {hist_tkr} (strike / forward start)")
         ax_ts.legend(loc="best")
         fig_ts.autofmt_xdate()
+        mark_full_width(fig_ts)
         figs.append(fig_ts)
     else:
         st.info(
