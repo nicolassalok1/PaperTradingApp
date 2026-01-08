@@ -170,8 +170,8 @@ class HestonFFTCalibrator(BaseSurfaceCalibrator):
             # Soft Feller condition penalty (sigma^2 <= 2 kappa theta)
             kappa, theta, sigma, _, _ = [float(v) for v in x]
             feller_gap = float(max(0.0, sigma * sigma - 2.0 * kappa * theta))
-            if feller_gap > 0:
-                res = np.concatenate([res, np.array([feller_gap], dtype=float)])
+            # Always append to keep residual dimension constant across optimizer calls.
+            res = np.concatenate([res, np.array([feller_gap], dtype=float)])
             return res.astype(float)
 
         runs: list[Dict[str, Any]] = []
