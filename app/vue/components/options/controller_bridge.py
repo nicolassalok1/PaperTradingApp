@@ -299,15 +299,8 @@ def render_figures_grid(figs):
     if not figs:
         return
 
-    wide_figs = [f for f in figs if getattr(f, "_codex_full_width", False)]
-    normal_figs = [f for f in figs if f not in wide_figs]
-
-    for fig in wide_figs:
-        st.pyplot(fig, clear_figure=True)
-        plt.close(fig)
-
-    for i in range(0, len(normal_figs), 2):
-        pair = [f for f in normal_figs[i : i + 2] if f is not None]
+    for i in range(0, len(figs), 2):
+        pair = [f for f in figs[i : i + 2] if f is not None]
         if not pair:
             continue
         cols = st.columns(len(pair), gap="small")
