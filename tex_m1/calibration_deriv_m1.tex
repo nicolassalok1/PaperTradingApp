@@ -1,0 +1,80 @@
+% =========================================================
+% Compléments M1 — Calibration (C. Dérivations)
+% =========================================================
+
+\subsection*{(1) Moindres carrés pondérés : gradient et Hessien (lecture Gauss--Newton)}
+Considérons une perte de type moindres carrés pondérés :
+\[
+\mathcal{L}(\theta)=\frac12\sum_{i=1}^N w_i\,r_i(\theta)^2
+=\frac12\,r(\theta)^\top W\,r(\theta),
+\]
+où $r_i(\theta)$ est un résidu (prix ou IV) et $W=\mathrm{diag}(w_i)$.
+Notons $J(\theta)$ le jacobien $J_{ij}=\partial r_i/\partial \theta_j$.
+
+\paragraph{Gradient.}
+En dérivant :
+\[
+\nabla \mathcal{L}(\theta)=J(\theta)^\top W\,r(\theta).
+\]
+\paragraph{Hessien exact.}
+Il s'écrit
+\[
+\nabla^2\mathcal{L}(\theta)=J^\top WJ + \sum_{i=1}^N w_i r_i(\theta)\,\nabla^2 r_i(\theta).
+\]
+\paragraph{Approximation Gauss--Newton.}
+Près d'un bon fit, les résidus $r_i$ sont petits, donc on néglige le second terme :
+\[
+\nabla^2\mathcal{L}(\theta)\approx J^\top WJ.
+\]
+Cela justifie beaucoup d'algorithmes pratiques : on approxime la courbure par $J^\top WJ$.
+
+\subsection*{(2) Levenberg--Marquardt : compromis entre Newton et descente de gradient}
+Gauss--Newton propose de résoudre
+\[
+(J^\top WJ)\Delta\theta = -J^\top Wr.
+\]
+Si $J^\top WJ$ est mal conditionné, on ajoute un terme de régularisation (damping) :
+\[
+(J^\top WJ+\lambda I)\Delta\theta = -J^\top Wr,\qquad \lambda>0.
+\]
+\paragraph{Interprétation.}
+\begin{itemize}[leftmargin=*]
+\item $\lambda$ petit : comportement proche de Newton/Gauss--Newton (rapide si bien conditionné).
+\item $\lambda$ grand : comportement proche d'une descente de gradient (robuste mais lent).
+\end{itemize}
+En calibration, ce mécanisme est crucial : les surfaces sont bruitées et les pricers peuvent être irréguliers, donc on a besoin de robustesse.
+
+\subsection*{(3) Log-paramétrisation : rendre les contraintes «naturelles»}
+Beaucoup de paramètres doivent être positifs : $\kappa,\theta,\sigma,v_0,\alpha,\nu,\dots$.
+Plutôt que d'imposer des bornes dures, on peut optimiser sur des variables libres :
+\[
+\kappa=\exp(\widetilde\kappa),\quad \theta=\exp(\widetilde\theta),\quad \sigma=\exp(\widetilde\sigma),\ \dots
+\]
+Cette reparamétrisation :
+\begin{itemize}[leftmargin=*]
+\item garantit la positivité ;
+\item homogénéise souvent les échelles ;
+\item améliore le conditionnement (car les paramètres sont naturellement en échelle log en finance).
+\end{itemize}
+
+\subsection*{(4) Mini-exercice corrigé : «fit en vol» = «fit en prix pondéré» (au 1er ordre)}
+Supposons que le marché soit donné en IV et qu'on compare des IV.
+Montrer qu'au premier ordre, minimiser $\sum (\sigma^{\mathrm{mod}}-\sigma^{\mathrm{mkt}})^2$ revient à minimiser une somme de carrés de prix \emph{pondérée} par $1/\mathrm{Vega}^2$.
+
+\emph{Solution.}
+Sur un point, on a la linéarisation BS :
+\[
+C(\sigma^{\mathrm{mod}})\approx C(\sigma^{\mathrm{mkt}})+\mathrm{Vega}(\sigma^{\mathrm{mkt}})\cdot(\sigma^{\mathrm{mod}}-\sigma^{\mathrm{mkt}}).
+\]
+Donc
+\[
+\Delta C \approx \mathrm{Vega}\cdot \Delta\sigma
+\quad\Rightarrow\quad
+\Delta\sigma \approx \frac{\Delta C}{\mathrm{Vega}}.
+\]
+En sommant sur les points :
+\[
+\sum (\Delta\sigma)^2 \approx \sum \left(\frac{\Delta C}{\mathrm{Vega}}\right)^2,
+\]
+soit un fit en prix avec poids $w\propto 1/\mathrm{Vega}^2$.
+Cela explique pourquoi «fit en vol non pondéré» sur-pondère mécaniquement les zones où Vega est faible.

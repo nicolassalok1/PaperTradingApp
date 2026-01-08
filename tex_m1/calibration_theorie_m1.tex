@@ -1,0 +1,63 @@
+% =========================================================
+% Compléments M1 — Calibration (B. Théorie)
+% =========================================================
+
+\subsection*{(1) Ill-posedness : pourquoi «bien fitter» ne suffit pas}
+La calibration est un problème inverse : on observe une surface (prix ou IV) et on remonte à des paramètres $\theta$.
+Deux difficultés structurelles apparaissent presque toujours :
+\begin{itemize}[leftmargin=*]
+\item \textbf{Non convexité} : la fonction perte peut avoir de nombreux minima locaux (surtout avec FFT/CF/MC).
+\item \textbf{Mauvais conditionnement} : certains paramètres ont un effet très faible sur la surface sur le domaine observé (directions «plates»), d'autres ont un effet très fort (directions «raides»).
+\end{itemize}
+Conséquence : deux jeux de paramètres peuvent donner une RMSE quasi identique mais des dynamiques très différentes hors grille (extrapolation, stress, hedging).
+
+\subsection*{(2) Jacobien et «sloppiness» : lecture linéarisée du problème}
+Notons $r(\theta)$ le vecteur des résidus (par exemple $C^{\mathrm{mod}}-C^{\mathrm{mkt}}$ sur les points observés).
+Près d'un $\theta_0$, on linéarise :
+\[
+r(\theta_0+\Delta\theta)\approx r(\theta_0)+J(\theta_0)\Delta\theta,
+\qquad
+J_{ij}=\frac{\partial r_i}{\partial \theta_j}.
+\]
+Si $J^\top J$ a un spectre très étalé (grand rapport conditionnement), le problème est «sloppy» :
+\begin{itemize}[leftmargin=*]
+\item des directions de paramètres changent peu les prix $\Rightarrow$ paramètres instables ;
+\item de petites erreurs de données peuvent provoquer de grandes variations sur ces directions.
+\end{itemize}
+Cette lecture explique pourquoi une calibration n'est pas seulement un «optimiseur qui converge» : c'est une question de \emph{géométrie}.
+
+\subsection*{(3) Régularisation : stabiliser, au prix d'un biais contrôlé}
+Une régularisation de type Tikhonov ajoute un terme :
+\[
+\mathcal{L}_{\mathrm{reg}}(\theta)=\mathcal{L}(\theta)+\alpha\|\theta-\theta_{\mathrm{prior}}\|^2,
+\qquad \alpha>0.
+\]
+Interprétation :
+\begin{itemize}[leftmargin=*]
+\item \textbf{fréquentiste} : on pénalise les paramètres extrêmes pour améliorer le conditionnement ;
+\item \textbf{bayésien} : c'est un MAP avec un prior gaussien centré en $\theta_{\mathrm{prior}}$.
+\end{itemize}
+En finance, cela correspond à une pratique raisonnable : préférer un modèle «plausible» et stable, plutôt qu'un fit parfait mais fragile.
+
+\subsection*{(4) Contraintes : bornes, positivité, et conditions structurelles}
+Les contraintes jouent deux rôles :
+\begin{itemize}[leftmargin=*]
+\item \textbf{économique} : éviter des dynamiques absurdes (variance négative, explosions).
+\item \textbf{numérique} : éviter des zones où les pricers deviennent instables (intégrales oscillantes, CF mal conditionnée, etc.).
+\end{itemize}
+Exemples :
+\begin{itemize}[leftmargin=*]
+\item Heston : $\kappa>0$, $\theta>0$, $\sigma>0$, $v_0>0$, $|\rho|<1$, et (optionnel) pénalité Feller.
+\item SABR : $\alpha>0$, $\nu>0$, $|\rho|<1$, et bornes sur $\beta$.
+\end{itemize}
+
+\subsection*{(5) Calibration «en prix» vs «en vol» : une relecture via la Vega}
+La relation linéarisée $\,\Delta C\approx \mathrm{Vega}\cdot \Delta\sigma\,$ dit :
+\[
+\Delta\sigma \approx \frac{\Delta C}{\mathrm{Vega}}.
+\]
+Donc, minimiser une erreur en IV revient approximativement à minimiser une erreur en prix \emph{pondérée} par $1/\mathrm{Vega}^2$ :
+\[
+\sum (\Delta\sigma)^2 \approx \sum \left(\frac{\Delta C}{\mathrm{Vega}}\right)^2.
+\]
+Message : le choix «prix vs IV» est surtout un choix de \emph{pondération implicite} des régions de la surface.

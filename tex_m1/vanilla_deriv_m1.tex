@@ -1,0 +1,137 @@
+% =========================================================
+% Compléments M1 — Options vanilles (C. Dérivations)
+% =========================================================
+
+\subsection*{(1) Identité clé : $S_0e^{-qT}\varphi(d_1)=Ke^{-rT}\varphi(d_2)$}
+Cette identité est extrêmement utile pour dériver les grecs proprement (elle permet de simplifier des termes).
+Rappel :
+\[
+d_1=\frac{\ln(S_0/K)+(r-q+\tfrac12\sigma^2)T}{\sigma\sqrt{T}},
+\qquad
+d_2=d_1-\sigma\sqrt{T}.
+\]
+On calcule :
+\[
+\frac{\varphi(d_1)}{\varphi(d_2)}
+=\exp\Big(-\tfrac12 d_1^2+\tfrac12 d_2^2\Big)
+=\exp\Big(\tfrac12(d_2^2-d_1^2)\Big)
+=\exp\Big(\tfrac12(d_2-d_1)(d_2+d_1)\Big).
+\]
+Or $d_2-d_1=-\sigma\sqrt{T}$ et $d_2+d_1=2d_1-\sigma\sqrt{T}$, donc
+\[
+\tfrac12(d_2^2-d_1^2)=\tfrac12(-\sigma\sqrt{T})(2d_1-\sigma\sqrt{T})
+=-\sigma\sqrt{T}\,d_1+\tfrac12\sigma^2T.
+\]
+En remplaçant $d_1$ :
+\[
+-\sigma\sqrt{T}\,d_1+\tfrac12\sigma^2T
+=-\Big(\ln(S_0/K)+(r-q+\tfrac12\sigma^2)T\Big)+\tfrac12\sigma^2T
+=-\ln(S_0/K)-(r-q)T.
+\]
+Donc
+\[
+\frac{\varphi(d_1)}{\varphi(d_2)}=\exp\big(-\ln(S_0/K)-(r-q)T\big)=\frac{K}{S_0}e^{-(r-q)T},
+\]
+ce qui équivaut à
+\[
+\boxed{S_0e^{-qT}\varphi(d_1)=Ke^{-rT}\varphi(d_2).}
+\]
+
+\subsection*{(2) Dérivation détaillée de $\Delta$ et Vega}
+On part du call :
+\[
+C(S_0,\sigma)=S_0e^{-qT}N(d_1)-Ke^{-rT}N(d_2).
+\]
+\paragraph{Delta.}
+On dérive en $S_0$ :
+\[
+\frac{\partial C}{\partial S_0}
+=e^{-qT}N(d_1)+S_0e^{-qT}\varphi(d_1)\frac{\partial d_1}{\partial S_0}
+-Ke^{-rT}\varphi(d_2)\frac{\partial d_2}{\partial S_0}.
+\]
+Or $\partial d_1/\partial S_0 = \frac{1}{S_0\sigma\sqrt{T}}$ et $\partial d_2/\partial S_0=\partial d_1/\partial S_0$.
+Donc
+\[
+\frac{\partial C}{\partial S_0}
+=e^{-qT}N(d_1)+e^{-qT}\frac{\varphi(d_1)}{\sigma\sqrt{T}}
+-Ke^{-rT}\varphi(d_2)\frac{1}{S_0\sigma\sqrt{T}}.
+\]
+En utilisant l'identité $S_0e^{-qT}\varphi(d_1)=Ke^{-rT}\varphi(d_2)$, le dernier terme vaut exactement
+$e^{-qT}\frac{\varphi(d_1)}{\sigma\sqrt{T}}$ et s'annule avec le second.
+Ainsi :
+\[
+\boxed{\Delta_{\mathrm{call}}=\frac{\partial C}{\partial S_0}=e^{-qT}N(d_1).}
+\]
+
+\paragraph{Vega.}
+On dérive en $\sigma$ :
+\[
+\frac{\partial C}{\partial \sigma}
+=S_0e^{-qT}\varphi(d_1)\frac{\partial d_1}{\partial \sigma}
+-Ke^{-rT}\varphi(d_2)\frac{\partial d_2}{\partial \sigma}.
+\]
+Comme $d_2=d_1-\sigma\sqrt{T}$, on a $\partial d_2/\partial\sigma=\partial d_1/\partial\sigma-\sqrt{T}$.
+Donc
+\[
+\frac{\partial C}{\partial \sigma}
+=\Big(S_0e^{-qT}\varphi(d_1)-Ke^{-rT}\varphi(d_2)\Big)\frac{\partial d_1}{\partial \sigma}
+Ke^{-rT}\varphi(d_2)\sqrt{T}.
+\]
+Le terme entre parenthèses est nul par l'identité ci-dessus, donc
+\[
+\boxed{\mathrm{Vega}=\frac{\partial C}{\partial \sigma}=Ke^{-rT}\varphi(d_2)\sqrt{T}=S_0e^{-qT}\varphi(d_1)\sqrt{T}.}
+\]
+\paragraph{Message pratique.}
+Vega $>0$ garantit que l'inversion prix $\to$ vol est bien posée tant qu'on reste dans les bornes d'arbitrage.
+
+\subsection*{(3) Theta (sensibilité au temps) : formule et lecture}
+Theta mesure l'effet du passage du temps (décroissance de valeur temps).
+On peut montrer (call) :
+\[
+\Theta_{\mathrm{call}}
+=-\frac{S_0e^{-qT}\varphi(d_1)\sigma}{2\sqrt{T}} + qS_0e^{-qT}N(d_1)-rKe^{-rT}N(d_2).
+\]
+\paragraph{Lecture.}
+Le premier terme est la «theta diffusion» (lié à la convexité/Gamma), les autres proviennent du carry (dividendes) et de l'actualisation.
+
+\subsection*{(4) Inversion IV : Newton sécurisé (pour comprendre Brent)}
+Résoudre $f(\sigma)=C_{\mathrm{BS}}(\sigma)-C_{\mathrm{mkt}}=0$.
+Newton donne :
+\[
+\sigma_{n+1}=\sigma_n-\frac{f(\sigma_n)}{f'(\sigma_n)}
+=\sigma_n-\frac{C_{\mathrm{BS}}(\sigma_n)-C_{\mathrm{mkt}}}{\mathrm{Vega}(\sigma_n)}.
+\]
+\paragraph{Pourquoi Newton peut échouer ?}
+Si Vega est très petit (options très OTM ou maturité très courte), le pas peut exploser.
+On sécurise alors par :
+\begin{itemize}[leftmargin=*]
+\item \textbf{bracketing} (bornes $[\sigma_{\min},\sigma_{\max}]$) ;
+\item \textbf{clipping} : limiter l'amplitude du pas ;
+\item \textbf{fallback} : bisection/Brent si Newton sort des bornes.
+\end{itemize}
+Brent peut être vu comme un «Newton sécurisé» qui ne perd jamais la racine si le bracket est valide.
+
+\subsection*{(5) Point subtil : initial guess et stabilité numérique}
+Un bon point de départ accélère fortement l'inversion.
+Pour un call proche de l'ATM-forward, une approximation simple (Brenner--Subrahmanyam) est :
+\[
+\sigma_{\mathrm{init}}\approx \sqrt{\frac{2\pi}{T}}\frac{C}{S_0e^{-qT}}.
+\]
+Ce n'est pas une formule universelle, mais elle donne une intuition : plus $C$ est grand (à moneyness donnée), plus la vol est grande.
+
+\subsection*{(6) Exercices corrigés (BS / grecs / IV)}
+\paragraph{Exercice 1 --- contrôle call--put parity.}
+Avec $S_0=100$, $K=110$, $T=1$, $r=2\%$, $q=0$, on observe $C=4.2$ et $P=12.5$.
+Vérifier la parité call--put et conclure.
+
+\emph{Solution.}
+La parité impose $C-P=S_0-Ke^{-rT}=100-110e^{-0.02}\approx 100-107.82=-7.82$.
+Or $C-P=4.2-12.5=-8.3$, écart $\approx -0.48$.
+Selon le bid/ask, c'est soit une incohérence (arbitrage théorique), soit un écart compatible avec spreads/erreurs de cotation.
+
+\paragraph{Exercice 2 --- Vega et difficulté d'inversion.}
+Expliquer pourquoi l'inversion d'IV est instable pour une option très OTM à courte maturité.
+
+\emph{Solution.}
+Pour une option très OTM, $|d_1|$ est grand, donc $\varphi(d_1)$ est exponentiellement petit.
+Comme $\mathrm{Vega}=S_0e^{-qT}\varphi(d_1)\sqrt{T}$, Vega est proche de 0 : un petit bruit sur le prix correspond à une grande variation de $\sigma$, ce qui rend la racine numériquement instable.

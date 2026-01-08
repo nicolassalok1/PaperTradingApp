@@ -1,0 +1,79 @@
+% =========================================================
+% Compléments M1 — Variation quadratique (B. Théorie)
+% =========================================================
+
+\subsection*{(1) Propriétés algébriques : pourquoi on parle de «crochet»}
+La covariation $[X,Y]_t$ (quand elle existe) se comporte comme une forme bilinéaire :
+\begin{itemize}[leftmargin=*]
+\item \textbf{Symétrie :} $[X,Y]_t=[Y,X]_t$.
+\item \textbf{Bilinéarité :} $[aX+bY,Z]_t=a[X,Z]_t+b[Y,Z]_t$.
+\item \textbf{Lien avec la variation quadratique :} $[X]_t=[X,X]_t$.
+\end{itemize}
+Une identité à retenir (utile en multi-facteurs) est :
+\[
+[X+Y]_t=[X]_t+[Y]_t+2[X,Y]_t.
+\]
+Elle est l'analogue stochastique de $(x+y)^2=x^2+y^2+2xy$, mais ici c'est un résultat \emph{au niveau des limites de partitions}.
+
+\subsection*{(2) Variation finie vs bruit : séparation structurelle}
+Un message fondamental (et exploité partout en calcul d'Itô) est :
+\begin{center}
+\emph{La variation quadratique «voit» la partie bruitée (martingale) mais pas la partie de variation finie.}
+\end{center}
+Plus précisément :
+\begin{itemize}[leftmargin=*]
+\item Si $A$ est de variation finie, alors $[A]_t=0$.
+\item Si $M$ est une martingale continue de type Itô, alors $[M]_t$ est typiquement non nul.
+\end{itemize}
+Pour un processus d'Itô
+\[
+X_t=X_0+\int_0^t a_s\,\dd s+\int_0^t b_s\,\dd W_s,
+\]
+on obtient (chapitre courant) :
+\[
+[X]_t=\int_0^t b_s^2\,\dd s,
+\]
+ce qui formalise l'idée : \emph{seul le coefficient de diffusion $b_s$ crée de la variation quadratique}.
+
+\subsection*{(3) Crochet d'une intégrale d'Itô : règle de calcul à retenir}
+Soit $M_t=\int_0^t H_s\,\dd W_s$ avec $H\in\mathcal{H}^2$.
+Alors :
+\[
+[M]_t=\int_0^t H_s^2\,\dd s,
+\qquad
+[M,W]_t=\int_0^t H_s\,\dd s.
+\]
+\paragraph{Intuition.}
+Sur un petit pas $\Delta t$, $\Delta M\approx H\,\Delta W$ donc
+$(\Delta M)^2\approx H^2(\Delta W)^2\approx H^2\Delta t$,
+et $\Delta M\,\Delta W\approx H(\Delta W)^2\approx H\Delta t$.
+La théorie (limite) rend cette intuition exacte.
+
+\subsection*{(4) Table d'Itô : comment manipuler les différentiels}
+Le calcul stochastique se fait souvent avec une notation différentielle «comme si» :
+\[
+\dd X_t = a_t\,\dd t + b_t\,\dd W_t.
+\]
+La règle opérationnelle est la table d'Itô :
+\[
+(\dd t)^2=0,\qquad \dd t\,\dd W_t=0,\qquad (\dd W_t)^2=\dd t.
+\]
+En dimension $d$ avec corrélation instantanée $\rho_{ij}$ :
+\[
+\dd W_t^{(i)}\,\dd W_t^{(j)}=\rho_{ij}\,\dd t.
+\]
+\paragraph{Pourquoi c'est cohérent ?}
+Parce que l'échelle est $\dd W=O(\sqrt{\dd t})$. Donc $(\dd W)^2$ est de l'ordre $\dd t$ (à conserver), alors que $\dd t\,\dd W$ est de l'ordre $\dd t^{3/2}$ (à négliger) et $(\dd t)^2$ de l'ordre $\dd t^2$ (négligeable).
+
+\subsection*{(5) Au-delà du Brownien : semimartingales (message M1)}
+Dans un cadre général, le calcul d'Itô s'applique aux \emph{semimartingales} :
+\[
+X_t=X_0+A_t+M_t,
+\]
+où $A$ est de variation finie (drift) et $M$ une martingale locale continue.
+La variation quadratique s'identifie alors au crochet de $M$ :
+\[
+[X]_t=[M]_t,
+\]
+ce qui permet de réutiliser la table d'Itô sur une classe très large de modèles continus.
+Les modèles à sauts (Merton/Bates) demandent une extension (Itô avec sauts), mais l'idée «variation quadratique = bruit» reste centrale.

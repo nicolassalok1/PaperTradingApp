@@ -1,0 +1,87 @@
+% =========================================================
+% Compléments M1 — Lemme d'Itô (B. Théorie)
+% =========================================================
+
+\subsection*{(1) Forme intégrale : ce que la formule dit vraiment}
+La version différentielle est très pratique, mais pour raisonner sans ambiguïté il est utile de retenir la \textbf{forme intégrale}.
+Si $X$ suit
+\[
+X_t=X_0+\int_0^t \mu(s,X_s)\,\dd s+\int_0^t \sigma(s,X_s)\,\dd W_s
+\]
+et si $f\in C^{1,2}$, alors
+\[
+\boxed{
+\begin{aligned}
+f(t,X_t)=\;&f(0,X_0)
+ +\int_0^t \partial_t f(s,X_s)\,\dd s
+ +\int_0^t \partial_x f(s,X_s)\,\dd X_s\\
+&+\frac12\int_0^t \partial_{xx} f(s,X_s)\,\dd [X]_s,
+\end{aligned}}
+\]
+avec $[X]_s=\int_0^s \sigma(u,X_u)^2\,\dd u$.
+En remplaçant $\dd X_s=\mu\,\dd s+\sigma\,\dd W_s$ et $\dd[X]_s=\sigma^2\,\dd s$, on obtient la forme classique :
+\[
+f(t,X_t)=f(0,X_0)
+\!+\!\int_0^t\!\Big(\partial_t f+\mu\,\partial_x f+\tfrac12\sigma^2\partial_{xx} f\Big)(s,X_s)\,\dd s
+\!+\!\int_0^t\!\sigma\,\partial_x f(s,X_s)\,\dd W_s.
+\]
+\paragraph{Lecture martingale.}
+Le dernier terme est une intégrale d'Itô, donc une martingale (sous conditions). Le reste est un terme de drift (déterministe conditionnellement à la trajectoire).
+
+\subsection*{(2) Pourquoi $C^{1,2}$ ? et que faire quand ce n'est pas vrai}
+\paragraph{Rôle de $C^{1,2}$.}
+Le développement de Taylor utilisé dans la preuve requiert une dérivée en temps et deux dérivées en espace pour contrôler les restes.
+
+\paragraph{Payoffs non lisses en finance.}
+Les payoffs vanilles ont des singularités :
+\begin{itemize}[leftmargin=*]
+\item Call : $\Phi(S)=(S-K)^+$ non $C^1$ en $S=K$.
+\item Digital : $\Phi(S)=\1_{\{S>K\}}$ discontinu.
+\end{itemize}
+On contourne en pratique via :
+\begin{itemize}[leftmargin=*]
+\item PDE en sens faible / viscosité ;
+\item approximation lisse (mollification) + passage à la limite ;
+\item extensions (Tanaka, temps local) pour traiter des convexités concentrées.
+\end{itemize}
+
+\subsection*{(3) Itô multi-dimensionnel : notation propre et cas corrélé}
+Soit $\bm{X}_t\in\R^d$ avec
+\[
+\dd \bm{X}_t=\bm{\mu}(t,\bm{X}_t)\,\dd t+\Sigma(t,\bm{X}_t)\,\dd \bm{W}_t,
+\]
+où $\bm{W}$ est un brownien $d$-dimensionnel à composantes indépendantes.
+Alors, pour $f\in C^{1,2}$,
+\[
+\dd f(t,\bm{X}_t)
+=\partial_t f\,\dd t+\nabla f^\top \dd \bm{X}_t+\frac12\mathrm{Tr}\!\big(\Sigma\Sigma^\top \nabla^2 f\big)\dd t.
+\]
+\paragraph{Cas corrélé.}
+Si l'on part d'un brownien corrélé $\bm{\widetilde W}$ tel que $\dd \bm{\widetilde W}=L\,\dd \bm{W}$ avec $LL^\top=\rho$, on peut absorber la corrélation dans $\Sigma$.
+Dans les modèles multi-facteurs, l'objet important est toujours $\Sigma\Sigma^\top$ : c'est lui qui porte les covariations.
+
+\subsection*{(4) Itô--Tanaka (optionnel mais très utile pour les payoffs à kink)}
+Pour une fonction convexe mais non $C^2$ (comme $x\mapsto |x|$), la formule d'Itô se prolonge via la \textbf{formule de Tanaka}.
+Pour un semimartingale continu $X$ :
+\[
+|X_t|
+=|X_0|+\int_0^t \mathrm{sgn}(X_s)\,\dd X_s + L_t^0(X),
+\]
+où $L_t^0(X)$ est le \emph{temps local} en 0.
+\paragraph{Interprétation.}
+Le temps local mesure combien de temps (au sens «densité de passage») la trajectoire passe près d'un niveau.
+En finance, il apparaît naturellement quand on manipule des payoffs avec un kink (call/put) ou des barrières (densité de premier passage).
+\paragraph{Message pédagogique.}
+Même si l'on ne l'utilise pas directement pour pricer une vanilla, Tanaka explique pourquoi la convexité concentrée en $K$ fait apparaître des effets de couverture (Gamma) «localisés».
+
+\subsection*{(5) Itô pour semimartingales : la version «générique» (message M1)}
+Dans un cours de calcul stochastique, on retient que l'objet central est la semimartingale continue
+\[
+X_t=X_0+A_t+M_t,
+\]
+où $A$ est de variation finie et $M$ une martingale locale continue.
+Alors, pour $f\in C^2$ (sans dépendance en $t$ pour simplifier),
+\[
+f(X_t)=f(X_0)+\int_0^t f'(X_s)\,\dd X_s+\frac12\int_0^t f''(X_s)\,\dd [X]_s.
+\]
+Cette forme est souvent la plus robuste conceptuellement : elle fait apparaître explicitement $\dd[X]_s$, donc l'endroit exact où la rugosité (variation quadratique) intervient.

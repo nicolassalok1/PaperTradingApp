@@ -1,0 +1,39 @@
+% =========================================================
+% Compléments M1 — Options vanilles (B. Théorie)
+% =========================================================
+
+\subsection*{(1) Trois parametrisations utiles : spot, forward et log-moneyness}
+En pratique, travailler directement avec $(S_0,K,T)$ n'est pas toujours le plus stable.
+On introduit souvent :
+\begin{itemize}[leftmargin=*]
+\item le \textbf{forward} $F_{0,T}=S_0e^{(r-q)T}$ ;
+\item la \textbf{moneyness} $m=K/F_{0,T}$ ;
+\item la \textbf{log-moneyness} $k=\ln(K/F_{0,T})$.
+\end{itemize}
+\paragraph{Pourquoi c'est utile ?}
+À taux et dividendes constants, $F_{0,T}$ absorbe le drift risque-neutre.
+La surface $\sigma_{\mathrm{impl}}(k,T)$ (ou la variance totale $w(k,T)=\sigma_{\mathrm{impl}}(k,T)^2T$) est souvent plus «stationnaire» visuellement que $\sigma(K,T)$.
+
+\subsection*{(2) Convexité et densité risque-neutre : ce que la vanilla révèle sur la loi de $S_T$}
+Un fait central est que le prix d'un call européen est une fonction convexe de $K$ :
+\[
+K\mapsto C(K,T) \ \text{est décroissante et convexe}.
+\]
+Intuition : $C(K,T)=e^{-rT}\E^{\Qmeas}[(S_T-K)^+]$ et $(x-K)^+$ est convexe en $K$.
+\paragraph{Breeden--Litzenberger (message).}
+Sous des hypothèses de régularité, la densité risque-neutre $f_{S_T}^{\Qmeas}$ est reliée à la dérivée seconde du call :
+\[
+\frac{\partial^2 C}{\partial K^2}(K,T)=e^{-rT}f_{S_T}^{\Qmeas}(K).
+\]
+Donc une surface de vanilles \emph{encode} une loi terminale.
+Cela explique pourquoi l'arbitrage statique (monotonicité/convexité) est une contrainte fondamentale pour toute interpolation/extrapolation de surface.
+
+\subsection*{(3) Vol implicite : ce qu'elle résume (et ce qu'elle ne résume pas)}
+La volatilité implicite $\sigma_{\mathrm{impl}}$ est un \emph{paramètre de re-paramétrisation} : on exprime un prix via le BS «comme si» la vol était constante.
+En dehors de BS :
+\begin{itemize}[leftmargin=*]
+\item une même $\sigma_{\mathrm{impl}}$ peut provenir de sauts, vol stochastique, mélange de lois, etc. ;
+\item la surface $(K,T)\mapsto \sigma_{\mathrm{impl}}(K,T)$ résume des \emph{risques de distribution} (skew, smile, kurtosis) ;
+\item l'inversion price $\to$ IV est un problème numérique (mais monotone tant que Vega$>0$).
+\end{itemize}
+En finance quantitative, on utilise l'IV comme interface standardisée : on compare modèles/produits sur une échelle commune, tout en gardant à l'esprit qu'il s'agit d'un «résumé» (pas un paramètre structural).

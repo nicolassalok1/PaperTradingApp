@@ -1,0 +1,141 @@
+% =========================================================
+% Compléments M1 — Brownien (C. Dérivations)
+% =========================================================
+
+\subsection*{Dérivation guidée : résoudre le GBM sans «recette»}
+On repart de la SDE (sous $\Qmeas$) :
+\[
+\frac{\dd S_t}{S_t}=(r-q)\,\dd t+\sigma\,\dd W_t.
+\]
+L'idée est de transformer une dynamique multiplicative en dynamique additive via le logarithme.
+Posons $X_t=\ln S_t$.
+Au chapitre Itô, on montre la formule (ici on l'utilise) :
+\[
+\dd \ln S_t = \frac{1}{S_t}\dd S_t-\frac12\frac{1}{S_t^2}(\dd S_t)^2.
+\]
+Or $\dd S_t=(r-q)S_t\dd t+\sigma S_t\dd W_t$, donc
+\[
+\frac{1}{S_t}\dd S_t=(r-q)\dd t+\sigma \dd W_t,
+\qquad
+(\dd S_t)^2=(\sigma S_t)^2(\dd W_t)^2=\sigma^2 S_t^2\,\dd t,
+\]
+et ainsi
+\[
+\dd \ln S_t
+=(r-q)\dd t+\sigma \dd W_t-\tfrac12\sigma^2\dd t
+=\bigl(r-q-\tfrac12\sigma^2\bigr)\dd t+\sigma \dd W_t.
+\]
+On a donc une dynamique \textbf{linéaire} pour $X_t=\ln S_t$ :
+\[
+X_t=X_0+\int_0^t \bigl(r-q-\tfrac12\sigma^2\bigr)\dd u+\sigma\int_0^t \dd W_u
+=\ln S_0+\bigl(r-q-\tfrac12\sigma^2\bigr)t+\sigma W_t.
+\]
+En exponentiant :
+\[
+\boxed{
+S_t=S_0\exp\Big(\bigl(r-q-\tfrac12\sigma^2\bigr)t+\sigma W_t\Big).
+}
+\]
+\paragraph{Point pédagogique.}
+La présence de $-\tfrac12\sigma^2 t$ n'est pas un «détail» : c'est la correction d'Itô (convexité) qui rend $S_t$ log-normal et fait que $\E[S_t]=S_0e^{(r-q)t}$.
+
+\subsection*{Du modèle continu aux rendements discrets (annualisation de la volatilité)}
+Sur un pas $\Delta t$, on obtient
+\[
+\ln\frac{S_{t+\Delta t}}{S_t}
+=\bigl(r-q-\tfrac12\sigma^2\bigr)\Delta t+\sigma (W_{t+\Delta t}-W_t).
+\]
+Or $W_{t+\Delta t}-W_t\sim\Normal(0,\Delta t)$, donc
+\[
+\ln\frac{S_{t+\Delta t}}{S_t}\sim
+\Normal\Big(\bigl(r-q-\tfrac12\sigma^2\bigr)\Delta t,\ \sigma^2\Delta t\Big).
+\]
+\paragraph{Conséquence.}
+L'écart-type d'un log-return sur $\Delta t$ est $\sigma\sqrt{\Delta t}$.
+Si $\Delta t$ est en \emph{années} (par exemple $\Delta t=1/252$), on retrouve l'heuristique «vol journalière $\approx \sigma/\sqrt{252}$».
+
+\subsection*{Exponential martingale (outil clé pour Girsanov)}
+Un objet qui revient en changement de mesure est la martingale exponentielle :
+\[
+Z_t=\exp\Big(\theta W_t-\tfrac12\theta^2 t\Big),\qquad \theta\in\R.
+\]
+\paragraph{Pourquoi c'est une martingale ?}
+On sait que $W_t-W_s\sim\Normal(0,t-s)$ indépendant de $\F_s$.
+Donc, pour $s<t$,
+\[
+\E[Z_t\mid \F_s]
+=Z_s\,\E\!\left[\exp\Big(\theta(W_t-W_s)-\tfrac12\theta^2(t-s)\Big)\right]
+=Z_s,
+\]
+car si $X\sim\Normal(0,t-s)$ alors $\E[e^{\theta X}]=\exp(\tfrac12\theta^2(t-s))$.
+Cette identité est l'ombre portée du fait que «gaussien + exponentielle = calcul exact», ce qui rend le changement de mesure tractable en BS.
+
+\subsection*{Exercices corrigés (Brownien, intégrale d'Itô, GBM)}
+\paragraph{Exercice 1 --- loi d'une intégrale d'Itô à intégrande déterministe.}
+Soit $h:[0,T]\to\R$ déterministe, mesurable, et $\int_0^T h(t)^2\,\dd t<\infty$.
+Montrer que
+\[
+I=\int_0^T h(t)\,\dd W_t
+\]
+est une variable gaussienne centrée, et calculer sa variance.
+
+\emph{Solution.}
+On approxime $h$ par des fonctions en escalier $h^n$.
+Pour $h^n$, on a
+\[
+I_n=\int_0^T h^n(t)\,\dd W_t=\sum_k h^n(t_k)\Delta W_k,
+\]
+combinaison linéaire d'incréments gaussiens indépendants $\Rightarrow I_n$ est gaussien centré.
+Par isométrie d'Itô,
+\[
+\Var(I_n)=\E[I_n^2]=\int_0^T (h^n(t))^2\,\dd t.
+\]
+Comme $h^n\to h$ dans $L^2([0,T])$, on a $I_n\to I$ dans $L^2(\Omega)$ et la variance converge vers $\int_0^T h(t)^2\dd t$.
+Une limite $L^2$ de gaussiennes centrées (en fait, convergence en loi) est gaussienne, donc
+\[
+I\sim \Normal\Big(0,\ \int_0^T h(t)^2\,\dd t\Big).
+\]
+
+\paragraph{Exercice 2 --- moments de $S_T$ sous GBM.}
+Sous $\Qmeas$, $S_T=S_0\exp((r-q-\tfrac12\sigma^2)T+\sigma W_T)$.
+\begin{enumerate}[leftmargin=*]
+\item Calculer $\E^{\Qmeas}[S_T]$.
+\item Calculer $\Var^{\Qmeas}(S_T)$.
+\end{enumerate}
+
+\emph{Solution.}
+On utilise que $W_T\sim\Normal(0,T)$, donc $\E[e^{\sigma W_T}]=e^{\frac12\sigma^2T}$.
+\[
+\E[S_T]
+=S_0e^{(r-q-\frac12\sigma^2)T}\E[e^{\sigma W_T}]
+=S_0e^{(r-q-\frac12\sigma^2)T}e^{\frac12\sigma^2T}
+=S_0e^{(r-q)T}.
+\]
+Pour la variance, on calcule $\E[S_T^2]$ :
+\[
+S_T^2=S_0^2\exp\Big(2(r-q-\tfrac12\sigma^2)T+2\sigma W_T\Big),
+\]
+donc $\E[e^{2\sigma W_T}]=e^{2^2\sigma^2T/2}=e^{2\sigma^2T}$ et
+\[
+\E[S_T^2]=S_0^2e^{2(r-q-\frac12\sigma^2)T}e^{2\sigma^2T}
+=S_0^2e^{2(r-q)T}e^{\sigma^2T}.
+\]
+Ainsi
+\[
+\Var(S_T)=\E[S_T^2]-\E[S_T]^2
+=S_0^2e^{2(r-q)T}\bigl(e^{\sigma^2T}-1\bigr).
+\]
+
+\paragraph{Exercice 3 --- probabilité de franchissement (principe de réflexion).}
+Soit $a>0$. Montrer que
+\[
+\Prob\Big(\sup_{0\le t\le T} W_t\ge a\Big)=2\Prob(W_T\ge a).
+\]
+\emph{Solution (idée).}
+On note $\tau_a=\inf\{t:W_t=a\}$ et on considère l'application qui, pour une trajectoire franchissant $a$ avant $T$ et finissant en dessous de $a$, réfléchit la partie après $\tau_a$.
+On construit une bijection entre cet ensemble et l'ensemble des trajectoires finissant au-dessus de $a$.
+On obtient
+\[
+\Prob(M_T\ge a)=\Prob(W_T\ge a)+\Prob(M_T\ge a,\ W_T<a)
+=\Prob(W_T\ge a)+\Prob(W_T\ge a)=2\Prob(W_T\ge a).
+\]

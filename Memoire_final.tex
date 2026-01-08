@@ -7,6 +7,7 @@
 \usepackage{lmodern}
 \usepackage{amsmath, amssymb, amsfonts}
 \usepackage{mathtools}
+\usepackage{bm}
 \usepackage{amsthm}
 \usepackage{geometry}
 \usepackage{setspace}
@@ -22,7 +23,7 @@
 \usepackage{longtable}
 
 \geometry{margin=2.3cm}
-\setstretch{1.15}
+\setstretch{1.4}
 \setlist[itemize]{itemsep=3pt}
 \setcounter{secnumdepth}{3}
 \setcounter{tocdepth}{3}
@@ -39,11 +40,15 @@
 \newcommand{\ee}{\mathrm{e}}
 \newcommand{\ii}{\mathrm{i}}
 \newcommand{\R}{\mathbb{R}}
+\newcommand{\C}{\mathbb{C}}
 \newcommand{\N}{\mathbb{N}}
 \newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\Cov}{\mathrm{Cov}}
 \newcommand{\PP}{\mathbb{P}}
 \newcommand{\QQ}{\mathbb{Q}}
 \newcommand{\1}{\mathbf{1}}
+\newcommand{\bH}{B^{H}}
 \DeclareMathOperator*{\argmin}{arg\,min}
 \DeclareMathOperator*{\argmax}{arg\,max}
 
@@ -463,15 +468,15 @@ des PnL due aux facteurs (risque de march\'e) de celle due aux erreurs de donn\'
 
 \subsubsection{Vanilla / Early Exercise}
 
-Les options vanilles constituent la classe fondamentale des produits dérivés d’options.
-Leur payoff dépend uniquement du prix du sous-jacent $S_T$ à l’échéance $T$, ce qui permet
-une étude rigoureuse via les outils classiques de calcul stochastique, de théorie de l’arbitrage
-et d’analyse fonctionnelle.
+Les options vanilles constituent la classe fondamentale des produits dérivés d'options.
+Leur payoff dépend uniquement du prix du sous-jacent $S_T$ à l'échéance $T$, ce qui permet
+une étude rigoureuse via les outils classiques de calcul stochastique, de théorie de l'arbitrage
+et d'analyse fonctionnelle.
 
 %------------------------------------------------
 \paragraph{Options européennes.}
 
-Une option européenne ne peut être exercée qu’à la date de maturité $T$.
+Une option européenne ne peut être exercée qu'à la date de maturité $T$.
 
 Les payoffs sont donnés par :
 \[
@@ -481,7 +486,7 @@ Les payoffs sont donnés par :
 \]
 où $(x)^+ = \max(x,0)$.
 
-Sous la mesure risque--neutre $\mathbb{Q}$ et en l’absence d’arbitrage, les prix sont :
+Sous la mesure risque--neutre $\mathbb{Q}$ et en l'absence d'arbitrage, les prix sont :
 \[
 C_0 = e^{-rT}\,\mathbb{E}^{\mathbb{Q}}\big[(S_T-K)^+\big],
 \qquad
@@ -492,10 +497,10 @@ Dans le modèle de mouvement brownien géométrique
 \[
 dS_t = r S_t\,dt + \sigma S_t\, dW_t,
 \]
-l’application du lemme d’Itô permet de dériver la PDE de Black--Scholes ainsi que la formule
+l'application du lemme d'Itô permet de dériver la PDE de Black--Scholes ainsi que la formule
 fermée du call européen.
 
-La parité call--put s’écrit :
+La parité call--put s'écrit :
 \[
 C_0 - P_0 = S_0 - K e^{-rT},
 \]
@@ -505,24 +510,24 @@ relation qui doit être satisfaite dans tout modèle arbitrage--free.
 \paragraph{Options américaines.}
 
 Une option américaine peut être exercée à tout instant $\tau \in [0,T]$.
-La valorisation s’écrit comme un problème de temps d’arrêt optimal :
+La valorisation s'écrit comme un problème de temps d'arrêt optimal :
 \[
 V_0 = \sup_{\tau \in \mathcal{T}}
 \mathbb{E}^{\mathbb{Q}}\!\left[e^{-r\tau}\,\Phi(S_\tau)\right],
 \]
-où $\mathcal{T}$ désigne l’ensemble des temps d’arrêt adaptés.
+où $\mathcal{T}$ désigne l'ensemble des temps d'arrêt adaptés.
 
-La frontière d’exercice est caractérisée par l’inégalité :
+La frontière d'exercice est caractérisée par l'inégalité :
 \[
 \Phi(S_t) \;\ge\; V_t.
 \]
 
 Cas classiques :
 \begin{itemize}
-  \item Call américain \emph{sans dividende} : l’exercice anticipé n’est jamais optimal et l’on a
+  \item Call américain \emph{sans dividende} : l'exercice anticipé n'est jamais optimal et l'on a
   $V_0 = C_0^{EU}$.
   \item Put américain : un exercice anticipé peut être optimal lorsque $S_t$ franchit une
-  frontière critique $S^\*(t)$, solution d’un problème de frontière libre.
+  frontière critique $S^*(t)$, solution d'un problème de frontière libre.
 \end{itemize}
 
 En pratique, ces produits nécessitent des méthodes numériques (arbres binomiaux ou
@@ -532,7 +537,7 @@ trinômiaux, PDE variationnelles, méthodes de type Longstaff--Schwartz).
 \paragraph{Options bermudéennes.}
 
 Les options bermudéennes constituent un intermédiaire entre européennes et américaines :
-l’exercice n’est possible qu’à un ensemble discret de dates
+l'exercice n'est possible qu'à un ensemble discret de dates
 $\{t_1,\dots,t_m\} \subset [0,T]$.
 
 La valorisation se fait par récurrence arrière :
@@ -567,11 +572,12 @@ Le prix du call européen admet une formule semi--fermée de la forme
 \[
 C_0 = S_0 P_1 - K e^{-rT} P_2,
 \]
-où $P_1$ et $P_2$ s’expriment comme des intégrales de Fourier faisant intervenir
+où $P_1$ et $P_2$ s'expriment comme des intégrales de Fourier faisant intervenir
 la fonction caractéristique du log--prix.
 
-La dérivation complète de cette formule (changement de mesure, résolution de l’ODE
-pour la fonction caractéristique, inversion de Fourier) est fournie en annexe.
+La dérivation complète de cette formule (changement de mesure, résolution de l'ODE
+pour la fonction caractéristique, inversion de Fourier) est développée en
+Section~\ref{sec:deriv-heston}.
 
 %------------------------------------------------
 \paragraph{Volatilité rugueuse et modèle rBergomi.}
@@ -587,8 +593,9 @@ Les éléments clés sont :
   \item lien avec les SDE de type Volterra et la variance rough.
 \end{itemize}
 
-Les d\'etails (construction du fBM, noyaux, choix de sch\'emas) peuvent \^etre ajout\'es en annexe ; on renvoie sinon \`a la litt\'erature
-sur la rough volatility pour les d\'erivations compl\`etes.
+Les d\'etails (construction du fBM, noyaux, choix de sch\'emas) sont d\'evelopp\'es en
+Sections~\ref{sec:deriv-fbm} et~\ref{sec:deriv-rbergomi} ; on renvoie sinon \`a la litt\'erature
+sur la rough volatility pour des approfondissements.
 
 %------------------------------------------------
 \paragraph{Rôle structurel des options vanilles.}
@@ -596,31 +603,31 @@ sur la rough volatility pour les d\'erivations compl\`etes.
 Les options vanilles sont utilisées pour :
 \begin{itemize}
   \item \textbf{calibrer} les modèles de volatilité, en ajustant un vecteur de paramètres $\theta$
-  pour minimiser l’écart entre volatilités implicites modèle et marché ;
-  \item \textbf{extraire les sensibilités} (Greeks) : 
+  pour minimiser l'écart entre volatilités implicites modèle et marché ;
+  \item \textbf{extraire les sensibilités} (Greeks) :
   $\Delta = \frac{\partial V}{\partial S}$,
   $\Gamma = \frac{\partial^2 V}{\partial S^2}$,
   $\text{Vega} = \frac{\partial V}{\partial \sigma}$, etc. ;
   \item \textbf{construire des payoffs exotiques synthétiques} par superposition linéaire
-  d’options vanilles (spreads, butterflies, arbitrages statiques).
+  d'options vanilles (spreads, butterflies, arbitrages statiques).
 \end{itemize}
 
 
 \subsubsection{Path-dependent options}
 
 Les options path-dependent sont des produits dérivés dont le payoff dépend de
-l’ensemble de la trajectoire $(S_t)_{0 \le t \le T}$, et non uniquement de la valeur 
-du sous-jacent à maturité. Leur valorisation requiert l'utilisation de probabilités 
-fonctionnelles, de techniques avancées de Monte Carlo et, dans certains cas, de 
+l'ensemble de la trajectoire $(S_t)_{0 \le t \le T}$, et non uniquement de la valeur
+du sous-jacent à maturité. Leur valorisation requiert l'utilisation de probabilités
+fonctionnelles, de techniques avancées de Monte Carlo et, dans certains cas, de
 résultats de théorie des extrêmes du mouvement brownien.
 
 %====================================================
 \paragraph{Asian options.}
 
-\textbf{Structure.}  
+\textbf{Structure.}
 On distingue deux types principaux de moyennes discrètes :
 \[
-A_T^{\mathrm{arith}} = \frac{1}{n}\sum_{i=1}^n S_{t_i}, 
+A_T^{\mathrm{arith}} = \frac{1}{n}\sum_{i=1}^n S_{t_i},
 \qquad
 A_T^{\mathrm{geom}} = \left(\prod_{i=1}^n S_{t_i}\right)^{1/n}.
 \]
@@ -680,7 +687,7 @@ m_T = \min_{0 \le t \le T} S_t.
 %====================================================
 \paragraph{Forward-start options.}
 
-\textbf{Structure.}  
+\textbf{Structure.}
 Le strike est fixé à une date future $t_0 < T$ :
 \[
 K = \alpha S_{t_0}.
@@ -701,13 +708,13 @@ K = \alpha S_{t_0}.
 %====================================================
 \paragraph{Cliquet / Ratchet options.}
 
-\textbf{Structure.}  
+\textbf{Structure.}
 Options à réinitialisation périodique :
 \[
 \Phi = \sum_{i=1}^n (S_{t_i} - S_{t_{i-1}})^+.
 \]
 
-\textbf{Payoff.}  
+\textbf{Payoff.}
 Basé sur les increments positifs ou une accumulation de gains ``lock-in''.
 
 \textbf{Pricing.}
@@ -720,9 +727,9 @@ Basé sur les increments positifs ou une accumulation de gains ``lock-in''.
 
 \subsubsection{Barrier options}
 
-Les options barrières sont des produits dérivés dont le payoff dépend du 
-franchissement ou non d’un niveau prédéfini appelé \emph{barrière}. Elles sont 
-fortement sensibles à la trajectoire du sous--jacent et requièrent la maîtrise 
+Les options barrières sont des produits dérivés dont le payoff dépend du
+franchissement ou non d'un niveau prédéfini appelé \emph{barrière}. Elles sont
+fortement sensibles à la trajectoire du sous--jacent et requièrent la maîtrise
 des temps de passage du mouvement brownien.
 
 %====================================================
@@ -736,10 +743,10 @@ On définit le temps d'atteinte de la barrière $B$ par :
 Deux familles principales :
 
 \begin{itemize}
-  \item \textbf{Knock-out} : l’option est annulée si $\tau_B \le T$.  
+  \item \textbf{Knock-out} : l'option est annulée si $\tau_B \le T$.
         \\Exemples : up-and-out, down-and-out.
 
-  \item \textbf{Knock-in} : l’option n’existe que si la barrière est atteinte avant $T$.  
+  \item \textbf{Knock-in} : l'option n'existe que si la barrière est atteinte avant $T$.
         \\Exemples : up-and-in, down-and-in.
 \end{itemize}
 
@@ -769,13 +776,13 @@ Relation fondamentale de parité :
 \paragraph{Pricing.}
 
 \subparagraph{Cas Black--Scholes : formules fermées.}
-Sous un GBM, les hitting times sont explicitables par le principe de 
-réflexion. Cela conduit à des formules fermées pour l’ensemble des barrières 
+Sous un GBM, les hitting times sont explicitables par le principe de
+réflexion. Cela conduit à des formules fermées pour l'ensemble des barrières
 up/down, in/out.
 
-Exemple (call down--and--out) :  
+Exemple (call down--and--out) :
 \[
-C_{\mathrm{DO}} 
+C_{\mathrm{DO}}
 = C_{\mathrm{vanilla}}
   - \left( \frac{B}{S_0} \right)^{2\lambda - 2}
     C_{\mathrm{vanilla}}(S_0', K),
@@ -789,17 +796,17 @@ S_0' = \frac{B^2}{S_0}.
 
 \subparagraph{Observation continue vs discrète.}
 \begin{itemize}
-  \item Observation continue : barrière active en tout temps → hitting times exacts.
-  \item Observation discrète : barrière testée à des dates $\{t_i\}$ seulement  
-        $\Rightarrow$ 
+  \item Observation continue : barrière active en tout temps $\rightarrow$ hitting times exacts.
+  \item Observation discrète : barrière testée à des dates $\{t_i\}$ seulement
+        $\Rightarrow$
         \(
-        \mathrm{Price}_{\mathrm{disc}} 
+        \mathrm{Price}_{\mathrm{disc}}
         >
         \mathrm{Price}_{\mathrm{cont}}
         \).
 \end{itemize}
 
-Correction : utilisation d’un \textbf{Brownian bridge} entre deux pas de temps.
+Correction : utilisation d'un \textbf{Brownian bridge} entre deux pas de temps.
 
 %----------------------------------------------------
 \subparagraph{Pricing sous volatilité locale / stochastique / rough.}
@@ -813,7 +820,7 @@ Correction : utilisation d’un \textbf{Brownian bridge} entre deux pas de temps
 %----------------------------------------------------
 \subparagraph{Monte Carlo.}
 
-Le Monte Carlo naïf ne détecte pas correctement les franchissements.  
+Le Monte Carlo naïf ne détecte pas correctement les franchissements.
 Solution : Brownian bridge.
 
 Probabilité conditionnelle de franchissement :
@@ -840,7 +847,7 @@ Probabilité conditionnelle de franchissement :
   \item \textbf{Parisian barriers} :
   hitting cumulé durant $\delta$ :
   \[
-  \tau^\star = \inf\left\{t : \int_0^t 
+  \tau^\star = \inf\left\{t : \int_0^t
      \mathbf{1}_{\{S_u < B\}} \, du \ge \delta \right\}.
   \]
   \item \textbf{Partial barriers} :
@@ -850,7 +857,7 @@ Probabilité conditionnelle de franchissement :
 
 \subsubsection{Spreads \& Wings}
 
-Les stratégies « spreads » et « wings » sont des combinaisons linéaires d’options
+Les stratégies ``spreads'' et ``wings'' sont des combinaisons linéaires d'options
 vanilles visant à modifier le profil de payoff et les sensibilités (gamma,
 vega, vomma, convexité). Elles reposent sur le principe :
 \[
@@ -1118,7 +1125,7 @@ C(K_1) - C(K_2) - C(K_3) + C(K_4),
 Les calendar spreads et diagonal spreads sont des stratégies multi--maturités
 qui exploitent la structure par terme de la volatilité implicite ainsi que la
 décroissance temporelle de la valeur temps (Theta). Elles reposent sur la
-combinaison d’options de même sous--jacent mais de maturités, voire de strikes,
+combinaison d'options de même sous--jacent mais de maturités, voire de strikes,
 différents.
 
 %====================================================
@@ -1133,7 +1140,7 @@ différents.
 \]
 
 \textbf{Payoff.}
-À maturité $T_2$, le payoff du calendar spread est celui de l’option longue,
+À maturité $T_2$, le payoff du calendar spread est celui de l'option longue,
 mais le coût initial est réduit par la jambe courte :
 \[
 \Pi_0 = C(K,T_2) - C(K,T_1).
@@ -1234,12 +1241,12 @@ stochastique, ou encore élimination du risque de change (produits quanto).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \paragraph{Digital options.}
 
-\textbf{Structure.} 
+\textbf{Structure.}
 Une option digitale verse un montant fixe $Q$ si la condition de moneyness est satisfaite.
 
 \textbf{Payoff.}
 \[
-\Phi_{\mathrm{DC}} = Q \cdot \mathbf{1}_{\{ S_T > K \}}, 
+\Phi_{\mathrm{DC}} = Q \cdot \mathbf{1}_{\{ S_T > K \}},
 \qquad
 \Phi_{\mathrm{DP}} = Q \cdot \mathbf{1}_{\{ S_T < K \}}.
 \]
@@ -1274,8 +1281,8 @@ d_2 = \frac{\ln(S_0/K) + (r - \tfrac12 \sigma^2)T}{\sigma \sqrt{T}}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \paragraph{Asset-or-nothing options.}
 
-\textbf{Structure.}  
-Le payoff dépend du niveau du sous-jacent et d’une condition binaire.
+\textbf{Structure.}
+Le payoff dépend du niveau du sous-jacent et d'une condition binaire.
 
 \textbf{Payoff.}
 \[
@@ -1310,7 +1317,7 @@ V_0 = S_0 N(d_1).
 \paragraph{Chooser options.}
 
 \textbf{Structure.}
-À une date $t_c < T$, l’acheteur choisit entre un call et un put.
+À une date $t_c < T$, l'acheteur choisit entre un call et un put.
 
 \textbf{Payoff.}
 \[
@@ -1397,7 +1404,7 @@ Best-of / worst-of.
 \textbf{Pricing.}
 Dépend de la corrélation :
 \[
-\sigma_B^2 = 
+\sigma_B^2 =
 \sum_{i,j} w_i w_j \sigma_i \sigma_j \rho_{ij}.
 \]
 Méthodes :
@@ -1426,15 +1433,15 @@ Méthodes :
 
 \subsubsection{Basket options}
 
-Les basket options sont des dérivés dont le payoff dépend d’un panier pondéré 
-de plusieurs sous--jacents. Leur valorisation est profondément influencée par 
-la corrélation entre les actifs, ainsi que par la structure de leurs 
+Les basket options sont des dérivés dont le payoff dépend d'un panier pondéré
+de plusieurs sous--jacents. Leur valorisation est profondément influencée par
+la corrélation entre les actifs, ainsi que par la structure de leurs
 volatilités respectives.
 
-Le panier s’écrit :
+Le panier s'écrit :
 \[
 B_T = \sum_{i=1}^{n} w_i S_T^{(i)},
-\qquad 
+\qquad
 \sum_{i=1}^n w_i = 1, \; w_i \ge 0.
 \]
 
@@ -1451,8 +1458,8 @@ B_T = \sum_{i=1}^{n} w_i S_T^{(i)},
 \]
 
 \textbf{Pricing.}
-Même lorsque chaque $S_t^{(i)}$ suit un GBM, le panier $B_T$ n’est pas 
-lognormal. Il n’existe donc pas de formule fermée générale.
+Même lorsque chaque $S_t^{(i)}$ suit un GBM, le panier $B_T$ n'est pas
+lognormal. Il n'existe donc pas de formule fermée générale.
 
 Approximations usuelles :
 \begin{itemize}
@@ -1461,7 +1468,7 @@ Approximations usuelles :
   \sigma_B^2 = \sum_{i,j} w_i w_j \sigma_i \sigma_j \rho_{ij}.
   \]
   \item \textbf{Moment matching} :
-  ajustement d’une lognormale équivalente via 
+  ajustement d'une lognormale équivalente via
   $\mathbb{E}[B_T]$ et $\mathrm{Var}(B_T)$.
   \item \textbf{Monte Carlo multivarié} :
   simulation corrélée via factorisation de Cholesky ou SVD.
@@ -1566,15 +1573,15 @@ absence d'arbitrage (parit\'es, monotonicit\'es, convexit\'e), puis \`a un mod\`
 
 \paragraph{Définition.}
 
-Soit une partition d’un intervalle $[0,T]$ :
+Soit une partition d'un intervalle $[0,T]$ :
 \[
 \Pi_n = \{0 = t_0^{(n)} < t_1^{(n)} < \dots < t_{k_n}^{(n)} = T\},
 \qquad
 |\Pi_n| := \max_i (t^{(n)}_{i+1} - t^{(n)}_i).
 \]
 
-On définit la \emph{variation quadratique} d’un processus continu $(X_t)$ par la limite,
-lorsqu’elle existe :
+On définit la \emph{variation quadratique} d'un processus continu $(X_t)$ par la limite,
+lorsqu'elle existe :
 \[
 [X]_T
 := \lim_{n\to\infty}
@@ -1584,13 +1591,13 @@ lorsqu’elle existe :
 |\Pi_n| \to 0.
 \]
 
-Lorsque la limite existe pour tout $t\le T$, on obtient un processus croissant 
+Lorsque la limite existe pour tout $t\le T$, on obtient un processus croissant
 $t\mapsto [X]_t$.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \paragraph{Variation quadratique du mouvement brownien.}
 
-Soit $(W_t)$ un mouvement brownien standard.  
+Soit $(W_t)$ un mouvement brownien standard.
 Sur un intervalle $[t_i,t_{i+1}]$ de longueur $\Delta t_i$ :
 \[
 W_{t_{i+1}} - W_{t_i} \sim \mathcal{N}(0,\Delta t_i)
@@ -1616,22 +1623,22 @@ Pour la variance :
 
 Si $Z \sim \mathcal{N}(0,\Delta t)$, alors
 \[
-\mathbb{E}[Z^4] = 3 (\Delta t)^2, 
+\mathbb{E}[Z^4] = 3 (\Delta t)^2,
 \qquad
 \mathrm{Var}(Z^2) = 3(\Delta t)^2 - (\Delta t)^2 = 2(\Delta t)^2.
 \]
 
 Donc :
 \[
-\mathrm{Var}(S_n) 
+\mathrm{Var}(S_n)
 = 2 \sum_i (\Delta t_i)^2.
 \]
 
 Or, lorsque $|\Pi_n|\to 0$ :
 \[
-\sum_i (\Delta t_i)^2 
-\le |\Pi_n|\sum_i \Delta t_i 
-= |\Pi_n|\,T 
+\sum_i (\Delta t_i)^2
+\le |\Pi_n|\sum_i \Delta t_i
+= |\Pi_n|\,T
 \xrightarrow[n\to\infty]{} 0.
 \]
 
@@ -1640,7 +1647,7 @@ Ainsi :
 \mathrm{Var}(S_n) \longrightarrow 0.
 \]
 
-Par l’inégalité de Chebyshev :
+Par l'inégalité de Chebyshev :
 \[
 \forall \varepsilon>0,\qquad
 \mathbb{P}\big(|S_n - T| > \varepsilon\big)
@@ -1652,14 +1659,14 @@ Donc :
 \[
 S_n \xrightarrow[n\to\infty]{\mathbb{P}} T,
 \]
-et, en renforçant l’argument (partitions dyadiques + Borel--Cantelli),
+et, en renforçant l'argument (partitions dyadiques + Borel--Cantelli),
 \[
 [W]_t = t
 \qquad \text{presque sûrement}.
 \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\paragraph{Variation quadratique d’un processus d’It\^{o}.}
+\paragraph{Variation quadratique d'un processus d'It\^{o}.}
 
 Considérons une diffusion :
 \[
@@ -1684,7 +1691,7 @@ Le terme stochastique domine dans le carré :
 \left(\int_{t_i}^{t_{i+1}} b_s\, dW_s\right)^2.
 \]
 
-Par isométrie d’It\^{o} :
+Par isométrie d'It\^{o} :
 \[
 \mathbb{E}\!\left[
 \left(\int_{t_i}^{t_{i+1}} b_s\, dW_s\right)^2
@@ -1698,7 +1705,7 @@ Par isométrie d’It\^{o} :
 
 Ainsi :
 \[
-\sum_i (\Delta X_i)^2 
+\sum_i (\Delta X_i)^2
 \to \int_0^T b_s^2\, ds.
 \]
 
@@ -1711,7 +1718,7 @@ On obtient rigoureusement :
 \paragraph{Résumé.}
 \begin{itemize}
   \item Pour le mouvement brownien : $[W]_t = t$.
-  \item Pour une diffusion d’It\^{o} :
+  \item Pour une diffusion d'It\^{o} :
   \[
   dX_t = a_t\,dt + b_t\,dW_t
   \quad\Rightarrow\quad
@@ -1726,7 +1733,7 @@ On obtient rigoureusement :
 
 \bigskip
 
-Soit un mouvement brownien $(W_t)_{t\ge 0}$ sur un espace probabilis\'e 
+Soit un mouvement brownien $(W_t)_{t\ge 0}$ sur un espace probabilis\'e
 filtr\'e $(\Omega,\mathcal{F},(\mathcal{F}_t)_{t\ge 0},\mathbb{P})$, et soit
 un processus d'It\^{o} scalaire $(X_t)_{t\in[0,T]}$ de la forme :
 \[
@@ -1753,14 +1760,14 @@ Le lemme d'It\^{o} donne l'expression diff\'erentielle de $(Y_t)$.
 Consid\'erons un petit incr\'ement de temps $h>0$ et notons $X_t = x$ pour fixer les id\'ees.
 Sur l'intervalle $[t,t+h]$, on a formellement :
 \[
-X_{t+h} - X_t 
+X_{t+h} - X_t
 \simeq a(t,x)\,h + b(t,x)\,\Delta W_t,
 \quad
 \Delta W_t := W_{t+h} - W_t,
 \]
 avec $\Delta W_t \sim \mathcal{N}(0,h)$. En ordre de grandeur :
 \[
-a(t,x)\,h = \mathcal{O}(h), 
+a(t,x)\,h = \mathcal{O}(h),
 \qquad
 b(t,x)\,\Delta W_t = \mathcal{O}(\sqrt{h}).
 \]
@@ -1768,9 +1775,9 @@ b(t,x)\,\Delta W_t = \mathcal{O}(\sqrt{h}).
 On applique un d\'eveloppement de Taylor \`a deux variables \`a $f$ autour de $(t,x)$ :
 \[
 \begin{aligned}
-f(t+h,X_{t+h}) 
-&\approx f(t,x) 
-+ f_t(t,x)\,h 
+f(t+h,X_{t+h})
+&\approx f(t,x)
++ f_t(t,x)\,h
 + f_x(t,x)\,(X_{t+h}-x) \\
 &\quad + \frac12 f_{xx}(t,x)\,(X_{t+h}-x)^2.
 \end{aligned}
@@ -1793,7 +1800,7 @@ Avec $\Delta X \simeq a h + b \Delta W_t$, on obtient
 
 En termes d'ordre :
 \[
-a^2 h^2 = \mathcal{O}(h^2), 
+a^2 h^2 = \mathcal{O}(h^2),
 \qquad
 2ab h\Delta W_t = \mathcal{O}(h^{3/2}),
 \qquad
@@ -1817,7 +1824,7 @@ On retient donc heuristiquement :
 
 En rempla\c{c}ant $\Delta X$ et $(\Delta X)^2$ dans l'expression de $\Delta f$ :
 \[
-\Delta f 
+\Delta f
 \approx f_t h + f_x (a h + b\Delta W_t)
 + \tfrac12 f_{xx} b^2 h.
 \]
@@ -1825,7 +1832,7 @@ En rempla\c{c}ant $\Delta X$ et $(\Delta X)^2$ dans l'expression de $\Delta f$ :
 On peut r\'earranger les termes :
 \[
 \Delta f
-\approx 
+\approx
 \bigl( f_t + a f_x + \tfrac12 b^2 f_{xx} \bigr)\, h
 + b f_x \,\Delta W_t.
 \]
@@ -1856,7 +1863,7 @@ df(t,X_t)
 \]
 o\`u $[X]_t$ est la variation quadratique de $X$.
 
-Avec 
+Avec
 \[
 dX_t = a(t,X_t)\,dt + b(t,X_t)\,dW_t,
 \]
@@ -1899,19 +1906,19 @@ f(t,X_t)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \paragraph{R\'esum\'e.}
 
-Pour un processus d’It\^{o}
+Pour un processus d'It\^{o}
 \[
 dX_t = a(t,X_t)\,dt + b(t,X_t)\,dW_t
 \]
-et une fonction $f \in C^{1,2}$, le lemme d’It\^{o} affirme que :
+et une fonction $f \in C^{1,2}$, le lemme d'It\^{o} affirme que :
 \[
 df(t,X_t)
 = \bigl( f_t + a f_x + \tfrac12 b^2 f_{xx} \bigr)(t,X_t)\, dt
 + b(t,X_t) f_x(t,X_t)\, dW_t.
 \]
 
-La pr\'esence du terme $\tfrac12 b^2 f_{xx}$ provient directement de la 
-variation quadratique du brownien, via le fait que $(dW_t)^2$ se comporte 
+La pr\'esence du terme $\tfrac12 b^2 f_{xx}$ provient directement de la
+variation quadratique du brownien, via le fait que $(dW_t)^2$ se comporte
 comme $dt$ dans le calcul stochastique.
 
 
@@ -1936,7 +1943,7 @@ En appliquant le lemme d'It\^{o} \`a $f(S_t)$, avec $a(t,S_t)=\mu S_t$ et $b(t,S
 \[
 df(S_t)
 =
-f'(S_t)\, dS_t 
+f'(S_t)\, dS_t
 + \frac12 f''(S_t)\, d[S]_t.
 \]
 
@@ -1981,7 +1988,7 @@ On suppose $V \in C^{1,2}$ et on applique le lemme d'It\^{o} \`a $V(t,S_t)$.
 
 On a :
 \[
-dV(t,S_t) = V_t\, dt + V_S\, dS_t 
+dV(t,S_t) = V_t\, dt + V_S\, dS_t
 + \frac12 V_{SS}\, d[S]_t.
 \]
 
@@ -2003,11 +2010,11 @@ dV(t,S_t)
 \end{aligned}
 \]
 
-On construit maintenant un portefeuille auto--finan\c{c}ant 
+On construit maintenant un portefeuille auto--finan\c{c}ant
 \[
 \Pi_t = V(t,S_t) - \Delta_t S_t,
 \]
-o\`u $\Delta_t$ est une quantit\'e d'unit\'es du sous--jacent.  
+o\`u $\Delta_t$ est une quantit\'e d'unit\'es du sous--jacent.
 On choisit
 \[
 \Delta_t := V_S(t,S_t),
@@ -2025,7 +2032,7 @@ dS_t = r S_t\,dt + \sigma S_t\, dW_t,
 \]
 et
 \[
-dV_t = 
+dV_t =
 \bigl( V_t + r S_t V_S + \tfrac12 \sigma^2 S_t^2 V_{SS} \bigr)\, dt
 + \sigma S_t V_S\, dW_t.
 \]
@@ -2037,10 +2044,10 @@ d\Pi_t
 &= \left[
 V_t + r S_t V_S + \tfrac12 \sigma^2 S_t^2 V_{SS}
 \right] dt
-+ \sigma S_t V_S\, dW_t 
++ \sigma S_t V_S\, dW_t
 - V_S (r S_t\,dt + \sigma S_t\, dW_t) \\
 &= \left[
-V_t + r S_t V_S + \tfrac12 \sigma^2 S_t^2 V_{SS} 
+V_t + r S_t V_S + \tfrac12 \sigma^2 S_t^2 V_{SS}
 - r S_t V_S
 \right] dt \\
 &= \left[
@@ -2049,8 +2056,8 @@ V_t + \tfrac12 \sigma^2 S_t^2 V_{SS}
 \end{aligned}
 \]
 
-Ainsi, le portefeuille $\Pi_t$ est \emph{sûr} (plus de terme stochastique).  
-Par absence d’arbitrage, un portefeuille sans risque doit cro\^{i}tre au taux $r$ :
+Ainsi, le portefeuille $\Pi_t$ est \emph{sûr} (plus de terme stochastique).
+Par absence d'arbitrage, un portefeuille sans risque doit cro\^{i}tre au taux $r$ :
 
 \[
 d\Pi_t = r \Pi_t\,dt = r\bigl(V(t,S_t) - V_S(t,S_t) S_t\bigr)\,dt.
@@ -2068,21 +2075,21 @@ Autrement dit :
 V_t + \frac12 \sigma^2 S^2 V_{SS} + r S V_S - r V = 0.
 \]
 
-C’est la \textbf{PDE de Black--Scholes} pour tout $(t,S)$ dans $[0,T)\times(0,+\infty)$,
+C'est la \textbf{PDE de Black--Scholes} pour tout $(t,S)$ dans $[0,T)\times(0,+\infty)$,
 avec condition terminale :
 \[
 V(T,S) = \Phi(S).
 \]
 
 Cette PDE, coupl\'ee \`a la condition de terminale et aux conditions de croissance
-appropri\'ees, caract\'erise de fa\c{c}on unique le prix d’option europ\'een
+appropri\'ees, caract\'erise de fa\c{c}on unique le prix d'option europ\'een
 dans le cadre Black--Scholes.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Application : r\'esolution explicite de la PDE de Black--Scholes}
 
-On consid\`ere la PDE de Black--Scholes pour le prix $V(t,S)$ d’un call europ\'een
+On consid\`ere la PDE de Black--Scholes pour le prix $V(t,S)$ d'un call europ\'een
 de strike $K$ et maturit\'e $T$ :
 \[
 V_t + \frac12 \sigma^2 S^2 V_{SS} + r S V_S - r V = 0,
@@ -2093,13 +2100,13 @@ avec condition terminale :
 V(T,S) = (S-K)^+.
 \]
 
-L’objectif est de retrouver la formule ferm\'ee de Black--Scholes \`a partir de cette PDE.
+L'objectif est de retrouver la formule ferm\'ee de Black--Scholes \`a partir de cette PDE.
 
 \paragraph{Changement de variables.}
 
 On introduit les variables :
 \[
-\tau := T - t \quad\text{(temps \`a maturit\'e)}, 
+\tau := T - t \quad\text{(temps \`a maturit\'e)},
 \qquad
 x := \ln S.
 \]
@@ -2138,7 +2145,7 @@ On pose
 \[
 u(\tau,x) = e^{\alpha x + \beta \tau} w(\tau,x),
 \]
-et on choisit $\alpha,\beta$ pour transformer l’\'equation en \emph{\'equation de la chaleur}
+et on choisit $\alpha,\beta$ pour transformer l'\'equation en \emph{\'equation de la chaleur}
 pour $w$.
 
 On calcule :
@@ -2150,7 +2157,7 @@ u_{xx} = e^{\alpha x + \beta \tau} (\alpha^2 w + 2\alpha w_x + w_{xx}),
 u_\tau = e^{\alpha x + \beta \tau} (\beta w + w_\tau).
 \]
 
-En substituant dans l’\'equation pour $u$ :
+En substituant dans l'\'equation pour $u$ :
 
 \[
 \beta w + w_\tau
@@ -2175,7 +2182,7 @@ Pour obtenir une \'equation de la chaleur pure :
 \[
 w_\tau = \frac12 \sigma^2 w_{xx},
 \]
-il faut que le coefficient de $w_x$ soit nul et que celui de $w$ soit nul, d’o\`u :
+il faut que le coefficient de $w_x$ soit nul et que celui de $w$ soit nul, d'o\`u :
 
 \[
 \sigma^2 \alpha + r - \tfrac12 \sigma^2 = 0,
@@ -2196,7 +2203,7 @@ Avec ce choix, $w$ satisfait :
 \[
 w_\tau = \frac12 \sigma^2 w_{xx},
 \]
-c’est-à-dire l’\'equation de la chaleur classique.
+c'est-à-dire l'\'equation de la chaleur classique.
 
 \paragraph{Condition initiale.}
 
@@ -2209,7 +2216,7 @@ w(0,x) = e^{-\alpha x} u(0,x)
 = e^{-\alpha x} (e^x - K)^+.
 \]
 
-L’\'equation de la chaleur se r\'esout par convolution avec le noyau gaussien.
+L'\'equation de la chaleur se r\'esout par convolution avec le noyau gaussien.
 On obtient au final, apr\`es transformation inverse, la formule de Black--Scholes :
 \[
 C_0 = S_0 N(d_1) - K e^{-rT} N(d_2),
@@ -2339,7 +2346,7 @@ Pour un call europ\'een de strike $K$ et maturit\'e $T$, on cherche :
 C_0 = e^{-rT}\,\mathbb{E}^{\mathbb{Q}}[(S_T - K)^+].
 \]
 
-Dans le mod\`ele de Heston, le prix admet une formule semi--ferm\'ee en termes de 
+Dans le mod\`ele de Heston, le prix admet une formule semi--ferm\'ee en termes de
 transform\'ee de Fourier, gr\^ace au caract\`ere affine du mod\`ele.
 
 \paragraph{Changement de variable.}
@@ -2349,7 +2356,7 @@ On introduit le log--prix :
 X_t = \ln S_t.
 \]
 
-En appliquant le lemme d’It\^{o} \`a $X_t$ (comme dans la section pr\'ec\'edente), on obtient :
+En appliquant le lemme d'It\^{o} \`a $X_t$ (comme dans la section pr\'ec\'edente), on obtient :
 \[
 dX_t = \left(r - \frac12 v_t\right)\, dt + \sqrt{v_t} \, dW_t^{(1)}.
 \]
@@ -2363,9 +2370,9 @@ On consid\`ere la fonction caract\'eristique du log--prix sous $\mathbb{Q}$ :
 \phi(u; t) := \mathbb{E}^{\mathbb{Q}}\big[ e^{iu X_t} \,\big|\, X_0, v_0 \big].
 \]
 
-Le caract\`ere affine du mod\`ele implique que la fonction caract\'eristique s’\'ecrit sous la forme :
+Le caract\`ere affine du mod\`ele implique que la fonction caract\'eristique s'\'ecrit sous la forme :
 \[
-\phi(u; t) = 
+\phi(u; t) =
 \exp\Big( C(u,t) + D(u,t) v_0 + iu X_0 \Big),
 \]
 o\`u $C(u,t)$ et $D(u,t)$ satisfont des \'{e}quations diff\'erentielles ordinaires de type Riccati.
@@ -2381,7 +2388,7 @@ Plus pr\'ecis\'ement, on montre que :
 \]
 avec conditions initiales $C(u,0)=0$, $D(u,0)=0$.
 
-La r\'esolution explicite de ces EDO (voir annexe consacr\'ee \`a Heston) donne des
+La r\'esolution explicite de ces EDO (voir Section~\ref{sec:deriv-heston}) donne des
 expressions ferm\'ees pour $C$ et $D$, d'o\`u une expression ferm\'ee de $\phi(u;T)$.
 
 \paragraph{Formule de pricing (int\'egrale de Fourier).}
@@ -2392,7 +2399,7 @@ C_0 = S_0 P_1 - K e^{-rT} P_2,
 \]
 o\`u
 \[
-P_j = \frac12 + \frac{1}{\pi} \int_0^{+\infty} 
+P_j = \frac12 + \frac{1}{\pi} \int_0^{+\infty}
 \Re\left(
 \frac{e^{-iu \ln K} \phi_j(u)}{iu}
 \right)\, du,
@@ -2405,15 +2412,15 @@ des arguments complexes diff\'erents (voir la d\'erivation classique de Heston).
 
 \noindent
 \textit{Remarque.} La d\'erivation compl\`ete des expressions ferm\'ees de $C(u,t)$, $D(u,t)$
-et des int\'egrales de pricing est fournie en annexe. 
-Elle repose sur la r\'esolution explicite des EDO de Riccati et sur l'utilisation 
+et des int\'egrales de pricing est fournie en Section~\ref{sec:deriv-heston}.
+Elle repose sur la r\'esolution explicite des EDO de Riccati et sur l'utilisation
 de la transform\'ee de Fourier invers\'ee.
 
 
 \subsubsection{Surface de volatilit\'e implicite et calibration de mod\`eles}
 
-La volatilité implicite est définie comme la valeur de $\sigma$ qui, insérée dans 
-la formule de Black--Scholes, reproduit le prix de marché d’un call europ\'een :
+La volatilité implicite est définie comme la valeur de $\sigma$ qui, insérée dans
+la formule de Black--Scholes, reproduit le prix de marché d'un call europ\'een :
 \[
 C^{BS}(S_0,K,r,\sigma,T) = C^{\mathrm{mkt}}(K,T).
 \]
@@ -2424,22 +2431,22 @@ obtient la \emph{surface de volatilité implicite} :
 \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\paragraph{Contraintes d’arbitrage sur la surface.}
+\paragraph{Contraintes d'arbitrage sur la surface.}
 
-Pour qu’une surface de volatilité soit compatible avec l’absence d’arbitrage
+Pour qu'une surface de volatilité soit compatible avec l'absence d'arbitrage
 statique, certaines conditions doivent être satisfaites.
 
 \begin{itemize}
-  \item \textbf{Monotonie en maturité (pas d’arbitrage de calendrier)} :
+  \item \textbf{Monotonie en maturité (pas d'arbitrage de calendrier)} :
   \[
   T_2 > T_1 \quad\Rightarrow\quad C(K,T_2) \ge C(K,T_1).
   \]
 
-  \item \textbf{Convexité en strike (pas d’arbitrage butterfly)} :
+  \item \textbf{Convexité en strike (pas d'arbitrage butterfly)} :
   \[
   \frac{\partial^2 C}{\partial K^2}(K,T) \ge 0.
   \]
-  Cette condition assure l’existence d’une densité risque--neutre positive :
+  Cette condition assure l'existence d'une densité risque--neutre positive :
   \[
   \frac{\partial^2 C}{\partial K^2}(K,T)
   = e^{-rT} f^{\mathbb{Q}}_{S_T}(K).
@@ -2459,10 +2466,10 @@ génère une surface implicite de volatilité :
 \]
 
 La calibration consiste à choisir $\theta$ pour que cette surface reproduise au
-mieux la surface observée sur le marché. Le problème d’optimisation s’écrit
+mieux la surface observée sur le marché. Le problème d'optimisation s'écrit
 classiquement :
 \[
-\theta^\*
+\theta^*
 =
 \arg\min_{\theta}
 \sum_{(K,T)\in \mathcal{G}}
@@ -2486,7 +2493,7 @@ Dans le mod\`ele de Heston, les param\`etres
 \[
 \theta = (\kappa,\theta,\xi,\rho,v_0)
 \]
-sont ajustés en évaluant les prix d’options via la formule semi--fermée basée
+sont ajustés en évaluant les prix d'options via la formule semi--fermée basée
 sur la fonction caractéristique. Pour chaque $(K,T)$, on en déduit
 \[
 \sigma_{\mathrm{mod}}(K,T;\theta)
@@ -2502,12 +2509,12 @@ initialisation robuste.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \paragraph{Calibration rough volatility / rBergomi.}
 
-Dans les mod\`eles de volatilité rugueuse, la variance suit une dynamique 
+Dans les mod\`eles de volatilité rugueuse, la variance suit une dynamique
 fractionnaire. Les paramètres typiques sont $(H,\eta,\xi_0(t))$, avec $H<1/2$.
 La valorisation s'effectue via Monte Carlo rapide (hybrid schemes), puis une
 minimisation analogue au cas Heston :
 \[
-\theta^\*
+\theta^*
 =
 \arg\min_{\theta}
 \sum_{(K,T)\in \mathcal{G}}
@@ -2525,8 +2532,8 @@ minimisation analogue au cas Heston :
   \item La surface de volatilité implicite est la représentation empirique de la
   distribution future du sous--jacent perçue par le marché.
   \item Les contraintes $\partial_{K}^2 C \ge 0$ et $C(K,T_2)\ge C(K,T_1)$ doivent
-  être respectées pour éviter l’arbitrage statique.
-  \item La calibration consiste à résoudre un problème d’optimisation sur les paramètres
+  être respectées pour éviter l'arbitrage statique.
+  \item La calibration consiste à résoudre un problème d'optimisation sur les paramètres
   du modèle afin de reproduire au mieux la surface de marché.
   \item Les modèles stochastiques (Heston, rough volatility) sont calibrés via des
   méthodes globales puis locales, en exploitant leur fonction caractéristique ou
@@ -2567,7 +2574,7 @@ flexibles des dynamiques de volatilité observées sur les march\'es.
 \paragraph{Mod\`ele SABR.}
 
 Le mod\`ele SABR (Stochastic Alpha Beta Rho), introduit par Hagan et al., est
-largement utilis\'e en taux d’int\'er\^et pour reproduire les smiles de
+largement utilis\'e en taux d'int\'er\^et pour reproduire les smiles de
 volatilit\'e des swaptions. Sous la mesure risque--neutre, le forward $F_t$
 \'evolue selon :
 \[
@@ -2595,8 +2602,7 @@ volatilité implicite :
 \left[ 1 + \text{Corrections}_1(\nu,\rho,\beta,K) \right],
 \]
 ce qui permet une calibration directe du smile. Cette formule est obtenue par expansion
-asymptotique en $\nu$ et les d\'erivations compl\`etes sont fournies en \textbf{ANNEXE}
-(voir fichiers associ\'es au mod\`ele SABR).
+asymptotique en $\nu$ ; une d\'erivation pas \`a pas est donn\'ee en Section~\ref{sec:deriv-sabr}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \paragraph{Mod\`eles de Volterra et volatilité rugueuse.}
@@ -2604,14 +2610,14 @@ asymptotique en $\nu$ et les d\'erivations compl\`etes sont fournies en \textbf{
 Les mod\`eles Volterra-g\'en\'eriques consid\`erent des dynamiques \`a m\'emoire
 longue :
 \[
-dX_t 
+dX_t
 = \left( \int_0^t K(t-s)\,g(X_s)\,ds \right) dt
 + \left( \int_0^t K(t-s)\,h(X_s)\,ds \right) dW_t,
 \]
 o\`u $K$ est un noyau de Volterra causal. Le choix du noyau d\'etermine la
 r\'egularité et la structure de m\'emoire du mod\`ele.
 
-Un cas fondamental est la \textbf{volatilité rugueuse (rough volatility)}, fondée 
+Un cas fondamental est la \textbf{volatilité rugueuse (rough volatility)}, fondée
 sur un \emph{fractional Brownian motion} (fBM) de param\`etre de Hurst $H<1/2$ :
 \[
 B_t^H = \frac{1}{\Gamma(H+\frac12)}
@@ -2634,8 +2640,8 @@ Les mod\`eles rough permettent de reproduire fid\`element :
 \end{itemize}
 
 Les d\'etails de construction du mouvement brownien fractionnaire, des noyaux de Volterra et des sch\'emas de simulation
-peuvent \^etre rel\'egu\'es en annexes (ou \`a la litt\'erature) ; on se limite ici aux d\'efinitions, \`a l'intuition et aux implications
-pour la g\'eom\'etrie court terme du smile.
+sont d\'evelopp\'es plus loin (Sections~\ref{sec:deriv-fbm} et~\ref{sec:deriv-rbergomi}) ; on se limite ici aux d\'efinitions,
+\`a l'intuition et aux implications pour la g\'eom\'etrie court terme du smile.
 
 
 \subsubsection{Lien avec le projet \emph{PaperTradingApp}}
@@ -2652,7 +2658,7 @@ les erreurs (discr\'etisation, troncature, instabilit\'e de calibration) de mani
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Greeks}
 
-Les Greeks quantifient les sensibilités du prix d’un dérivé aux différents
+Les Greeks quantifient les sensibilités du prix d'un dérivé aux différents
 paramètres de marché. Pour une option de prix $V(t,S)$ :
 
 \paragraph{Delta.}
@@ -2673,13 +2679,13 @@ Un portefeuille long gamma bénéficie des variations du sous-jacent.
 \[
 \text{Vega} = \frac{\partial V}{\partial \sigma}.
 \]
-Sensibilité à la volatilité implicite. Maximum autour de l’ATM.
+Sensibilité à la volatilité implicite. Maximum autour de l'ATM.
 
 \paragraph{Theta.}
 \[
 \Theta = \frac{\partial V}{\partial t}.
 \]
-Sensibilité à l’écoulement du temps. Les options vanilles longues sont
+Sensibilité à l'écoulement du temps. Les options vanilles longues sont
 généralement $\Theta < 0$.
 
 \paragraph{Rho.}
@@ -2725,11 +2731,11 @@ dS_t = \mu S_t\, dt + \sigma S_t\, dW_t.
 
 Le prix $V(t,S_t)$ d'une option européenne vérifie (par développement stochastique) :
 \[
-dV_t 
+dV_t
 =
 \left(
-V_t 
-+ \mu S_t V_S 
+V_t
++ \mu S_t V_S
 + \frac12 \sigma^2 S_t^2 V_{SS}
 \right) dt
 + \sigma S_t V_S\, dW_t.
@@ -2754,7 +2760,7 @@ Après substitution :
 d\Pi_t
 &=
 \left(
-V_t 
+V_t
 + \mu S_t V_S
 + \frac12 \sigma^2 S_t^2 V_{SS}
 \right) dt
@@ -2769,7 +2775,7 @@ V_t
 
 On impose que le terme en $dW_t$ disparaisse :
 \[
-V_S - \Delta_t = 0 
+V_S - \Delta_t = 0
 \quad\Longrightarrow\quad
 \Delta_t = V_S.
 \]
@@ -2779,7 +2785,7 @@ Le portefeuille devient alors localement sans risque :
 d\Pi_t
 =
 \left(
-V_t 
+V_t
 + \frac12 \sigma^2 S_t^2 V_{SS}
 \right) dt.
 \]
@@ -2803,9 +2809,9 @@ V_t + \frac12 \sigma^2 S^2 V_{SS}
 
 En réarrangeant :
 \[
-V_t 
+V_t
 + \frac12 \sigma^2 S^2 V_{SS}
-+ r S V_S 
++ r S V_S
 - r V
 = 0.
 \]
@@ -2816,7 +2822,7 @@ V(T,S) = (S-K)^+,
 \]
 on retrouve la formule fermée de Black--Scholes :
 \[
-C_0 
+C_0
 = S_0 N(d_1) - K e^{-rT} N(d_2),
 \]
 avec
@@ -2832,7 +2838,7 @@ d_{1,2}
 
 \noindent
 Cette dérivation illustre que la formule de Black--Scholes provient directement
-du principe fondamental : \emph{un portefeuille delta--hedgé ne doit pas permettre d’arbitrage}.
+du principe fondamental : \emph{un portefeuille delta--hedgé ne doit pas permettre d'arbitrage}.
 
 \subsubsection{Couverture et d\'ecision s\'equentielle : erreurs, co\^uts et formulation MDP}
 
@@ -2882,8 +2888,8 @@ et (iii) une boucle de d\'ecision s\'equentielle. Elle fournit un cadre conceptu
 
 \subsubsection{Taux z\'ero--coupon et courbe des taux}
 
-Le prix d’un z\'ero--coupon de maturit\'e $T$ est not\'e $P(0,T)$ : c’est la valeur
-aujourd’hui d’un instrument qui versera exactement $1$ unit\'e \`a la date $T$.
+Le prix d'un z\'ero--coupon de maturit\'e $T$ est not\'e $P(0,T)$ : c'est la valeur
+aujourd'hui d'un instrument qui versera exactement $1$ unit\'e \`a la date $T$.
 
 Le taux z\'ero--coupon (capitalisation continue) est d\'efini par :
 \[
@@ -2899,9 +2905,9 @@ T \longmapsto R(0,T)
 est appel\'ee \emph{courbe des taux spots}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsubsection{Facteurs d’actualisation (Discount Factors)}
+\subsubsection{Facteurs d'actualisation (Discount Factors)}
 
-Le facteur d’actualisation associ\'e \`a la date $T$ est :
+Le facteur d'actualisation associ\'e \`a la date $T$ est :
 \[
 D(0,T) = P(0,T) = e^{-R(0,T)\,T}.
 \]
@@ -2917,7 +2923,7 @@ Ces facteurs constituent la base du calcul de la valeur de tous les flux futurs
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Taux forward instantan\'e}
 
-Le \emph{taux forward instantan\'e} $f(0,T)$ est le taux d’int\'er\^et implicite
+Le \emph{taux forward instantan\'e} $f(0,T)$ est le taux d'int\'er\^et implicite
 pour un emprunt infinitésimal entre les dates $T$ et $T + dT$, d\'eduit \`a partir
 du prix des z\'ero-coupons.
 
@@ -2928,15 +2934,15 @@ f(0,T) := -\frac{\partial}{\partial T} \ln P(0,T).
 
 On en d\'eduit :
 \[
-P(0,T) 
-= 
+P(0,T)
+=
 \exp\!\left( -\int_0^T f(0,u)\,du \right).
 \]
 
 La quantit\'e $f(0,T)$ peut \^etre vue comme la \emph{densit\'e instantan\'ee}
-du taux d’actualisation. Elle joue un r\^ole central dans les mod\`eles de taux
+du taux d'actualisation. Elle joue un r\^ole central dans les mod\`eles de taux
 de type Heath--Jarrow--Morton (HJM), o\`u la dynamique de $f(t,T)$ d\'etermine
-l’ensemble de la structure par terme.
+l'ensemble de la structure par terme.
 
 \medskip
 
@@ -2945,17 +2951,17 @@ num\'eriquement les discount factors bootstrapp\'es.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Construction de la courbe (bootstrapping)}
 
-La courbe des taux z\'ero-coupon n’est pas directement observable sur le march\'e.
+La courbe des taux z\'ero-coupon n'est pas directement observable sur le march\'e.
 Les march\'es cotent des instruments liquides \`a diff\'erentes maturit\'es
-(dépôts interbancaires, FRAs, futures, swaps IRS).  
-Le \emph{bootstrapping} consiste \`a reconstruire de mani\`ere cohérente les 
-facteurs d’actualisation $P(0,T)$ à partir de ces instruments.
+(dépôts interbancaires, FRAs, futures, swaps IRS).
+Le \emph{bootstrapping} consiste \`a reconstruire de mani\`ere cohérente les
+facteurs d'actualisation $P(0,T)$ à partir de ces instruments.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \paragraph{1. Instruments courts (dép\^ots).}
 
 Pour les d\'ep\^ots de maturit\'e $T$ (typiquement $\leq 1$ an), on conna\^it le
-taux simple $L(0,T)$.  
+taux simple $L(0,T)$.
 On en d\'eduit directement :
 \[
 P(0,T) = \frac{1}{1 + L(0,T)\,T}.
@@ -2965,7 +2971,7 @@ P(0,T) = \frac{1}{1 + L(0,T)\,T}.
 \paragraph{2. FRAs et futures.}
 
 Les contrats FRA (Forward Rate Agreement) donnent les taux forward implicites
-sur une p\'eriode future $[T_1,T_2]$.  
+sur une p\'eriode future $[T_1,T_2]$.
 Leur prix impose la relation :
 \[
 1 = P(0,T_1)\,\bigl(1 + F(0;T_1,T_2)(T_2-T_1)\bigr)\, P(0,T_2)^{-1}.
@@ -2978,7 +2984,7 @@ P(0,T_2)
 \]
 
 Les futures sur taux court (Eurodollar, SOFR futures, Euribor futures) permettent
-d’extraire des taux forward similaires via des conventions d’ajustement.
+d'extraire des taux forward similaires via des conventions d'ajustement.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \paragraph{3. Swaps IRS (maturit\'es longues).}
@@ -3006,7 +3012,7 @@ S_n \sum_{k=1}^{n} \alpha_k\, P(0,T_k).
 \]
 
 Les facteurs $P(0,T_k)$ pour $k<n$ sont d\'ej\`a connus par bootstrapping
-(récursivité), ce qui permet d’obtenir $P(0,T_n)$.
+(récursivité), ce qui permet d'obtenir $P(0,T_n)$.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \paragraph{4. Interpolation.}
@@ -3018,20 +3024,20 @@ on construit une courbe continue via une interpolation :
   \item sur les taux forwards instants $f(0,T)$,
   \item ou sur les discount factors,
   \item en utilisant des splines monotones ou Hermite préservant la convexité,
-  \item en veillant à éviter les violations d’arbitrage 
-        (monotonie des discount factors et convexité des prix d’option).
+  \item en veillant à éviter les violations d'arbitrage
+        (monotonie des discount factors et convexité des prix d'option).
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \paragraph{5. Courbe finale.}
 
-La courbe compl\`ete des facteurs d’actualisation est donn\'ee par :
+La courbe compl\`ete des facteurs d'actualisation est donn\'ee par :
 \[
 P(0,T) = \exp\!\left( -\int_0^T f(0,u)\,du \right),
 \]
 o\`u $f(0,T)$ est obtenu par dérivation numérique ou interpolation.
 
-Cette courbe sert de base \`a toute valorisation d’instruments \`a taux fixe,
+Cette courbe sert de base \`a toute valorisation d'instruments \`a taux fixe,
 flottant ou dérivés (IRS, cap/floor, swaption, CMS, etc.).
 
 
@@ -3049,11 +3055,9 @@ Une \'ecriture courante du taux z\'ero continu $y(0,T)$ est :
 y(0,T)
 =
 \beta_0
-
 +
 \beta_1\,
 \frac{1-\ee^{-T/\tau}}{T/\tau}
-
 +
 \beta_2\,
 \left(
@@ -3091,20 +3095,20 @@ mal choisie. Elle sert aussi de base \`a des stress tests de taux et \`a des ana
 
 Les produits linéaires (forwards, futures, swaps) sont fondamentaux en finance
 de taux et de devises. Leur valorisation repose exclusivement sur la courbe des
-taux d’actualisation et sur les taux forward extraits de celle-ci.
+taux d'actualisation et sur les taux forward extraits de celle-ci.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Forwards}
 
-Un contrat forward fixe aujourd’hui un prix de transaction à une date future $T$.
-L’actif n’échange aucun flux avant la maturité.
+Un contrat forward fixe aujourd'hui un prix de transaction à une date future $T$.
+L'actif n'échange aucun flux avant la maturité.
 
-Sous absence d’arbitrage, le prix forward $F(0,T)$ est donné par :
+Sous absence d'arbitrage, le prix forward $F(0,T)$ est donné par :
 \[
 F(0,T) = S_0 \,\frac{1}{P(0,T)}
        = S_0\, e^{R(0,T)\,T},
 \]
-où $P(0,T)$ est le facteur d’actualisation.
+où $P(0,T)$ est le facteur d'actualisation.
 
 Avec dividende continu (ou taux de portage $q$) :
 \[
@@ -3121,7 +3125,7 @@ Dans un cadre frictionless, le prix du future vaut en général le forward :
 \[
 F_{\mathrm{fut}}(0,T) \approx F(0,T),
 \]
-mais l’ajustement quotidien introduit une différence lorsque $S_t$ est
+mais l'ajustement quotidien introduit une différence lorsque $S_t$ est
 corrélé au taux court (effet convexité futures).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -3135,7 +3139,7 @@ Un swap de taux échange :
 
 La valeur de la jambe fixe est :
 \[
-\mathrm{Fixe}(0) 
+\mathrm{Fixe}(0)
 = S_n \sum_{k=1}^{n} \alpha_k\, P(0,T_k).
 \]
 
@@ -3145,12 +3149,12 @@ La jambe flottante vaut :
 \]
 car un taux variable réinitialisé assure la parité avec un instrument zéro-coupon.
 
-Le taux swap $S_n$ d’un IRS (valeur initiale nulle) est défini par :
+Le taux swap $S_n$ d'un IRS (valeur initiale nulle) est défini par :
 \[
 \mathrm{Fixe}(0) = \mathrm{Flottante}(0)
 \quad\Longrightarrow\quad
 S_n
-= 
+=
 \frac{1 - P(0,T_n)}{\sum_{k=1}^{n} \alpha_k\, P(0,T_k)}.
 \]
 
@@ -3161,11 +3165,11 @@ S_n
   \item Le \textbf{forward} verrouille un prix d'achat/vente futur.
   \item Le \textbf{future} ajoute la liquidité, standardisation, et marche-to-market.
   \item Le \textbf{swap de taux} échange flux fixes et variables, permettant de
-        transformer exposition fixe ↔ variable.
+        transformer exposition fixe $\leftrightarrow$ variable.
 \end{itemize}
 
 Ces produits linéaires servent aussi de brique fondamentale pour le pricing
-d’instruments plus complexes (swaption, cap/floor, CMS, etc.).
+d'instruments plus complexes (swaption, cap/floor, CMS, etc.).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -3176,23 +3180,22 @@ spot/forward, les conventions de taux et l'actualisation. Ils fournissent donc l
 coh\'erente (via $F(t,T)$), (ii) relier les payoffs \`a des prix forward dans les formules, et (iii) proposer des stress tests
 sur les taux (et leur impact sur prix/Greeks) sans ambig\"uit\'e de convention.
 
-\iffalse % Hors p\'erim\`etre principal : section retir\'ee du rendu final
 \subsection{Cr\'edit}
 
 La valorisation des instruments de cr\'edit repose sur la notion de risque de
-d\'efaut et sur l’intensit\'e (hazard rate) associ\'ee. Les Credit Default Swaps
-(CDS) constituent l’instrument de march\'e le plus standard pour extraire ces
+d\'efaut et sur l'intensit\'e (hazard rate) associ\'ee. Les Credit Default Swaps
+(CDS) constituent l'instrument de march\'e le plus standard pour extraire ces
 informations.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{CDS : d\'efinition et structure}
 
-Un Credit Default Swap est un contrat d’assurance contre le d\'efaut d’un
+Un Credit Default Swap est un contrat d'assurance contre le d\'efaut d'un
 emprunteur (corporate, souverain). Il \'{e}change :
 \begin{itemize}
   \item une \emph{jambe de protection} : paiement $(1 - R)$ en cas de d\'efaut,
   \item une \emph{jambe de prime} : paiements r\'eguliers du spread $s$ tant que
-        le d\'efaut n’a pas eu lieu.
+        le d\'efaut n'a pas eu lieu.
 \end{itemize}
 
 Le payoff de protection, si le d\'efaut survient en $\tau \in (0,T]$, est :
@@ -3214,7 +3217,7 @@ avec $\alpha_k$ la fraction de jour.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Intensit\'e de d\'efaut (hazard rate)}
 
-On mod\'elise le d\'efaut par un temps d’arriv\'ee al\'eatoire $\tau$ dont la
+On mod\'elise le d\'efaut par un temps d'arriv\'ee al\'eatoire $\tau$ dont la
 loi est caract\'eris\'ee par une intensit\'e $\lambda(t)$ telle que :
 \[
 \mathbb{Q}(\tau > t)
@@ -3254,8 +3257,8 @@ s
 \frac{ (1-R) \lambda }{ \sum_{k=1}^{n} \alpha_k e^{-(r+\lambda)T_k} }.
 \]
 
-En pratique, les spreads de CDS observés sur le marché permettent d’en déduire
-l’intensit\'e $\lambda(t)$ via une calibration similaire à celle de la courbe
+En pratique, les spreads de CDS observés sur le marché permettent d'en déduire
+l'intensit\'e $\lambda(t)$ via une calibration similaire à celle de la courbe
 des taux.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -3263,7 +3266,7 @@ des taux.
 
 \begin{itemize}
   \item Le spread $s$ augmente lorsque le risque de d\'efaut per\c{c}u augmente.
-  \item La probabilit\'e de survie est 
+  \item La probabilit\'e de survie est
   \[
     \mathbb{Q}(\tau > T) = e^{-\int_0^T \lambda(u)\,du}.
   \]
@@ -3279,17 +3282,31 @@ Les CDS sont essentiels pour :
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\fi
 \subsection{Mod\`eles de volatilit\'e avanc\'es : rough, sauts et filtrage}
 
-Cette section a pour objectif d’esquisser quelques directions modernes en finance
-quantitative, sans chercher \`a d\'evelopper les d\'erivations compl\`etes, qui sont
-report\'ees en annexe.
+Cette section se lit comme un mini-cours de mod\'elisation de volatilité ``avanc\'ee'' :
+on part des objets (noyaux de Volterra, fBM, mod\`eles affines), on relie ces choix
+aux faits stylis\'es (smile/skew court terme), puis on d\'eroule pas \`a pas deux
+outils omnipr\'esents en pratique :
+\begin{itemize}
+  \item la simulation du mouvement brownien fractionnaire via la m\'ethode de Davies--Harte (brique centrale en volatilité rugueuse),
+  \item la fonction caract\'eristique du mod\`ele de Heston et la valorisation par Fourier (type Carr--Madan).
+\end{itemize}
+Les compl\'ements (construction rough Bergomi/Volterra, SABR, Rough Heston, m\'ethodes num\'eriques)
+sont donn\'es plus loin (Sections~\ref{sec:deriv-rbergomi}, \ref{sec:deriv-sabr}, \ref{sec:deriv-rough-heston}, \ref{sec:numerical-methods}).
+
+\paragraph{Objectifs p\'edagogiques (niveau M1).}
+\begin{itemize}
+  \item Expliquer le r\^ole du param\`etre de Hurst $H$ et la notion de m\'emoire (rough : $H<1/2$).
+  \item Passer d'une covariance th\'eorique \`a un algorithme de simulation (embedding circulant + FFT) et en comprendre les contraintes.
+  \item D\'eriver une fonction caract\'eristique dans un mod\`ele affine (ansatz $\rightarrow$ Riccati) et l'utiliser pour pricer une call par Fourier.
+  \item Mettre en regard les hypoth\`eses de mod\`ele avec la calibration et les diagnostics num\'eriques.
+\end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Rough volatility et SDE de Volterra}
 
-Les mod\`eles de \emph{volatilit\'e rugueuse} constituent aujourd’hui l’un des cadres
+Les mod\`eles de \emph{volatilit\'e rugueuse} constituent aujourd'hui l'un des cadres
 les plus avancés pour reproduire les smiles de volatilité observés sur les
 marchés actions. Ils reposent sur des SDE de type Volterra dont la dynamique
 est non markovienne :
@@ -3309,7 +3326,7 @@ o\`u $K$ est un noyau singulier près de $0$.
 Dans le cas rough (Hurst $H<1/2$), la variance est souvent modélisée via un
 fractional Brownian motion :
 \[
-v_t = 
+v_t =
 \xi_0(t)\,
 \exp\!\left(
 \eta B_t^H - \tfrac12 \eta^2 t^{2H}
@@ -3320,19 +3337,553 @@ Ces mod\`eles permettent :
 \begin{itemize}
   \item de reproduire un skew de court terme marqu\'e (stylized fact largement document\'e),
   \item de d\'ecrire une structure de corr\'elation temporelle cohérente,
-  \item d’expliquer certains ph\'enom\`enes de la microstructure.
+  \item d'expliquer certains ph\'enom\`enes de la microstructure.
 \end{itemize}
 
-\emph{La d\'erivation compl\`ete des SDE de Volterra, du fBM, et du mod\`ele rBergomi
-est fournie en annexe.}
+\emph{On d\'etaille ci-dessous la simulation du fBM (Davies--Harte), brique centrale des mod\`eles rough ; la construction compl\`ete rough Bergomi/Volterra est donn\'ee en Section~\ref{sec:deriv-rbergomi}.}
+
+\paragraph{Pourquoi Davies--Harte (vue pratique).}
+Simuler un fBM revient \`a simuler un vecteur gaussien corr\'el\'e (le \emph{fractional Gaussian noise}).
+La m\'ethode de Davies--Harte utilise un embedding circulant et une FFT, ce qui ram\`ene le co\^ut \`a $O(N\log N)$ (au lieu d'une d\'ecomposition de Cholesky dense).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%==========================================================
+%  D'erivations int'egr'ees (ex-chapitres 8--9)
+%==========================================================
+\begingroup
+\let\section\subsubsection
+\let\subsection\paragraph
+\section{Mouvement brownien fractionnaire : m\'ethode de Davies--Harte (d\'erivation pas \`a pas)}
+\label{sec:deriv-fbm}
+
+\subsection*{Simulation du mouvement brownien fractionnaire --- Méthode de Davies--Harte (dérivation détaillée)}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Rappels sur le mouvement brownien fractionnaire}
+
+\subsection{Définition}
+
+Pour un paramètre de Hurst $H\in(0,1)$, le \emph{mouvement brownien fractionnaire}
+(fBm) $(\bH(t))_{t\ge 0}$ est un processus gaussien centré tel que
+\begin{equation}
+  \E[\bH(t)] = 0,\qquad t\ge 0,
+\end{equation}
+et
+\begin{equation}
+  \Cov\bigl(\bH(t),\bH(s)\bigr)
+  = R_H(t,s)
+  = \frac{1}{2}\bigl(|t|^{2H} + |s|^{2H} - |t-s|^{2H}\bigr),
+  \qquad s,t\ge 0.
+\end{equation}
+On en déduit deux propriétés clés :
+\begin{itemize}
+  \item \textbf{incréments stationnaires} :
+  \[
+    \bH(t+h)-\bH(t)
+    \stackrel{d}{=}
+    \bH(h)-\bH(0), \qquad \forall t,h\ge 0 ;
+  \]
+  \item \textbf{autosimilarité} :
+  \[
+    \bigl(\bH(ct)\bigr)_{t\ge 0}
+    \stackrel{d}{=}
+    \bigl(c^H \bH(t)\bigr)_{t\ge 0},\qquad \forall c>0.
+  \]
+\end{itemize}
+En particulier,
+\begin{equation}
+  \Var\bigl(\bH(t)\bigr) = t^{2H}.
+\end{equation}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Discrétisation sur une grille}
+
+On veut simuler une trajectoire de $\bH$ sur une période $[0,T]$.
+On fixe un nombre de pas $N\in\mathbb{N}^\ast$ et on définit
+\begin{equation}
+  \Delta t = \frac{T}{N},\qquad
+  t_k = k\,\Delta t,\quad k = 0,\dots,N.
+\end{equation}
+
+L'autosimilarité permet d'écrire, pour chaque $k$,
+\begin{equation}
+  \bH(t_k)
+  = \bH(k\Delta t)
+  \stackrel{d}{=} (\Delta t)^H \widetilde B_H(k),
+\end{equation}
+où $(\widetilde B_H(k))_{k=0,\dots,N}$ est un fBm vu aux instants entiers $k$.
+Ainsi, on peut :
+\begin{enumerate}
+  \item simuler un fBm \emph{à pas unitaire} $(\widetilde B_H(0),\dots,\widetilde B_H(N))$ ;
+  \item le rescaler ensuite par $(\Delta t)^H$ :
+  \[
+    \bH(t_k) \approx (\Delta t)^H \widetilde B_H(k).
+  \]
+\end{enumerate}
+
+On note les incréments unitaires
+\begin{equation}
+  X_k = \widetilde B_H(k+1) - \widetilde B_H(k),\qquad k=0,\dots,N-1.
+\end{equation}
+La suite $(X_k)_{k\ge 0}$ est le \emph{fractional Gaussian noise} (fGn).
+On a alors
+\begin{equation}
+  \widetilde B_H(k)
+  = \sum_{j=0}^{k-1} X_j,\qquad k\ge 1,
+\end{equation}
+et
+\begin{equation}
+  \bH(t_k)
+  \approx (\Delta t)^H \sum_{j=0}^{k-1} X_j.
+\end{equation}
+
+Toute la difficulté se ramène donc à simuler le vecteur gaussien corrélé
+\[
+  (X_0,\dots,X_{N-1})
+\]
+avec la bonne structure de covariance.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Covariance du bruit fractionnaire}
+
+\subsection{Dérivation explicite de $\gamma(k)$}
+
+On veut la covariance
+\begin{equation}
+  \gamma(k)
+  = \Cov(X_n,X_{n+k}),
+\end{equation}
+qui, par stationnarité des incréments, ne dépend pas de $n$.
+
+On se place sur le fBm à pas unitaire $\widetilde B_H$ et on note
+\begin{equation}
+  X_n = \widetilde B_H(n+1)-\widetilde B_H(n).
+\end{equation}
+En développant la covariance à l'aide de la bilinéarité :
+\begin{align}
+  \gamma(k)
+  &= \Cov\bigl(\widetilde B_H(n+1)-\widetilde B_H(n),
+               \widetilde B_H(n+k+1)-\widetilde B_H(n+k)\bigr)
+  \\[0.3em]
+  &= \Cov\bigl(\widetilde B_H(n+1),\widetilde B_H(n+k+1)\bigr)
+   - \Cov\bigl(\widetilde B_H(n+1),\widetilde B_H(n+k)\bigr)
+  \notag\\
+  &\quad
+   - \Cov\bigl(\widetilde B_H(n),\widetilde B_H(n+k+1)\bigr)
+   + \Cov\bigl(\widetilde B_H(n),\widetilde B_H(n+k)\bigr).
+  \label{eq:gamma-dev}
+\end{align}
+Par stationnarité des accroissements et invariance par translation,
+on peut prendre $n=0$ sans perte de généralité :
+\begin{equation}
+  \gamma(k)
+  = \Cov\bigl(\widetilde B_H(1)-\widetilde B_H(0),
+               \widetilde B_H(k+1)-\widetilde B_H(k)\bigr).
+\end{equation}
+Comme $\widetilde B_H(0)=0$ presque sûrement, on a
+\[
+  \Cov\bigl(\widetilde B_H(0),\widetilde B_H(t)\bigr)=0,\qquad \forall t\ge 0,
+\]
+et \eqref{eq:gamma-dev} se simplifie en
+\begin{equation}
+  \gamma(k)
+  = R_H(1,k+1) - R_H(1,k),
+\end{equation}
+où
+\[
+  R_H(s,t)
+  = \frac{1}{2}\Bigl(|s|^{2H} + |t|^{2H} - |t-s|^{2H}\Bigr).
+\]
+
+On calcule explicitement :
+\begin{align}
+  R_H(1,k+1)
+  &= \frac{1}{2}\Bigl(|1|^{2H} + |k+1|^{2H} - |(k+1)-1|^{2H}\Bigr)
+   = \frac{1}{2}\Bigl(1 + |k+1|^{2H} - |k|^{2H}\Bigr),
+\\
+  R_H(1,k)
+  &= \frac{1}{2}\Bigl(|1|^{2H} + |k|^{2H} - |k-1|^{2H}\Bigr)
+   = \frac{1}{2}\Bigl(1 + |k|^{2H} - |k-1|^{2H}\Bigr).
+\end{align}
+D'où
+\begin{align}
+  \gamma(k)
+  &= R_H(1,k+1) - R_H(1,k)
+\\[0.3em]
+  &= \frac{1}{2}\Bigl(1 + |k+1|^{2H} - |k|^{2H}
+                      - 1 - |k|^{2H} + |k-1|^{2H}\Bigr)
+\\[0.3em]
+  &= \frac{1}{2}\Bigl(|k+1|^{2H} + |k-1|^{2H} - 2|k|^{2H}\Bigr).
+\end{align}
+
+Ainsi, la covariance théorique du bruit fractionnaire (fGn) est
+\begin{equation}
+  \boxed{
+  \gamma(k)
+  = \Cov(X_t,X_{t+k})
+  = \E[X_t X_{t+k}]
+  = \frac{1}{2}\Bigl(|k+1|^{2H} + |k-1|^{2H} - 2|k|^{2H}\Bigr).
+  }
+\end{equation}
+
+\subsection{Matrice de covariance Toeplitz}
+
+On regroupe les $N$ premiers incréments dans le vecteur
+\[
+  X = (X_0,\dots,X_{N-1})^\top.
+\]
+Sa matrice de covariance est la matrice Toeplitz
+\begin{equation}
+  \Gamma
+  = \Cov(X,X^\top)
+  = \bigl(\gamma(|i-j|)\bigr)_{0\le i,j\le N-1}.
+\end{equation}
+Autrement dit, la première ligne de $\Gamma$ est
+\[
+  (\gamma(0),\gamma(1),\dots,\gamma(N-1)),
+\]
+et chaque ligne suivante est une translation vers la droite.
+
+La méthode de Davies--Harte consiste à \emph{embeder} cette matrice Toeplitz
+dans une matrice \textbf{circulante} de taille $2N\times 2N$, ce qui
+permet d'utiliser la FFT.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Embedding circulant et vecteur $c$}
+
+On construit le vecteur
+\begin{equation}
+  c
+  = \bigl(
+    \gamma(0),\gamma(1),\dots,\gamma(N),\gamma(N-1),\dots,\gamma(1)
+    \bigr)^\top
+  \in\R^{2N}.
+\end{equation}
+On en déduit la matrice circulante $C\in\R^{2N\times 2N}$ définie par
+\begin{equation}
+  C_{jk} = c_{(k-j)\bmod 2N},
+  \qquad j,k = 0,\dots,2N-1.
+\end{equation}
+Ainsi :
+\begin{itemize}
+  \item la première ligne de $C$ est exactement $c^\top$ ;
+  \item la $(j+1)$-ème ligne est obtenue en décalant circulairement la
+        précédente d'un cran vers la droite.
+\end{itemize}
+
+Par construction, le bloc $N\times N$ en haut à gauche de $C$ coïncide
+avec la matrice Toeplitz $\Gamma$.
+L'idée est alors :
+\begin{quote}
+  simuler un vecteur gaussien $Y\in\R^{2N}$ de covariance $C$,
+  puis ne garder que ses $N$ premières composantes ; celles-ci auront
+  la covariance désirée $\Gamma$.
+\end{quote}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Diagonalisation de la matrice circulante par la FFT}
+
+\subsection{Matrice de Fourier}
+
+On pose $M=2N$ et on considère la matrice de Fourier \emph{unitaire}
+\begin{equation}
+  F_{pj} = \frac{1}{\sqrt{M}} e^{-2\pi i pj/M},
+  \qquad p,j = 0,\dots,M-1.
+\end{equation}
+Cette normalisation donne
+\[
+  F^{-1} = F^\ast,
+\]
+la transposée conjuguée.
+
+Pour un vecteur $v\in\C^M$, on définit sa transformée de Fourier discrète
+(DFT) par
+\begin{equation}
+  \widehat v = F v,
+\end{equation}
+et la transformée inverse (IDFT) par
+\begin{equation}
+  v = F^\ast \widehat v.
+\end{equation}
+En pratique numérique, $F$ et $F^\ast$ sont calculés via la FFT/IFFT.
+
+\subsection{Diagonalisation d'une matrice circulante}
+
+Un résultat standard est : \emph{toute matrice circulante est diagonalisée
+par la matrice de Fourier}.
+Plus précisément, si $C$ est la matrice circulante dont la première ligne
+est $c^\top$, alors
+\begin{equation}
+  \widehat c = F c
+  = (\lambda_0,\dots,\lambda_{M-1})^\top
+\end{equation}
+contient les valeurs propres de $C$, et on a
+\begin{equation}
+  \boxed{
+  C = F^\ast \,\Delta\, F,
+  }
+\end{equation}
+où
+\begin{equation}
+  \Delta = \mathrm{diag}(\lambda_0,\dots,\lambda_{M-1})
+\end{equation}
+est diagonale.
+
+Dans le langage numérique, on écrit simplement
+\[
+  \Lambda = \mathrm{FFT}(c),
+\]
+où $\Lambda=(\lambda_k)_{0\le k<M}$.
+
+Comme $c$ est réel et symétrique, les $\lambda_k$ sont réels et,
+dans le cas idéal, non négatifs.
+En pratique, la méthode de Davies--Harte requiert $\lambda_k\ge 0$ ;
+si certains $\lambda_k$ sont négatifs (erreurs numériques mises à part),
+l'algorithme n'est pas applicable pour ce couple $(H,N)$.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Simulation gaussienne via la représentation spectrale}
+
+\subsection{Principe général}
+
+Soit $Y\in\C^M$ un vecteur gaussien centré.
+Si l'on peut écrire la covariance sous la forme
+\[
+  \Cov(Y,Y^\ast) = C = F^\ast \Delta F,
+\]
+alors il suffit de prendre
+\begin{equation}
+  Y = F^\ast Z,
+\end{equation}
+où $Z$ est un vecteur gaussien complexe tel que
+\[
+  \E[Z]=0,\qquad \E[Z Z^\ast] = \Delta.
+\]
+En effet,
+\begin{align}
+  \Cov(Y,Y^\ast)
+  &= \E[YY^\ast]
+   = \E[F^\ast Z Z^\ast F]
+   = F^\ast \E[Z Z^\ast] F
+   = F^\ast \Delta F
+   = C.
+\end{align}
+
+On a donc transformé un problème de covariance générale $C$
+en un problème diagonal beaucoup plus simple.
+
+\subsection{Construction du vecteur $Z$}
+
+On veut un vecteur
+\[
+  Z = (Z_0,\dots,Z_{M-1})^\top \in\C^M
+\]
+tel que
+\[
+  \E[Z]=0,\qquad \E[Z Z^\ast] = \Delta
+  = \mathrm{diag}(\lambda_0,\dots,\lambda_{M-1}).
+\]
+Comme $\Delta$ est diagonale, cela revient à imposer que
+\[
+  \E[Z_k \overline{Z_\ell}] = 0\quad\text{si }k\ne\ell,
+  \qquad
+  \E[|Z_k|^2] = \lambda_k.
+\]
+
+On tient compte du fait que l'on veut finalement un \emph{vecteur réel}
+$Y$, donc on impose en plus la symétrie conjuguée
+\begin{equation}
+  Z_{M-k} = \overline{Z_k},\qquad 1\le k\le M-1.
+\end{equation}
+Comme $c$ est réel et symétrique, on a $\lambda_k = \lambda_{M-k}$,
+ce qui rend cette construction cohérente.
+
+Une construction explicite standard est :
+\begin{itemize}
+  \item Générer des gaussiennes réelles indépendantes
+        $U_0,\dots,U_N,V_1,\dots,V_{N-1}\sim\N(0,1)$.
+  \item Poser
+    \begin{align}
+      Z_0   &= \sqrt{\lambda_0}\,U_0,\\
+      Z_N   &= \sqrt{\lambda_N}\,U_N,\\
+      Z_k   &= \sqrt{\frac{\lambda_k}{2}}\,(U_k + iV_k),
+              &&k=1,\dots,N-1,\\
+      Z_{M-k} &= \sqrt{\frac{\lambda_k}{2}}\,(U_k - iV_k)
+              = \overline{Z_k},
+              &&k=1,\dots,N-1.
+    \end{align}
+\end{itemize}
+On vérifie alors :
+\[
+  \E[Z_k] = 0,\qquad
+  \E[|Z_k|^2] = \lambda_k,\qquad
+  \E[Z_k\overline{Z_\ell}] = 0\ (k\ne\ell),
+\]
+donc $\E[Z Z^\ast] = \Delta$.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Génération du bruit fractionnaire par IFFT}
+
+\subsection{Application de l'IFFT}
+
+On définit
+\begin{equation}
+  Y = F^\ast Z = \mathrm{IFFT}(Z).
+\end{equation}
+Par ce qui précède, on a
+\begin{equation}
+  \Cov(Y,Y^\ast) = C.
+\end{equation}
+De plus, grâce aux relations $Z_{M-k}=\overline{Z_k}$, on montre que
+$Y$ est \emph{réel} (à des erreurs numériques près) :
+\[
+  Y \in \R^M.
+\]
+Dans l'implémentation, on prend donc
+\[
+  Y = \Re\bigl(\mathrm{IFFT}(Z)\bigr).
+\]
+
+On note
+\[
+  Y = (Y_0,\dots,Y_{M-1})^\top.
+\]
+Par construction, la covariance de $Y$ est la matrice circulante $C$.
+Le bloc $N\times N$ en haut à gauche de $C$ est la matrice de covariance
+$\Gamma$ du fGn.
+Donc, en ne conservant que les $N$ premières composantes de $Y$,
+on obtient un vecteur ayant la bonne covariance.
+
+On définit donc le bruit fractionnaire simulé par
+\begin{equation}
+  (X_0,X_1,\dots,X_{N-1})^\top
+  =
+  (Y_0,Y_1,\dots,Y_{N-1})^\top
+  \approx \text{fGn de covariance }\gamma(k).
+\end{equation}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Reconstruction du mouvement brownien fractionnaire}
+
+On part de
+\[
+  \widetilde B_H(0) = 0,\qquad
+  \widetilde B_H(k) = \sum_{j=0}^{k-1} X_j,\quad k=1,\dots,N,
+\]
+où $(X_j)$ est le fGn simulé ci-dessus.
+
+Pour revenir aux temps $t_k = k\Delta t$ sur $[0,T]$, on utilise
+l'autosimilarité :
+\[
+  \bH(t_k) \stackrel{d}{=} (\Delta t)^H \widetilde B_H(k).
+\]
+On pose donc
+\begin{equation}
+  \boxed{
+  \bH(t_k) = (\Delta t)^H \sum_{j=0}^{k-1} X_j,
+  \qquad k=0,\dots,N,
+  }
+\end{equation}
+avec la convention $\bH(t_0)=\bH(0)=0$.
+
+On vérifie que, au moins au premier ordre, la variance est correctement
+ajustée :
+\begin{align}
+  \Var\bigl(\bH(t_k)\bigr)
+  &= (\Delta t)^{2H}\,\Var\Bigl(\sum_{j=0}^{k-1} X_j\Bigr)
+\\[0.3em]
+  &= (\Delta t)^{2H}
+     \sum_{i=0}^{k-1}\sum_{j=0}^{k-1} \gamma(|i-j|)
+\\[0.3em]
+  &\approx (k\Delta t)^{2H} = t_k^{2H},
+\end{align}
+ce qui est cohérent avec la définition de la fBm.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Récapitulatif de la méthode de Davies--Harte}
+
+\subsection*{Étape 1 : covariance du bruit fractionnaire}
+\begin{itemize}
+  \item Pour $k=0,\dots,N$, calculer
+    \[
+      \gamma(k) = \frac{1}{2}\Bigl(|k+1|^{2H} + |k-1|^{2H} - 2|k|^{2H}\Bigr).
+    \]
+\end{itemize}
+
+\subsection*{Étape 2 : vecteur circulant $c$}
+\begin{itemize}
+  \item Construire
+    \[
+      c = \bigl(
+        \gamma(0),\gamma(1),\dots,\gamma(N),
+        \gamma(N-1),\dots,\gamma(1)
+      \bigr)^\top \in\R^{2N}.
+    \]
+\end{itemize}
+
+\subsection*{Étape 3 : FFT et valeurs propres}
+\begin{itemize}
+  \item Calculer la FFT :
+    \[
+      \Lambda = \mathrm{FFT}(c)
+              = (\lambda_0,\dots,\lambda_{2N-1})^\top.
+    \]
+  \item Vérifier que toutes les $\lambda_k$ sont non négatives
+        (à un petit $\varepsilon$ près pour les erreurs numériques).
+\end{itemize}
+
+\subsection*{Étape 4 : génération du vecteur gaussien complexe}
+\begin{itemize}
+  \item Générer des $U_0,\dots,U_N,V_1,\dots,V_{N-1}\sim\N(0,1)$ indépendants.
+  \item Construire $Z\in\C^{2N}$ par
+    \begin{align*}
+      Z_0   &= \sqrt{\lambda_0}\,U_0,\\
+      Z_N   &= \sqrt{\lambda_N}\,U_N,\\
+      Z_k   &= \sqrt{\frac{\lambda_k}{2}}\,(U_k + iV_k),
+              &&k=1,\dots,N-1,\\
+      Z_{2N-k} &= \sqrt{\frac{\lambda_k}{2}}\,(U_k - iV_k)
+              = \overline{Z_k},
+              &&k=1,\dots,N-1.
+    \end{align*}
+\end{itemize}
+
+\subsection*{Étape 5 : IFFT et extraction du fGn}
+\begin{itemize}
+  \item Calculer
+    \[
+      Y = \mathrm{IFFT}(Z) = F^\ast Z.
+    \]
+  \item Prendre la partie réelle et garder les $N$ premières composantes :
+    \[
+      X_k = \Re(Y_k),\qquad k=0,\dots,N-1.
+    \]
+    Le vecteur $(X_0,\dots,X_{N-1})$ est le \emph{fractional Gaussian noise}.
+\end{itemize}
+
+\subsection*{Étape 6 : reconstruction du fBm sur $[0,T]$}
+\begin{itemize}
+  \item Fixer $\Delta t = T/N$.
+  \item Poser
+    \[
+      \bH(t_0)=0,\qquad
+      \bH(t_k) = (\Delta t)^H \sum_{j=0}^{k-1} X_j,\quad k=1,\dots,N.
+    \]
+\end{itemize}
+
+On obtient ainsi une trajectoire discrète
+\[
+  \bigl(\bH(t_0),\bH(t_1),\dots,\bH(t_N)\bigr)
+\]
+qui suit, en loi, un mouvement brownien fractionnaire de paramètre $H$
+sur l'intervalle $[0,T]$.
+\endgroup
 \subsubsection{Mod\`ele de Heston et variants affines}
 
 Le mod\`ele de Heston constitue un mod\`ele de r\'ef\'erence en volatilité stochastique.
 Il est affine, ce qui permet une expression ferm\'ee de la fonction caract\'eristique :
 \[
-\phi(u;T) = 
+\phi(u;T) =
 \exp \bigl(C(u,T) + D(u,T) v_0 + i u \ln S_0 \bigr).
 \]
 
@@ -3344,19 +3895,511 @@ permettent :
   \item une calibration robuste via transformée de Fourier.
 \end{itemize}
 
-Les d\'erivations Riccati compl\`etes (équations pour $C$ et $D$) sont report\'ees en
-annexe.
+On donne maintenant une d\'erivation pas \`a pas : ansatz affine, \'equation de Riccati,
+puis pricing par Fourier (Carr--Madan) et remarques num\'eriques.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begingroup
+\let\section\subsubsection
+\let\subsection\paragraph
+\section{D\'erivation pas \`a pas : mod\`ele de Heston}
+\label{sec:deriv-heston}
+
+
+
+\subsection{Mod\`ele de Heston et log--prix}
+
+Sous la mesure risque--neutre $Q$, le prix de l'actif $S_t$ et sa variance
+instantan\'ee $v_t$ suivent
+\begin{equation}
+\begin{cases}
+dS_t = r S_t\,dt + \sqrt{v_t}\,S_t\,dW^{(1)}_t, \\[3pt]
+dv_t = \kappa(\theta - v_t)\,dt + \xi\sqrt{v_t}\,dW^{(2)}_t, \\[3pt]
+dW^{(1)}_t\,dW^{(2)}_t = \rho\,dt,
+\end{cases}
+\end{equation}
+avec $v_0 > 0$, $\kappa>0$, $\theta>0$, $\xi>0$, $|\rho|\le 1$.
+
+On pose le log--prix
+\begin{equation}
+X_t = \ln S_t.
+\end{equation}
+Par la formule d'It\^o,
+\begin{equation}
+dX_t = \left(r - \frac{v_t}{2}\right)dt + \sqrt{v_t}\,dW^{(1)}_t.
+\end{equation}
+
+On consid\`ere une option call europ\'eenne de strike $K>0$ et maturit\'e $T>0$,
+de payoff $(S_T-K)^+$. Son prix au temps $0$ est
+\begin{equation}
+C(K,T) = e^{-rT}\,\mathbb{E}_Q\big[(S_T - K)^+\big].
+\end{equation}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Fonction caract\'eristique du log--prix sous Heston}
+
+On d\'efinit la fonction caract\'eristique du log--prix $X_T = \ln S_T$ par
+\begin{equation}
+\varphi_T(u) := \mathbb{E}\!\left[ e^{i u X_T} \right], \qquad u\in\mathbb{C}.
+\end{equation}
+On veut une expression explicite de $\varphi_T(u)$.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{PDE de Feynman--Kac et ansatz affine}
+
+Pour $0\le t\le T$, $x\in\mathbb{R}$, $v\ge0$, on introduit
+\begin{equation}
+p(t,x,v;u) := \mathbb{E}\big[ e^{i u X_T} \,\big|\, X_t=x, v_t=v \big].
+\end{equation}
+Alors $p(T,x,v;u) = e^{iux}$ et
+\begin{equation}
+\varphi_T(u) = p(0,\ln S_0, v_0;u).
+\end{equation}
+
+Le couple $(X_t,v_t)$ a pour g\'en\'erateur infinit\'esimal
+\begin{equation}
+\mathcal{L} f =
+\left(r - \frac{v}{2}\right)\partial_x f
++ \kappa(\theta - v)\partial_v f
++ \frac{1}{2} v\,\partial_{xx} f
++ \rho\xi v\,\partial_{xv} f
++ \frac{1}{2}\xi^2 v\,\partial_{vv} f.
+\end{equation}
+Par Feynman--Kac, $p$ satisfait
+\begin{equation}
+\partial_t p + \mathcal{L}p = 0, \qquad p(T,x,v;u) = e^{iux}.
+\end{equation}
+
+On cherche une solution de la forme affine en $v$:
+\begin{equation}
+p(t,x,v;u) = \exp\!\big(C(\tau;u) + D(\tau;u)v + iux\big),
+\qquad \tau := T-t.
+\end{equation}
+On impose $C(0;u)=0$, $D(0;u)=0$, de sorte que $p(T,x,v;u)=e^{iux}$.
+
+On calcule
+\[
+\partial_t p = -C'(\tau;u)p - D'(\tau;u)v p,\quad
+\partial_x p = iup,\quad
+\partial_{xx}p = -u^2p,
+\]
+\[
+\partial_v p = Dp,\quad
+\partial_{vv}p = D^2p,\quad
+\partial_{xv}p = i u D p.
+\]
+
+En injectant dans la PDE, puis en factorisant par $p\neq0$, on obtient
+\begin{align}
+0 &= -C' - D'v
++ \left(r - \frac{v}{2}\right)(iu)
++ \kappa(\theta - v)D
++ \frac{1}{2} v(-u^2)
++ \rho\xi v(iuD)
++ \frac{1}{2}\xi^2 v D^2.
+\end{align}
+On s\'eparant les termes constants et les termes proportionnels \`a $v$, ce qui donne
+\begin{align}
+\text{(terme constant)}  &:& -C' + iur + \kappa\theta D &= 0,\\
+\text{(terme en $v$)}    &:& -D'
+ + \left(-\frac{iu}{2}\right)
+ - \kappa D
+ - \frac{u^2}{2}
+ + \rho\xi iu D
+ + \frac{1}{2}\xi^2 D^2 &= 0.
+\end{align}
+On en d\'eduit les EDO (en $\tau$):
+\begin{align}
+C'(\tau;u) &= \kappa\theta D(\tau;u) + i u r, \qquad C(0;u)=0,
+\label{eq:Cprime}\\[3pt]
+D'(\tau;u) &= \frac{1}{2}\xi^2 D(\tau;u)^2
+           + (\rho\xi i u - \kappa)D(\tau;u)
+           + \frac{1}{2}(u^2 + i u),\qquad D(0;u)=0.
+\label{eq:Dprime}
+\end{align}
+
+L'\'equation~\eqref{eq:Dprime} est de Riccati.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{R\'esolution de l'\'equation de Riccati}
+
+On note
+\begin{equation}
+a := \frac{\xi^2}{2},\qquad
+\beta(u) := \rho\xi i u - \kappa,\qquad
+\omega(u) := \frac{1}{2}(u^2+i u).
+\end{equation}
+Alors
+\begin{equation}
+D' = a D^2 + \beta(u) D + \omega(u).
+\end{equation}
+
+On introduit le discriminant
+\begin{equation}
+d(u) := \sqrt{\beta(u)^2 + 4a\omega(u)}
+      = \sqrt{(\rho\xi i u - \kappa)^2 + \xi^2(u^2+i u)},
+\end{equation}
+et on prend la racine avec $\Re[d(u)]>0$.
+
+On d\'efinit ensuite
+\begin{equation}
+g(u) := \frac{\kappa - \rho\xi i u - d(u)}{\kappa - \rho\xi i u + d(u)}.
+\end{equation}
+
+La solution classique de l'\'equation de Riccati est alors
+\begin{equation}
+D(\tau;u)
+= \frac{\kappa - \rho\xi i u - d(u)}{\xi^2}\;
+  \frac{1 - e^{-d(u)\tau}}{1 - g(u)e^{-d(u)\tau}}.
+\end{equation}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Int\'egration pour obtenir $C(\tau;u)$}
+
+En int\'egrant~\eqref{eq:Cprime}, on obtient
+\begin{equation}
+C(\tau;u) = i u r\,\tau
++ \kappa\theta\int_0^\tau D(s;u)\,ds.
+\end{equation}
+
+L'int\'egrale en $s$ se calcule explicitement. Le r\'esultat standard (obtenu
+en faisant le changement $y=e^{-d(u)s}$ et en int\'egrant terme \`a terme) est
+\begin{equation}
+C(\tau;u)
+= i u r \tau
++ \frac{\kappa\theta}{\xi^2}
+  \left[
+     \left(\kappa - \rho\xi i u - d(u)\right)\tau
+     - 2\ln\!\left(\frac{1 - g(u)e^{-d(u)\tau}}{1 - g(u)}\right)
+  \right].
+\end{equation}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Fonction caract\'eristique finale}
+
+En r\'esum\'e, la fonction caract\'eristique du log--prix $X_T=\ln S_T$ sous
+le mod\`ele de Heston est
+\begin{equation}
+\boxed{
+\varphi_T(u)
+= \mathbb{E}\!\left[ e^{i u X_T} \right]
+= \exp\!\Big(
+C(T;u) + D(T;u)\,v_0 + i u \ln S_0
+\Big),
+}
+\end{equation}
+avec
+\begin{align}
+d(u) &= \sqrt{(\rho\xi i u - \kappa)^2 + \xi^2(u^2+i u)},\\[3pt]
+g(u) &= \frac{\kappa - \rho\xi i u - d(u)}{\kappa - \rho\xi i u + d(u)},\\[3pt]
+D(T;u) &= \frac{\kappa - \rho\xi i u - d(u)}{\xi^2}\;
+         \frac{1 - e^{-d(u)T}}{1 - g(u)e^{-d(u)T}},\\[3pt]
+C(T;u) &= i u r T
++ \frac{\kappa\theta}{\xi^2}
+  \left[
+     \left(\kappa - \rho\xi i u - d(u)\right)T
+     - 2\ln\!\left(\frac{1 - g(u)e^{-d(u)T}}{1 - g(u)}\right)
+  \right].
+\end{align}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Repr\'esentation de Fourier du prix de la call}
+
+\subsection{Densit\'e du log--prix}
+
+Notons $X_T=\ln S_T$ et $f_{X_T}$ sa densit\'e (sous $Q$). Le prix de la call
+en fonction de $k=\ln K$ s'\'ecrit
+\begin{equation}
+C(k) = C(K,T) = e^{-rT}\int_k^{+\infty}\big(e^x-e^k\big)\,f_{X_T}(x)\,dx,
+\qquad k:=\ln K.
+\end{equation}
+
+\subsection{Damping et transform\'ee de Fourier}
+
+On choisit un param\`etre de damping $\alpha>0$ tel que
+\begin{equation}
+\mathbb{E}\big[e^{(\alpha+1)X_T}\big] < +\infty.
+\end{equation}
+On introduit la quantit\'e
+\begin{equation}
+c_\alpha(k) := e^{\alpha k}\,C(k),
+\end{equation}
+et sa transform\'ee de Fourier
+\begin{equation}
+\psi_T(v) := \int_{-\infty}^{+\infty} e^{ivk} c_\alpha(k)\,dk
+           = \int_{-\infty}^{+\infty} e^{(\alpha+iv)k} C(k)\,dk,
+           \qquad v\in\mathbb{R}.
+\end{equation}
+
+Par un calcul direct (changement d'ordre d'int\'egration et int\'egration en
+$k$ d'abord), on obtient
+\begin{equation}
+\psi_T(v)
+= e^{-rT}\,\frac{1}{(\alpha+iv)(\alpha+iv+1)}
+      \int_{-\infty}^{+\infty} e^{(\alpha+1+iv)x}f_{X_T}(x)\,dx.
+\end{equation}
+
+Or
+\begin{equation}
+\int_{-\infty}^{+\infty} e^{(\alpha+1+iv)x}f_{X_T}(x)\,dx
+= \mathbb{E}\big[e^{(\alpha+1+iv)X_T}\big]
+= \varphi_T\big( v - i(\alpha+1)\big),
+\end{equation}
+puisque
+$e^{(\alpha+1+iv)x} = e^{i(v-i(\alpha+1))x}$.
+
+On en d\'eduit
+\begin{equation}
+\boxed{
+\psi_T(v)
+= e^{-rT}\,
+  \frac{\varphi_T\big(v - i(\alpha+1)\big)}
+       {(\alpha+iv)(\alpha+iv+1)}.
+}
+\end{equation}
+
+\subsection{Formule d'inversion}
+
+Par inversion de Fourier, on r\'ecup\`ere
+\begin{equation}
+c_\alpha(k) = \frac{1}{2\pi}
+\int_{-\infty}^{+\infty} e^{-ivk}\,\psi_T(v)\,dv.
+\end{equation}
+Comme $C(k)$ est r\'eel, $c_\alpha(k)$ l'est aussi et l'int\'egrale se
+simplifie en
+\begin{equation}
+c_\alpha(k) =
+\frac{1}{\pi}
+\int_0^{+\infty} \Re\!\bigl(e^{-ivk}\psi_T(v)\bigr)\,dv.
+\end{equation}
+
+En rappelant $C(k) = e^{-\alpha k} c_\alpha(k)$, on obtient finalement
+\begin{equation}
+\boxed{
+C(K,T)
+= C(k)
+= \frac{e^{-\alpha k}}{\pi}
+  \int_0^{+\infty}
+  \Re\!\left(
+    e^{-ivk}\,
+    e^{-rT}\,
+    \frac{\varphi_T\big(v - i(\alpha+1)\big)}
+         {(\alpha+iv)(\alpha+iv+1)}
+  \right)\,dv,
+\qquad k=\ln K.
+}
+\end{equation}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Sch\'ema num\'erique (id\'ee g\'en\'erale)}
+
+Pour calculer $C(K,T)$ num\'eriquement :
+
+\begin{enumerate}
+\item Choisir $\alpha>0$ tel que
+      $\mathbb{E}[e^{(\alpha+1)X_T}]<\infty$ (en pratique $\alpha\in[1,2]$
+      est standard).
+\item Choisir une grille pour $v$: $v_j = j\Delta v$, $j=0,\dots,N$, avec
+      $\Delta v$ et $N$ fixant la pr\'ecision.
+\item Pour chaque $v_j$,
+      \begin{enumerate}
+      \item calculer $u_j := v_j - i(\alpha+1)$,
+      \item calculer $d(u_j)$, $g(u_j)$, $D(T;u_j)$, $C(T;u_j)$,
+      \item en d\'eduire $\varphi_T(u_j)$,
+      \item calculer $\psi_T(v_j)$ via la formule ci--dessus.
+      \end{enumerate}
+\item Approcher l'int\'egrale par une somme de Riemann ou Simpson:
+      \[
+      C(K,T) \approx
+      \frac{e^{-\alpha k}}{\pi}
+      \sum_{j=0}^N
+      \Re\!\left( e^{-i v_j k} \psi_T(v_j) \right)\Delta v.
+      \]
+\end{enumerate}
+
+
+
+\subsection*{A.6. Formule finale et sch\'ema num\'erique}
+
+
+\subsection*{Formule finale de Heston pour $C(K,T)$ et sch\'ema num\'erique}
+
+\subsection*{1. Fonction caract\'eristique sous Heston}
+
+Sous la mesure risque--neutre $Q$ :
+\[
+\begin{cases}
+dS_t = r S_t\,dt + \sqrt{v_t}\,S_t\,dW_t^{(1)}, \\[3pt]
+dv_t = \kappa(\theta - v_t)\,dt + \xi\sqrt{v_t}\,dW_t^{(2)}, \\[3pt]
+dW_t^{(1)}\,dW_t^{(2)} = \rho\,dt,
+\end{cases}
+\qquad S_0>0,\; v_0>0.
+\]
+
+On pose
+\[
+X_t := \ln S_t .
+\]
+
+La fonction caract\'eristique du log--prix $X_T$ est
+\[
+\varphi_T(u) := \mathbb{E}\big[e^{iuX_T}\big], \qquad u\in\mathbb{C}.
+\]
+
+Elle s'\'ecrit sous forme affine
+\[
+\boxed{\displaystyle
+\varphi_T(u)
+= \exp\Big(C(T,u) + D(T,u)\,v_0 + iu\ln S_0\Big),
+}
+\]
+avec
+\[
+d(u) := \sqrt{(\rho\xi iu - \kappa)^2 + \xi^2(u^2+iu)},
+\qquad \Re(d(u))>0,
+\]
+\[
+g(u) := \frac{\kappa - \rho\xi iu - d(u)}{\kappa - \rho\xi iu + d(u)}.
+\]
+
+Les fonctions $C$ et $D$ sont
+\[
+\boxed{\displaystyle
+D(T,u)
+= \frac{\kappa - \rho\xi iu - d(u)}{\xi^2}
+  \,\frac{1 - e^{-d(u)T}}{1 - g(u)\,e^{-d(u)T}},
+}
+\]
+\[
+\boxed{\displaystyle
+C(T,u)
+= iurT
++ \frac{\kappa\theta}{\xi^2}
+  \left[
+    \big(\kappa - \rho\xi iu - d(u)\big)T
+    - 2\ln\!\left(\frac{1 - g(u)e^{-d(u)T}}{1 - g(u)}\right)
+  \right].
+}
+\]
+
+Tous les param\`etres $(\kappa,\theta,\xi,\rho,v_0,r,S_0)$ apparaissent
+explicitement dans $d(u)$, $g(u)$, $C(T,u)$, $D(T,u)$ donc dans $\varphi_T(u)$.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection*{2. Formule de prix via transform\'ee de Fourier (type Carr--Madan)}
+
+On note $K>0$ le strike et
+\[
+k := \ln K .
+\]
+
+On fixe un param\`etre de damping $\alpha>0$ tel que
+\[
+\mathbb{E}\big[e^{(\alpha+1)X_T}\big] < \infty
+\quad\text{(en pratique $\alpha\in[1,2]$).}
+\]
+
+Pour $v\in\mathbb{R}$, on pose
+\[
+A(v) := \alpha + iv.
+\]
+
+La transform\'ee de Carr--Madan est
+\[
+\psi_T(v)
+:= \int_{\mathbb{R}} e^{A(v) k'} C(k')\,dk',
+\]
+et peut se r\'ecrire en fonction de $\varphi_T$ :
+\[
+\boxed{\displaystyle
+\psi_T(v)
+= \frac{e^{-rT}}{A(v)\big(A(v)+1\big)}\,
+  \varphi_T\big(v - i(\alpha+1)\big).
+}
+\]
+
+La formule d'inversion donne alors le prix de la call :
+\[
+\boxed{\displaystyle
+C(K,T)
+= C(k)
+= \frac{e^{-\alpha k}}{\pi}
+  \int_0^{+\infty}
+    \Re\!\left(
+      e^{-ivk}\,\psi_T(v)
+    \right)\,dv.
+}
+\]
+
+En combinant explicitement :
+\[
+\boxed{\displaystyle
+C(K,T)
+=
+\frac{e^{-\alpha k}}{\pi}
+\int_0^{+\infty}
+\Re\!\left[
+e^{-ivk}\,
+\frac{e^{-rT}}{(\alpha+iv)(\alpha+1+iv)}\,
+\exp\Big(
+C(T,u) + D(T,u)\,v_0 + iu\ln S_0
+\Big)
+\right]_{u=v-i(\alpha+1)}
+dv.
+}
+\]
+
+Tout est maintenant en fonction de
+\[
+(\kappa,\theta,\xi,\rho,v_0,r,S_0,K,T,\alpha).
+\]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection*{3. Principes num\'eriques (sans pseudo-code)}
+
+\paragraph{Rappel de la formule.}
+Dans le cadre de Carr--Madan, on utilise un call damp\'e et l'on \'evalue une int\'egrale oscillante sur $v\in\R_+$ :
+\[
+C(K,T)
+=
+\frac{\ee^{-\alpha k}}{\pi}\int_0^{+\infty}\Re\!\left(\ee^{-\ii v k}\,\psi_T(v)\right)\dd v,
+\qquad
+k=\ln K,
+\]
+o\`u $\psi_T(v)$ d\'epend de la fonction caract\'eristique $\varphi_T(u)$ du log-prix \`a maturit\'e $T$ \'evalu\'ee en
+\[
+u(v)=v-\ii(\alpha+1).
+\]
+
+\paragraph{Choix du damping et int\'egrabilit\'e.}
+Le param\`etre $\alpha>0$ assure l'int\'egrabilit\'e de la transform\'ee (contr\^ole des queues en $K$). Le choix est un compromis :
+un $\alpha$ trop faible peut conduire \`a une int\'egrale mal conditionn\'ee ; un $\alpha$ trop grand amplifie certaines erreurs num\'eriques.
+
+\paragraph{Troncature, discr\'etisation et diagnostics.}
+Num\'eriquement, l'int\'egrale est tronqu\'ee \`a $[0,V_{\max}]$ et approch\'ee par quadrature sur une grille $v_n=n\,\Delta v$.
+Les erreurs proviennent (i) de la troncature (choix de $V_{\max}$), (ii) de la discr\'etisation ($\Delta v$), et (iii) de l'oscillation.
+Une validation th\'eorique consiste \`a v\'erifier la stabilit\'e du prix lorsque l'on augmente $V_{\max}$ et que l'on raffine $\Delta v$,
+et \`a croiser avec une m\'ethode ind\'ependante (Monte Carlo ou PDE) sur quelques points de grille.
+
+\paragraph{Branche complexe et stabilit\'e.}
+Dans Heston (et Bates), l'\'evaluation de $\varphi_T(u)$ requiert des racines carr\'ees et logarithmes complexes. Le choix de branche
+et la continuit\'e en $u$ conditionnent la stabilit\'e num\'erique ; en pratique, on impose une convention coh\'erente sur la racine
+et l'on surveille les discontinuit\'es.
+
+\paragraph{Version FFT.}
+La version FFT de Carr--Madan s'appuie sur une grille uniforme en fr\'equence $v$ et une grille uniforme en log-strike $k$,
+avec une relation de type $\Delta v\,\Delta k = 2\pi/N$. Elle permet d'obtenir un ensemble de prix sur une grille de strikes en un seul
+calcul, au prix d'effets d'aliasing et de fen\^etrage \`a contr\^oler (choix du domaine et des pas).
+\endgroup
 \subsubsection{Mod\`ele SABR et volatilité inspirée (SVI)}
 
 Pour les marchés de taux, le mod\`ele SABR, caractérisé par
 \[
-dF_t = \alpha_t F_t^\beta\, dW_t^{(1)}, 
+dF_t = \alpha_t F_t^\beta\, dW_t^{(1)},
 \qquad
 d\alpha_t = \nu \alpha_t\, dW_t^{(2)},
 \]
-remains l’un des standards de calibration en raison de son expression 
+remains l'un des standards de calibration en raison de son expression
 asymptotique fermée de la volatilité implicite.
 
 En parall\`ele, les mod\`eles SVI (Stochastic Volatility Inspired) fournissent une
@@ -3364,7 +4407,7 @@ paramétrisation analytique de la surface de volatilité, contr\^olant :
 \begin{itemize}
   \item le skew,
   \item la convexité,
-  \item les conditions d’arbitrage.
+  \item les conditions d'arbitrage.
 \end{itemize}
 
 Ces deux mod\`eles sont des outils incontournables pour reproduire des surfaces
@@ -3382,7 +4425,6 @@ des queues plus lourdes et des discontinuit\'es est d'ajouter un processus de sa
 Sous $\QQ$ et dans une convention \`a dividende continu $q$, on \'ecrit typiquement :
 \[
 \frac{\dd S_t}{S_{t^-}}
-
 =
 (r-q-\lambda\kappa_J)\,\dd t
 +
@@ -3813,21 +4855,21 @@ un protocole coh\'erent avec la temporalit\'e des donn\'ees de march\'e.
 \section{D\'ecision s\'equentielle : MDP et apprentissage par renforcement}
 
 %----------------------------------------------------------
-\iffalse % Hors p\'erim\`etre : ML g\'en\'eral (conserv\'e hors rendu final)
-\subsection{Supervised Learning}
+% Pr\'erequis pour le DQN : rappels ML / r\'eseaux
+\subsection{Pr\'erequis : apprentissage supervis\'e}
 
 Le \emph{supervised learning} consiste à apprendre une fonction
 \[
 f_\theta : \mathcal{X} \to \mathcal{Y}
 \]
-à partir d’un ensemble d’observations annotées
-$\{(x_i,y_i)\}_{i=1}^n$.  
-L’objectif est de déterminer les paramètres $\theta$ minimisant une fonction de
+à partir d'un ensemble d'observations annotées
+$\{(x_i,y_i)\}_{i=1}^n$.
+L'objectif est de déterminer les paramètres $\theta$ minimisant une fonction de
 perte :
 \[
-\theta^\*
+\theta^*
 =
-\arg\min_\theta 
+\arg\min_\theta
 \sum_{i=1}^{n}
 L\bigl(y_i, f_\theta(x_i)\bigr).
 \]
@@ -3842,7 +4884,7 @@ les modèles arborescents, les SVM, ainsi que les méthodes probabilistes
 
 \begin{itemize}
   \item \textbf{Régression} : prédiction de variables continues ($y \in \mathbb{R}$).
-  \item \textbf{Classification} : prédiction de labels discrets 
+  \item \textbf{Classification} : prédiction de labels discrets
         ($y \in \{1,\dots,K\}$).
 \end{itemize}
 
@@ -3852,7 +4894,7 @@ Les données sont divisées en :
 \[
 \text{train} \longrightarrow \text{validation} \longrightarrow \text{test}.
 \]
-Cela permet d’évaluer la capacité de généralisation du modèle.
+Cela permet d'évaluer la capacité de généralisation du modèle.
 
 \paragraph{Overfitting / Underfitting.}
 
@@ -3867,12 +4909,12 @@ Le risque prédit se décompose en :
 \[
 \text{Erreur} = \text{Biais}^2 + \text{Variance} + \text{Bruit}.
 \]
-L’objectif est de trouver un compromis optimal entre biais et variance.
+L'objectif est de trouver un compromis optimal entre biais et variance.
 
 \paragraph{Fonctions de perte.}
 
 \begin{itemize}
-  \item Régression : 
+  \item Régression :
   \[
     \text{MSE},\quad \text{MAE},\quad \text{Huber}.
   \]
@@ -3952,7 +4994,7 @@ B_{k,n}(x) = \binom{n}{k} x^k (1-x)^{n-k}.
 
 \paragraph{Arbres de décision.}
 
-Un arbre partitionne l’espace des features :
+Un arbre partitionne l'espace des features :
 \[
 x \mapsto \text{Région}_i \mapsto \hat y_i.
 \]
@@ -3982,8 +5024,8 @@ neural, ridge).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Unsupervised Learning}
 
-L’apprentissage non supervisé vise à identifier des structures, regrouper des
-observations ou réduire la dimensionnalité d’un jeu de données sans disposer
+L'apprentissage non supervisé vise à identifier des structures, regrouper des
+observations ou réduire la dimensionnalité d'un jeu de données sans disposer
 de labels explicites. Ces méthodes sont essentielles pour la détection de
 régimes, la segmentation de marché, la compression de données et la découverte
 de facteurs latents.
@@ -3993,29 +5035,29 @@ de facteurs latents.
 
 \paragraph{K-Means.}
 
-Le K-Means vise à partitionner un ensemble de points 
-$\{x_i\}_{i=1}^n \subset \mathbb{R}^d$ 
-en $K$ groupes en minimisant l’inertie intra-cluster :
+Le K-Means vise à partitionner un ensemble de points
+$\{x_i\}_{i=1}^n \subset \mathbb{R}^d$
+en $K$ groupes en minimisant l'inertie intra-cluster :
 \[
 \min_{C_1,\dots,C_K}
 \sum_{k=1}^K \sum_{x_i \in C_k} \|x_i - \mu_k\|^2,
 \]
 o\`u $\mu_k$ est le barycentre du cluster $C_k$.
 
-L’algorithme alterne entre :
+L'algorithme alterne entre :
 \begin{itemize}
   \item \textit{assignation} des points aux centres les plus proches,
   \item \textit{mise à jour} des centres.
 \end{itemize}
 
-La convergence est rapide mais dépend de l’initialisation.
+La convergence est rapide mais dépend de l'initialisation.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Anomaly / Novelty Detection}
 
 \paragraph{One-Class SVM.}
 
-Le One-Class SVM estime la frontière d’un ensemble de données non étiquetées.
+Le One-Class SVM estime la frontière d'un ensemble de données non étiquetées.
 On cherche une fonction $f$ telle que la majorité des points vérifient $f(x) \ge 0$.
 
 Formulation :
@@ -4041,7 +5083,7 @@ On diagonalise la matrice de covariance :
 = Q \Lambda Q^\top.
 \]
 
-Les vecteurs propres $q_k$ correspondant aux plus grandes valeurs propres 
+Les vecteurs propres $q_k$ correspondant aux plus grandes valeurs propres
 capturent les directions de variance maximale.
 
 \paragraph{SVD (Singular Value Decomposition).}
@@ -4062,8 +5104,8 @@ La SVD est la base de :
 \paragraph{t-SNE.}
 
 Méthode non linéaire conservant des distances locales via une minimisation de
-divergence de Kullback–Leibler entre les voisinages dans l’espace initial et
-l’espace réduit.
+divergence de Kullback--Leibler entre les voisinages dans l'espace initial et
+l'espace réduit.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Séries temporelles classiques}
@@ -4093,7 +5135,7 @@ X_t = \sum_{i=1}^q \theta_i \varepsilon_{t-i} + \varepsilon_t.
 
 \paragraph{ARMA(p,q).}
 \[
-X_t 
+X_t
 = \sum_{i=1}^p \phi_i X_{t-i}
 + \sum_{j=1}^q \theta_j \varepsilon_{t-j}
 + \varepsilon_t.
@@ -4114,7 +5156,7 @@ de volatilité, ou l'analyse de séries financières en basse fréquence.
 \subsection{Deep Learning}
 
 Le deep learning repose sur les réseaux de neurones artificiels, capables
-d’approximer des fonctions complexes par composition de transformations
+d'approximer des fonctions complexes par composition de transformations
 linéaires et non linéaires. Il permet de traiter des données structurées
 (images, séries temporelles, texte) via des architectures spécialisées.
 
@@ -4129,7 +5171,7 @@ z = w^\top x + b,
 \qquad
 a = \sigma(z),
 \]
-où $\sigma$ est une fonction d’activation (ReLU, sigmoid, tanh, GELU).
+où $\sigma$ est une fonction d'activation (ReLU, sigmoid, tanh, GELU).
 
 \paragraph{MLP (Multi-Layer Perceptron).}
 
@@ -4140,7 +5182,7 @@ f(x) = \sigma_L(W_L \sigma_{L-1}(W_{L-1}\cdots \sigma_1(W_1 x))).
 
 \paragraph{Problème du vanishing/exploding gradient.}
 
-Lorsque la profondeur augmente, les gradients peuvent diverger ou s’annuler.
+Lorsque la profondeur augmente, les gradients peuvent diverger ou s'annuler.
 Solutions :
 \begin{itemize}
   \item initialisation Xavier/He,
@@ -4153,7 +5195,7 @@ Solutions :
 \begin{itemize}
   \item \textbf{BatchNorm} : normalisation des activations au sein du batch.
   \item \textbf{LayerNorm} : normalisation par feature.
-  \item \textbf{Dropout} : régularisation par mise à zéro aléatoire d’activations.
+  \item \textbf{Dropout} : régularisation par mise à zéro aléatoire d'activations.
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -4173,7 +5215,7 @@ Les noyaux (kernels) extraient des motifs locaux (bords, textures).
 
 \paragraph{Stride, padding.}
 
-Le \emph{stride} contrôle le sous-échantillonnage.  
+Le \emph{stride} contrôle le sous-échantillonnage.
 Le \emph{padding} permet de conserver la taille spatiale.
 
 \paragraph{Pooling.}
@@ -4256,8 +5298,8 @@ On calcule :
 \]
 
 Intuition :
-- $Q$ “cherche” des informations pertinentes,  
-- $K$ dit quelles informations chaque token “porte”,  
+- $Q$ ``cherche'' des informations pertinentes,
+- $K$ dit quelles informations chaque token ``porte'',
 - $V$ apporte la valeur combinée.
 
 \paragraph{Entraînement.}
@@ -4292,7 +5334,7 @@ Quantification discrète via dictionnaire de codes.
 \paragraph{GAN.}
 
 \[
-\min_G \max_D\ 
+\min_G \max_D\
 \mathbb{E}[\log D(x)] + \mathbb{E}[\log(1 - D(G(z)))].
 \]
 
@@ -4305,19 +5347,18 @@ GAN + quantisation vectorielle (utilisé dans Stable Diffusion).
 x_T \sim \mathcal{N}(0,I),\qquad
 x_{t-1} = \mathrm{denoise}_\theta(x_t).
 \]
-Ce sont les modèles sous-jacents à DALL·E 2, Stable Diffusion, Imagen.
+Ce sont les modèles sous-jacents à DALL$\cdot$E 2, Stable Diffusion, Imagen.
 
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\fi
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Reinforcement Learning}
 
-Le Reinforcement Learning (RL) étudie l’interaction entre un agent et un
-environnement.  
-À chaque étape, l’agent observe un état $s_t$, choisit une action $a_t$, reçoit
-une récompense $\mathcal{R}_t$, et l’environnement évolue selon une dynamique inconnue.
-L’objectif est de maximiser la récompense cumulée.
+Le Reinforcement Learning (RL) étudie l'interaction entre un agent et un
+environnement.
+À chaque étape, l'agent observe un état $s_t$, choisit une action $a_t$, reçoit
+une récompense $\mathcal{R}_t$, et l'environnement évolue selon une dynamique inconnue.
+L'objectif est de maximiser la récompense cumulée.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Concepts fondamentaux}
@@ -4333,24 +5374,24 @@ où
   \item $\mathcal{A}$ : espace des actions,
   \item $\mathcal{P}(s'|s,a)$ : dynamique (transition),
   \item $\mathcal{R}(s,a)$ : récompense immédiate,
-  \item $\gamma_{\mathrm{RL}} \in (0,1)$ : facteur d’escompte (sans lien avec les taux $r_t$).
+  \item $\gamma_{\mathrm{RL}} \in (0,1)$ : facteur d'escompte (sans lien avec les taux $r_t$).
 \end{itemize}
 
-La politique $\pi(a|s)$ définit le comportement de l’agent.
+La politique $\pi(a|s)$ définit le comportement de l'agent.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Fonctions de valeur et équations de Bellman}
 
-La \textbf{valeur d’une politique} $\pi$ est :
+La \textbf{valeur d'une politique} $\pi$ est :
 \[
-V^\pi(s) = 
+V^\pi(s) =
 \mathbb{E}_\pi\!\left[
  \sum_{t=0}^\infty \gamma_{\mathrm{RL}}^t \mathcal{R}(s_t,a_t)
  \,\bigg|\, s_0 = s
 \right].
 \]
 
-La \textbf{valeur d’état-action} :
+La \textbf{valeur d'état-action} :
 \[
 Q^\pi(s,a)
 =
@@ -4363,7 +5404,7 @@ Q^\pi(s,a)
 Les équations de Bellman caractérisent ces valeurs :
 \[
 V^\pi(s)
-= 
+=
 \sum_{a} \pi(a|s)
 \sum_{s'} \mathcal{P}(s'|s,a)\bigl(
  \mathcal{R}(s,a) + \gamma_{\mathrm{RL}} V^\pi(s')
@@ -4372,14 +5413,14 @@ V^\pi(s)
 \[
 Q^\pi(s,a)
 =
- \mathcal{R}(s,a) + \gamma_{\mathrm{RL}} 
+ \mathcal{R}(s,a) + \gamma_{\mathrm{RL}}
 \sum_{s'} \mathcal{P}(s'|s,a)
 \sum_{a'} \pi(a'|s') Q^\pi(s',a').
 \]
 
 La \textbf{valeur optimale} satisfait :
 \[
-V^\*(s) = \max_{a} Q^\*(s,a).
+V^*(s) = \max_{a} Q^*(s,a).
 \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -4434,7 +5475,7 @@ Q(s_t,a_t)
 Q(s_t,a_t)
 + \alpha
 \bigl(
-\mathcal{R}_t 
+\mathcal{R}_t
 + \gamma_{\mathrm{RL}} Q(s_{t+1},a_{t+1})
 - Q(s_t,a_t)
 \bigr).
@@ -4459,7 +5500,7 @@ Q(s_t,a_t)
 Q(s_t,a_t)
 +
 \alpha\bigl(
-\mathcal{R}_t 
+\mathcal{R}_t
 + \gamma_{\mathrm{RL}} \max_{a'} Q(s_{t+1},a')
 - Q(s_t,a_t)
 \bigr).
@@ -4470,7 +5511,7 @@ Q(s_t,a_t)
 
 \begin{itemize}
   \item \textbf{On-policy} : on apprend la valeur de la politique suivie (SARSA).
-  \item \textbf{Off-policy} : on apprend la politique optimale tout en explorant 
+  \item \textbf{Off-policy} : on apprend la politique optimale tout en explorant
         différemment (Q-Learning).
 \end{itemize}
 
@@ -4479,14 +5520,14 @@ Importance sampling permet de corriger les biais off-policy.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Function Approximation}
 
-Lorsque l’espace des états est trop grand, on approxime :
+Lorsque l'espace des états est trop grand, on approxime :
 \[
 V(s;\theta),\qquad Q(s,a;\theta).
 \]
 
 Mise à jour TD :
 \[
-\theta \leftarrow \theta 
+\theta \leftarrow \theta
 + \alpha\, \delta_t \, \nabla_\theta V(s_t;\theta),
 \qquad
 \delta_t = \mathcal{R}_t + \gamma_{\mathrm{RL}} V(s_{t+1}) - V(s_t).
@@ -4499,6 +5540,133 @@ Bases :
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsubsection{Deep Q-Network (DQN) : comprendre le m\'ecanisme pas \`a pas}
+
+Le DQN (Deep Q-Network) est l'id\'ee de Q-learning appliqu\'ee \`a des espaces d'\'etats continus
+ou de grande dimension, en rempla\c{c}ant la table $Q(s,a)$ par un r\'eseau de neurones
+$Q_\theta(s,a)$.
+
+\paragraph{Point de d\'epart : l'\'equation de Bellman optimale.}
+La fonction $Q^*$ satisfait
+\[
+Q^*(s,a)=\mathcal{R}(s,a)+\gamma_{\mathrm{RL}}\,\mathbb{E}\!\left[\max_{a'}Q^*(s',a')\mid s,a\right].
+\]
+Le Q-learning tabulaire est une descente stochastique vers cette identit\'e en utilisant une transition observ\'ee
+$(s_t,a_t,r_t,s_{t+1})$.
+
+\paragraph{1. Approximation param\'etrique de $Q$.}
+On choisit une famille $Q_\theta(s,a)$ (par exemple un MLP) et l'on veut ajuster $\theta$ pour que
+les valeurs pr\'edites satisfassent, en moyenne, l'\'equation de Bellman.
+
+\paragraph{2. Cible TD (temporal-difference target).}
+Sur une transition $(s,a,r,s')$, la cible ``Bellman'' naturelle est
+\[
+y := r + \gamma_{\mathrm{RL}} \max_{a'} Q_\theta(s',a').
+\]
+On cherche \`a rendre $Q_\theta(s,a)$ proche de $y$.
+
+\paragraph{3. Perte : l'erreur de Bellman (MSE).}
+Le DQN minimise une perte de type
+\[
+L(\theta)=\mathbb{E}\big[(y - Q_\theta(s,a))^2\big],
+\]
+o\`u l'esp\'erance est approxim\'ee par une moyenne sur un mini-batch de transitions.
+La mise \`a jour se fait par descente de gradient :
+\[
+\theta \leftarrow \theta - \eta\,\nabla_\theta L(\theta).
+\]
+
+\paragraph{Pourquoi le sch\'ema na\"if diverge souvent.}
+Si l'on utilise le m\^eme r\'eseau pour pr\'edire $Q_\theta(s,a)$ et construire la cible $y$,
+alors la cible bouge \`a chaque it\'eration (\emph{moving target}) et l'on apprend sur des donn\'ees tr\`es corr\'el\'ees
+dans le temps (trajectoire), ce qui cr\'ee des instabilit\'es.
+Le DQN stabilise l'apprentissage par deux id\'ees cl\'es.
+
+\paragraph{4. Experience replay : d\'ecorr\'eler et r\'eutiliser les donn\'ees.}
+On stocke des transitions $(s,a,r,s',\mathrm{done})$ dans un buffer $\mathcal{D}$, puis on entra\^{i}ne sur des mini-batches
+\emph{tir\'es al\'eatoirement} dans $\mathcal{D}$. Cela :
+\begin{itemize}
+  \item casse les corr\'elations temporelles (les mini-batches ressemblent \`a des tirages i.i.d.) ;
+  \item am\'eliore l'efficacit\'e \'echantillon (une transition est r\'eutilis\'ee plusieurs fois) ;
+  \item lisse l'\'evolution des cibles (les donn\'ees vues par le r\'eseau varient moins brutalement).
+\end{itemize}
+
+\paragraph{5. Target network : figer la cible pendant quelques pas.}
+On introduit un second r\'eseau $Q_{\theta^-}$ (copie retard\'ee) utilis\'e uniquement pour construire la cible :
+\[
+y := r + \gamma_{\mathrm{RL}} \max_{a'} Q_{\theta^-}(s',a').
+\]
+Les param\`etres $\theta^-$ sont mis \`a jour p\'eriodiquement (toutes les $C$ it\'erations) par
+copie : $\theta^- \leftarrow \theta$. Ainsi, $y$ est (temporairement) une cible plus stable.
+
+\paragraph{6. Politique d'exploration : $\epsilon$-greedy.}
+L'agent collecte des donn\'ees avec une politique d'exploration typique :
+\[
+a =
+\begin{cases}
+\text{action al\'eatoire} & \text{avec proba. }\epsilon,\\
+\arg\max_{a'} Q_\theta(s,a') & \text{avec proba. }1-\epsilon.
+\end{cases}
+\]
+On fait d\'ecro\^{i}tre $\epsilon$ au cours du temps (explorer puis exploiter) afin de construire un replay buffer riche.
+
+\paragraph{7. DQN en une boucle d'apprentissage (vue conceptuelle).}
+Sans pseudo-code, l'encha\^{i}nement est :
+\begin{enumerate}[leftmargin=*]
+  \item initialiser $Q_\theta$ et $Q_{\theta^-}$, et un buffer $\mathcal{D}$ ;
+  \item r\'ep\'eter : ex\'ecuter une action (avec exploration), observer $(s,a,r,s',\mathrm{done})$, stocker dans $\mathcal{D}$ ;
+  \item tirer un mini-batch dans $\mathcal{D}$ et minimiser $L(\theta)$ avec la cible construite par $Q_{\theta^-}$ ;
+  \item toutes les $C$ it\'erations, mettre \`a jour $\theta^-\leftarrow\theta$.
+\end{enumerate}
+
+\paragraph{Exemple minimal : calcul d'une cible et d'une perte.}
+Consid\'erons une transition $\bigl(s,a,r,s',\mathrm{done}\bigr)$ tir\'ee du replay buffer.
+Le DQN construit une cible scalaire
+\[
+y =
+\begin{cases}
+r & \text{si }\mathrm{done}=\text{vrai},\\
+r + \gamma_{\mathrm{RL}}\max_{a'}Q_{\theta^-}(s',a') & \text{sinon.}
+\end{cases}
+\]
+La contribution de cette transition \`a la perte est alors
+\[
+\ell(\theta)=\bigl(y - Q_\theta(s,a)\bigr)^2,
+\]
+et l'actualisation de $\theta$ d\'eplace $Q_\theta(s,a)$ dans la direction de $y$.
+Sur un mini-batch, on moyenne simplement ces contributions, ce qui revient \`a ajuster simultan\'ement
+les valeurs sur plusieurs couples $(s,a)$ et \`a stabiliser le gradient.
+
+\paragraph{8. Sur-estimation et variantes : Double DQN.}
+Le terme $\max_{a'}Q(\cdot)$ introduit un biais de sur-estimation (le maximum d'estimateurs bruit\'es est biais\'e).
+Double DQN d\'ecorr\`ele \emph{s\'election} et \emph{\'evaluation} :
+\[
+y := r + \gamma_{\mathrm{RL}}\, Q_{\theta^-}\!\Bigl(s', \arg\max_{a'} Q_\theta(s',a')\Bigr).
+\]
+
+\paragraph{Cas pratique : actions discr\`etes vs continues.}
+Le DQN suppose un ensemble d'actions discret. En finance, une couverture naturelle peut \^etre continue (quantit\'e de sous-jacent).
+Une strat\'egie standard consiste \`a \emph{discr\'etiser} l'action (par ex.\ des incr\'ements de hedge $\{\ldots,-2\Delta,-\Delta,0,\Delta,2\Delta,\ldots\}$),
+ce qui rend le probl\`eme traitable par DQN au prix d'un compromis pr\'ecision/co\^ut de transaction.
+Pour des actions continues, on se tourne plut\^ot vers des approches actor--critic (DDPG/TD3/SAC) ; le DQN reste un point d'entr\'ee p\'edagogique robuste.
+
+\paragraph{9. Dueling networks et prioritized replay (options).}
+\begin{itemize}
+  \item \textbf{Dueling} : d\'ecomposer $Q_\theta(s,a)=V_\theta(s)+A_\theta(s,a)$ pour mieux g\'erer les nombreux $a$.
+  \item \textbf{Prioritized replay} : sur-\'echantillonner les transitions \`a forte erreur TD $|y-Q_\theta(s,a)|$.
+\end{itemize}
+
+\paragraph{Lecture ``finance'' : DQN comme apprentissage de couverture.}
+Dans une formulation MDP de couverture, $s_t$ agr\`ege l'information (temps restant, spot, vol implicite, greeks, etc.),
+l'action $a_t$ repr\'esente un ajustement discret de hedge (quantit\'e d'actif sous-jacent, ou position en options de couverture),
+et la r\'ecompense p\'enalise le risque et les co\^uts (variance de PnL, drawdown, co\^ut de transaction).
+Le DQN apprend alors une approximation de $Q^*(s,a)$ permettant de d\'ecider un hedge discret optimal sous co\^uts et contraintes.
+
+\paragraph{Points de vigilance.}
+Le DQN est sensible \`a : (i) l'\'echelle des r\'ecompenses, (ii) la non-stationnarit\'e des donn\'ees (march\'e), (iii) la d\'efinition de l'\'etat
+et des actions, et (iv) les contraintes de risque (VaR/ES, limites) \`a int\'egrer dans la r\'ecompense ou via des contraintes.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsubsection{Policy Gradient Methods}
 
 Les méthodes de gradient de politique optimisent $\pi_\theta(a|s)$ directement.
@@ -4516,7 +5684,7 @@ J(\theta) = \mathbb{E}_{\pi_\theta}[G_t].
 
 \paragraph{Actor--Critic.}
 \[
-\theta_{\mathrm{policy}} \leftarrow 
+\theta_{\mathrm{policy}} \leftarrow
 \theta_{\mathrm{policy}}
 + \alpha\, \delta_t\, \nabla_\theta \log \pi_\theta(a_t|s_t),
 \]
@@ -4545,7 +5713,7 @@ L^{\mathrm{PPO}}(\theta)
 
 Les algorithmes évolutionnaires optimisent une population de politiques :
 \[
-\theta^{(i)} \leftarrow 
+\theta^{(i)} \leftarrow
 \text{Mutation/Croisement/Selection}(\{\theta^{(j)}\}).
 \]
 
@@ -4559,195 +5727,16 @@ et éviter les minima locaux.
 Le RL combine :
 \begin{itemize}
   \item estimation de valeurs (MC, TD),
-  \item apprentissage d’actions optimales (SARSA, Q-Learning),
+  \item apprentissage d'actions optimales (SARSA, Q-Learning),
   \item optimisation directe de politiques (Policy Gradient, Actor--Critic, PPO),
   \item approximation de fonctions (Deep RL),
   \item compromis exploration/exploitation et stabilit\'e d'apprentissage.
 \end{itemize}
 
 Ces techniques sont essentielles pour les stratégies séquentielles,
-l’optimisation de portefeuilles, la gestion dynamique du risque,
+l'optimisation de portefeuilles, la gestion dynamique du risque,
 et les modèles décisionnels non paramétriques.
 
-\section{M\'ethodologie ``plateforme'' (sans technique) : responsabilit\'es, tra\c{c}abilit\'e et validation}
-
-Ce chapitre d\'ecrit une \emph{m\'ethodologie d'ing\'enierie quantitative} : comment organiser un projet de valorisation,
-de calibration et de gestion du risque de fa\c{c}on coh\'erente, audit\-able et r\'ep\'etable, sans entrer dans des choix
-techniques. L'enjeu est de rendre explicites les hypoth\`eses et les limites, et de proposer des crit\`eres de validation
-adapt\'es \`a des donn\'ees de march\'e imparfaites et \`a des mod\`eles incomplets.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{D\'efinitions : ``briques'' quantitatives et responsabilit\'es}
-
-\paragraph{Briques conceptuelles.}
-On distingue classiquement : (i) \textbf{donn\'ees} (quotes, courbes, conventions), (ii) \textbf{mod\`eles} (dynamique sous-jacente, param\`etres),
-(iii) \textbf{m\'ethodes} (PDE, arbres, Monte Carlo, Fourier), (iv) \textbf{d\'ecision} (couverture, allocation, limites), (v) \textbf{reporting}
-(PnL, expositions, diagnostics). Une s\'eparation claire de ces responsabilit\'es (analogue \`a une architecture conceptuelle type MVC)
-limite les couplages implicites : un changement de convention (taux, dividendes) ou de mod\`ele (Heston $\rightarrow$ Bates) doit avoir un impact
-localis\'e et tra\c{c}able.
-
-\paragraph{Hypoth\`ese et gouvernance.}
-Une \emph{hypoth\`ese} est un objet explicite : choix de num\'eraire, choix de mesure, conventions de dividendes, param\'etrisation d'une surface,
-fonction de perte de calibration, et r\`egles de gestion du risque. La gouvernance consiste \`a documenter ces hypoth\`eses, \`a contr\^oler leur
-coh\'erence (absence d'arbitrage statique), et \`a en mesurer la sensibilit\'e.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Intuition : tra\c{c}abilit\'e et reproductibilit\'e comme r\'eduction du risque de mod\`ele}
-
-Dans un environnement non stationnaire, la question n'est pas seulement ``quel est le bon mod\`ele ?'', mais aussi
-``quelles sont les cons\'equences d'un choix d'hypoth\`ese ?''. La tra\c{c}abilit\'e (donn\'ees utilis\'ees, param\`etres calibr\'es,
-pond\'erations, contraintes) permet d'expliquer un PnL, de diagnostiquer une instabilit\'e (donn\'ees vs mod\`ele), et d'\'eviter des erreurs
-de type ``m\^emes entr\'ees, sorties diff\'erentes''. Elle est donc une composante directe de la ma\^{i}trise du risque de mod\`ele.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{R\'esultat cl\'e : analyse de sensibilit\'e et stress tests}
-
-Un sch\'ema minimal formalise l'impact des incertitudes :
-\[
-\text{Sorties} = g(\text{donn\'ees},\text{hypoth\`eses}),
-\]
-et, \`a premier ordre, une perturbation $(\delta x,\delta\theta)$ induit
-\[
-\delta g \approx \nabla_x g \cdot \delta x + \nabla_\theta g \cdot \delta\theta.
-\]
-Cette d\'ecomposition justifie th\'eoriquement : (i) les \textbf{analyses de sensibilit\'e} (Greeks, sensibilit\'e \`a la courbe, \`a la surface),
-et (ii) les \textbf{stress tests} (sc\'enarios sur spot/vol/taux, d\'eformation de smile, widening de bid--ask). Elle rappelle aussi que
-la stabilit\'e d'une calibration n'est pas une question d'optimisation seulement, mais de conditionnement du probl\`eme inverse.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Crit\`eres de validation : out-of-sample, stabilit\'e, coh\'erence}
-
-\paragraph{Validation out-of-sample.}
-Pour un mod\`ele de volatilité, la validation consiste \`a tester la capacit\'e \`a reproduire des quotes hors \'echantillon (autres dates,
-autres maturit\'es) et \`a stabiliser des param\`etres. Pour une surface interpol\'ee, on v\'erifie l'absence d'arbitrage (butterfly/calendar)
-après interpolation et sous stress.
-
-\paragraph{Validation de couverture.}
-Sans r\'esultats empiriques fournis, on formalise la validation par un protocole : simuler/observer un sous-jacent, appliquer une strat\'egie
-de couverture \`a fr\'equence donn\'ee, et \'etudier la distribution de l'erreur de couverture (moyenne, variance, queues) sous co\^uts de transaction.
-
-\paragraph{Contr\^oles et coh\'erence.}
-Exemples de contr\^oles conceptuels : respect des parit\'es (call--put), bornes et monotonicit\'es, coh\'erence taux/forward,
-stabilit\'e des param\`etres \`a l'\'echelle journali\`ere, et coh\'erence entre vol r\'ealis\'ee (historique) et vol implicite (march\'e).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Limites}
-
-Une ``plateforme'' ne supprime pas l'incertitude : elle l'organise. La non-stationnarit\'e, la raret\'e d'observations extr\^emes, et les effets de microstructure
-limitent la port\'ee des validations. L'objectif est donc la robustesse (sensibilit\'e contr\^ol\'ee), l'explicabilit\'e (attribution, diagnostics) et
-la discipline de mod\'elisation (hypoth\`eses document\'ees, stress tests syst\'ematiques).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Lien avec le projet \emph{PaperTradingApp}}
-
-Le projet s'inscrit dans cette logique : articuler pricing, calibration, courbe de taux, risque et couverture dans un cadre coh\'erent, en rendant explicites
-les hypoth\`eses (conventions, mod\`eles, surfaces) et en proposant des crit\`eres de validation (out-of-sample, stress, sensibilit\'e) compatibles avec un
-contexte de paper trading o\`u l'objectif est l'apprentissage et la ma\^{i}trise explicative des briques quantitatives.
-
-
-
-
-%==========================================================
-%                 PARTIE 3 : PROJETS PERSONNELS
-%==========================================================
-\section{Projet : PaperTradingApp}
-
-Cette partie synth\'etise le projet \emph{PaperTradingApp} en explicitant le lien entre les modules fonctionnels d'une
-plateforme de paper trading d'options et les notions th\'eoriques pr\'esent\'ees dans les parties pr\'ec\'edentes.
-L'enjeu est double : (i) montrer que chaque brique fonctionnelle repose sur des hypoth\`eses de mod\`ele identifiables,
-et (ii) rendre claires les limites (donn\'ees, non-stationnarit\'e, co\^uts, risque de mod\`ele).
-
-%----------------------------------------------------------
-\subsection{Objectifs, p\'erim\`etre et hypoth\`eses}
-
-Le projet vise \`a fournir un environnement unifi\'e permettant :
-\begin{itemize}
-  \item d'explorer des \textbf{strat\'egies options} (vanilles et structures simples) ;
-  \item de construire une \textbf{lecture coh\'erente des surfaces de volatilit\'e} et de les relier \`a des mod\`eles ;
-  \item de comparer des \textbf{m\'ethodes de pricing} (ferm\'ees, semi-ferm\'ees, num\'eriques) et d'en analyser les biais ;
-  \item de suivre des \textbf{expositions} (Greeks) et des \textbf{m\'etriques de risque} au niveau portefeuille ;
-  \item d'\'etudier des \textbf{r\'egimes de volatilit\'e} et des heuristiques (mean reversion, Markov) utiles \`a la d\'ecision.
-\end{itemize}
-
-\subsection{Donn\'ees de march\'e : qualit\'e, horizons et coh\'erence}
-
-La qualit\'e des conclusions d\'epend directement de la qualit\'e des donn\'ees : traitements des valeurs manquantes,
-coh\'erence des dates de maturit\'e, gestion des \emph{corporate actions}, granularit\'e (intraday vs daily), et choix de
-l'horizon (pricing instantan\'e vs backtest historique). Le m\'emoire insiste sur les \textbf{sources de biais} :
-\begin{itemize}
-  \item non-synchronisation des quotes (spot vs options),
-  \item microstructure et effets de bid--ask,
-  \item d\'erives de r\'egime (\emph{non-stationarity}) dans la volatilité et les corr\'elations.
-\end{itemize}
-
-\subsection{Options : pricing, volatilit\'e implicite et surfaces}
-
-Le module ``Options'' s'appuie sur :
-\begin{itemize}
-  \item la d\'efinition rigoureuse des payoffs et des conventions (discounting, dividendes),
-  \item l'inversion prix $\leftrightarrow$ volatilit\'e (\emph{implied volatility}),
-  \item la construction et la visualisation de surfaces (maturit\'e/strike ou maturit\'e/log-moneyness),
-  \item la discussion des \textbf{arbitrages statiques} (monotonie, convexit\'e, calendar).
-\end{itemize}
-
-\subsection{Calibration avanc\'ee : du smile au mod\`ele}
-
-La calibration est un probl\`eme inverse : \`a partir d'une surface observ\'ee, on cherche des param\`etres $\theta$
-minimisant une erreur (en prix ou en vol implicite). Un sch\'ema g\'en\'erique est :
-\[
-\theta^\star=\arg\min_{\theta\in\Theta}\sum_{i} w_i\,
-\bigl( \sigma^{\text{mkt}}_i-\sigma^{\text{mod}}_i(\theta)\bigr)^2,
-\]
-avec pond\'erations $w_i$ et contraintes $\Theta$ (bornes, conditions de Feller, etc.).
-Les mod\`eles discut\'es incluent les structures affines (Heston), les param\'etrisations asymptotiques (SABR),
-les mod\`eles \`a m\'emoire (Volterra/rough) et les diffusions \`a sauts (Merton/Bates). Pour acc\'el\'erer le pricing,
-on recourt aux fonctions caract\'eristiques et aux m\'ethodes de Fourier (Carr--Madan/FFT).
-Une extension naturelle est l'utilisation de \textbf{surrogates} (r\'eseaux) pour approximer la carte
-surface $\mapsto$ param\`etres, afin d'obtenir des initialisations robustes.
-
-\subsection{Courbe des taux : discounting, forwards, param\'etrisation}
-
-La courbe z\'ero-coupon fournit le lien entre taux, discount factors et taux forwards. Le module ``Yield Curve'' met en
-sc\`ene (i) la conversion yield $\leftrightarrow$ discount factor, (ii) l'interpolation/extrapolation, (iii) le
-bootstrapping, et (iv) des formes param\'etriques (Nelson--Siegel) permettant une repr\'esentation lisse et interpr\'etable
-(niveau, pente, courbure).
-
-\subsection{Couverture : Greeks, erreur de hedging, d\'ecision s\'equentielle}
-
-La couverture (delta/gamma/vega) se comprend comme un compromis entre erreur de r\'eplication et co\^uts de transaction.
-Le projet met en regard :
-\begin{itemize}
-  \item une couverture ``classique'' issue de la th\'eorie Black--Scholes,
-  \item des extensions sous volatilit\'e stochastique (greeks locaux vs greeks de mod\`ele),
-  \item une formulation \`a base de \textbf{MDP} o\`u l'action est un ajustement de couverture et la r\'ecompense p\'enalise
-        une exposition r\'esiduelle et/ou des co\^uts.
-\end{itemize}
-
-\subsection{Portefeuille \& risque : m\'etriques, attribution, allocation}
-
-Au niveau portefeuille, le projet articule :
-\begin{itemize}
-  \item mesures de risque (expositions brutes/nettes, drawdowns, VaR/ES),
-  \item d\'ecomposition du PnL (r\'ealis\'e, latent, par symbole),
-  \item allocations de r\'ef\'erence (Markowitz, risk parity, eigen-portfolios) et questions d'estimation de covariance.
-\end{itemize}
-
-\subsection{Strat\'egies et r\'egimes de volatilité : straddle, IV crush, Markov}
-
-Le module ``Bots'' sert de laboratoire d'id\'ees : straddle (sensibilit\'e \`a la vol), \emph{IV crush} (choc de vol
-implicite autour d'\'ev\'enements), r\'egimes de vol r\'ealis\'ee (percentiles), diagnostics de mean reversion via
-r\'egressions, et cha\^ines de Markov sur r\'egimes discrets (matrice de transition, probabilit\'es conditionnelles).
-
-\subsection{Assistance et limites}
-
-Un assistant textuel peut aider \`a synth\'etiser un \'etat de portefeuille, mais ne remplace ni un mod\`ele ni une
-proc\'edure de contr\^ole : biais d'interpr\'etation, incertitudes non quantifi\'ees, et risques de sur-confiance. Le
-m\'emoire insiste sur la n\'ecessit\'e d'encadrer ces outils par des r\`egles de prudence (validation, tra\c{c}abilit\'e,
-absence d'action non contr\^ol\'ee).
-
-%==========================================================
-%                 PARTIE 4 : CONCLUSION
-%==========================================================
 \section{Conclusion et ouverture}
 
 Ce document a parcouru les fondements de la finance quantitative moderne en prenant pour fil conducteur le projet
@@ -4755,7 +5744,7 @@ Ce document a parcouru les fondements de la finance quantitative moderne en pren
 calibration, construction de courbe de taux, gestion du risque et allocation, ainsi qu'une ouverture vers des outils
 d'apprentissage utiles \`a la calibration (surrogates) et \`a la d\'ecision s\'equentielle (MDP/RL).
 
-L’ensemble constitue une base conceptuelle solide pour analyser un syst\`eme de trading d\'eriv\'es de bout en bout :
+L'ensemble constitue une base conceptuelle solide pour analyser un syst\`eme de trading d\'eriv\'es de bout en bout :
 donn\'ees, hypoth\`eses de mod\`eles, incertitudes, limites num\'eriques et contr\^oles de risque.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -4764,13 +5753,13 @@ donn\'ees, hypoth\`eses de mod\`eles, incertitudes, limites num\'eriques et cont
 Les points suivants peuvent \^etre retenus :
 
 \begin{itemize}
-  \item Les produits d\'eriv\'es (vanilles et exotiques) s’analysent via la mesure risque--neutre, les EDS et des
+  \item Les produits d\'eriv\'es (vanilles et exotiques) s'analysent via la mesure risque--neutre, les EDS et des
         m\'ethodes num\'eriques (arbres, PDE, Monte Carlo, Fourier/FFT).
-  \item Les Greeks structurent la lecture du risque et la couverture (delta/gamma/vega), et permettent d’anticiper les
+  \item Les Greeks structurent la lecture du risque et la couverture (delta/gamma/vega), et permettent d'anticiper les
         erreurs de hedging sous co\^uts de transaction et risque de mod\`ele.
   \item Les surfaces de volatilit\'e implicite r\'esument l'information options ; la calibration relie cette surface \`a des
         mod\`eles (Heston, SABR, rough/Volterra, sauts) et met en \'evidence les compromis de param\'etrisation.
-  \item La courbe de taux (discounting/forwards) est un ingr\'edient transversal : coh\'erence absence d’arbitrage,
+  \item La courbe de taux (discounting/forwards) est un ingr\'edient transversal : coh\'erence absence d'arbitrage,
         choix d'interpolation/extrapolation, param\'etrisations lisses (Nelson--Siegel).
   \item La gestion du risque au niveau portefeuille n\'ecessite des indicateurs actionnables (PnL, drawdowns, VaR/ES),
         ainsi que des r\`egles d'allocation (\`a la Markowitz, risk parity, eigen-portfolios).
@@ -4781,14 +5770,14 @@ Les points suivants peuvent \^etre retenus :
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Ouverture}
 
-Plusieurs directions naturelles s’ouvrent à la suite de ce travail :
+Plusieurs directions naturelles s'ouvrent à la suite de ce travail :
 
 \begin{itemize}
   \item \textbf{Qualit\'e des donn\'ees et microstructure} :
         mod\'eliser explicitement bid--ask, co\^uts de transaction et non-synchronisme spot/options, et mesurer l'impact sur
         surfaces, calibration, backtests et risque.
-  \item \textbf{Volatilité rugueuse et SDE de Volterra} : 
-        extension non markovienne des mod\`eles de variance, offrant une 
+  \item \textbf{Volatilité rugueuse et SDE de Volterra} :
+        extension non markovienne des mod\`eles de variance, offrant une
         flexibilit\'e accrue pour ajuster des smiles courts (selon les donn\'ees et la pond\'eration),
         et une mod\'elisation explicite de la m\'emoire longue.
   \item \textbf{Modèles multi-facteurs et modélisation affine avancée} :
@@ -4801,7 +5790,7 @@ Plusieurs directions naturelles s’ouvrent à la suite de ce travail :
         approximations supervis\'ees de cartes $(K,T,\theta)\mapsto C$ ou $\sigma_{\mathrm{imp}}$, utilisables pour initialiser
         des calibrations et acc\'el\'erer des diagnostics, sous contraintes arbitrage-free.
   \item \textbf{Reinforcement Learning pour la gestion dynamique du risque} :
-        agents apprenant des stratégies de hedging optimales 
+        agents apprenant des stratégies de hedging optimales
         (delta-gamma-vega), optimisation de portefeuilles, ou exécution optimale.
   \item \textbf{Validation out-of-sample et contr\^ole de risque de mod\`ele} :
         protocoles de validation, stress tests, r\'egularisation, et mesure de la stabilit\'e des param\`etres calibr\'es.
@@ -4810,7 +5799,7 @@ Plusieurs directions naturelles s’ouvrent à la suite de ce travail :
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Conclusion générale}
 
-Cette synthèse met en évidence l’interconnexion entre :
+Cette synthèse met en évidence l'interconnexion entre :
 
 \begin{itemize}
   \item maths appliquées (EDS, variation quadratique, PDE),
@@ -4819,1391 +5808,21 @@ Cette synthèse met en évidence l’interconnexion entre :
   \item reinforcement learning (prise de décision séquentielle).
 \end{itemize}
 
-L’objectif est de fournir une vision cohérente et moderne des outils quantitatifs
-utilisables en finance de marché.  
-Les annexes rassemblent des compl\'ements (Heston, SABR, Rough Heston, m\'ethodes Fourier/PDE) pour servir de base \`a des travaux plus avanc\'es.
+L'objectif est de fournir une vision cohérente et moderne des outils quantitatifs
+utilisables en finance de marché.
+Des sections de d\'erivations pas \`a pas (Heston, fBM, Volterra/rough Bergomi, SABR, rough Heston,
+m\'ethodes num\'eriques) compl\`etent le dossier pour servir de base \`a des travaux plus avanc\'es.
 
 
 %==========================================================
 %                 PARTIE 5 : BIBLIOGRAPHIE
 %==========================================================
-\section{Bibliographie comment\'ee (ouvrages et articles)}
+\section{SDE de Volterra et mod\`ele rough Bergomi}
+\label{sec:deriv-rbergomi}
 
-Cette bibliographie est \emph{align\'ee avec le contenu du m\'emoire}. Chaque r\'ef\'erence est accompagn\'ee d'un bref commentaire indiquant
-ce qu'elle apporte (cadre th\'eorique, mod\`ele, m\'ethode) et \`a quels chapitres elle se rattache. Elle n'a pas vocation \`a \^etre exhaustive.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Absence d'arbitrage, mesures martingales, calcul stochastique}
 
-\begin{description}[style=nextline,leftmargin=2.8cm]
-  \item[\textbf{Björk, T. (2009).}] \emph{Arbitrage Theory in Continuous Time}.\\
-  R\'ef\'erence structurante sur l'absence d'arbitrage, les changements de num\'eraire et les mesures martingales (cadre du pricing risque--neutre).
-
-  \item[\textbf{Delbaen, F., Schachermayer, W. (2006).}] \emph{The Mathematics of Arbitrage}.\\
-  Traitement approfondi du th\'eor\`eme fondamental de l'asset pricing (NFLVR) et de ses hypoth\`eses techniques (chapitre A).
-
-  \item[\textbf{Shreve, S. (2004).}] \emph{Stochastic Calculus for Finance II}.\\
-  D\'eveloppe It\^o, Girsanov, Feynman--Kac et les PDE de pricing ; utile pour relier dynamique sous-jacente et valorisation (chapitre C).
-\end{description}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Options, pricing et m\'ethodes num\'eriques (arbres, MC, Fourier)}
-
-\begin{description}[style=nextline,leftmargin=2.8cm]
-  \item[\textbf{Hull, J. (2022).}] \emph{Options, Futures, and Other Derivatives}.\\
-  Panorama des produits, parit\'es, bornes, et introduction aux pricers (BS, arbres, MC) (chapitres B--D, H).
-
-  \item[\textbf{Cox, J., Ross, S., Rubinstein, M. (1979).}] \emph{Option Pricing: A Simplified Approach}.\\
-  Article fondateur des arbres binomiaux CRR et de leur logique risque--neutre (chapitre D).
-
-  \item[\textbf{Glasserman, P. (2004).}] \emph{Monte Carlo Methods in Financial Engineering}.\\
-  Ouvrage de r\'ef\'erence pour estimateurs, r\'eduction de variance et Greeks Monte Carlo (chapitre D).
-
-  \item[\textbf{Longstaff, F., Schwartz, E. (2001).}] \emph{Valuing American Options by Simulation}.\\
-  M\'ethode LSMC : r\'egression pour l'exercice anticip\'e (am\'ericaines) ; utile pour comprendre l'approximation et ses biais (chapitre D).
-
-  \item[\textbf{Carr, P., Madan, D. (1999).}] \emph{Option Valuation Using the Fast Fourier Transform}.\\
-  Cadre Carr--Madan : damping, transform\'ee et FFT pour prix europ\'eens \`a partir de $\phi_T$ (chapitres D, F ; annexe F).
-
-  \item[\textbf{Lewis, A. (2001).}] \emph{A Simple Option Formula for General Jump-Diffusion and Other Exponential L\'evy Processes}.\\
-  Repr\'esentations Fourier g\'en\'erales en pr\'esence de sauts ; utile pour Merton/Bates (chapitre F).
-\end{description}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Volatilit\'e implicite, surfaces et arbitrage statique}
-
-\begin{description}[style=nextline,leftmargin=2.8cm]
-  \item[\textbf{Gatheral, J. (2006).}] \emph{The Volatility Surface: A Practitioner's Guide}.\\
-  R\'ef\'erence sur smile/skew, param\'etrisations (moneyness), et contraintes d'arbitrage statique (chapitre E).
-
-  \item[\textbf{Breeden, D., Litzenberger, R. (1978).}] \emph{Prices of State-Contingent Claims Implicit in Option Prices}.\\
-  R\'esultat central liant $\partial_{KK}C$ \`a la densit\'e risque--neutre (chapitre E).
-
-  \item[\textbf{Gatheral, J., Jacquier, A. (2014).}] \emph{Arbitrage-free SVI volatility surfaces}.\\
-  Conditions d'absence d'arbitrage (butterfly/calendar) pour SVI ; utile si l'on veut une surface param\'etrique robuste (chapitre E, annexes propos\'ees).
-\end{description}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Mod\`eles de volatilit\'e : Heston, SABR, rough, sauts}
-
-\begin{description}[style=nextline,leftmargin=2.8cm]
-  \item[\textbf{Heston, S. (1993).}] \emph{A Closed-Form Solution for Options with Stochastic Volatility}.\\
-  Mod\`ele affine de r\'ef\'erence ; fonction caract\'eristique et pricing semi-analytique (chapitre F ; annexe A).
-
-  \item[\textbf{Hagan, P., Kumar, D., Lesniewski, A., Woodward, D. (2002).}] \emph{Managing Smile Risk}.\\
-  Formule asymptotique SABR (Hagan) et interpr\'etation des param\`etres ; standard de calibration (chapitre F ; annexe D).
-
-  \item[\textbf{Merton, R. (1976).}] \emph{Option pricing when underlying stock returns are discontinuous}.\\
-  Jump--diffusion de Merton : motivation (queues) et pricing (chapitre F).
-
-  \item[\textbf{Bates, D. (1996).}] \emph{Jumps and stochastic volatility: exchange rate processes implicit in option prices}.\\
-  Combinaison volatilité stochastique + sauts (Bates) ; utile pour smiles courts et wings (chapitre F).
-
-  \item[\textbf{Gatheral, J., Jaisson, T., Rosenbaum, M. (2018).}] \emph{Volatility is rough}.\\
-  Motivation rough volatility (Hurst $<1/2$) et cons\'equences sur le skew court terme (chapitre F).
-
-  \item[\textbf{Bayer, C., Friz, P., Gatheral, J. (2016).}] \emph{Pricing under rough volatility}.\\
-  Questions num\'eriques et mod\'elisation associ\'ees \`a la rough volatility (chapitre F, annexe E).
-
-  \item[\textbf{El Euch, O., Rosenbaum, M. (2019).}] \emph{The characteristic function of rough Heston models}.\\
-  Rough Heston : cadre Volterra, fonction caract\'eristique et pricing (chapitre F ; annexe E).
-\end{description}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Courbe de taux et param\'etrisations}
-
-\begin{description}[style=nextline,leftmargin=2.8cm]
-  \item[\textbf{Brigo, D., Mercurio, F. (2006).}] \emph{Interest Rate Models: Theory and Practice}.\\
-  Cadre complet pour taux, discounting, bootstrapping et mod\`eles de taux (chapitre H).
-
-  \item[\textbf{Nelson, C., Siegel, A. (1987).}] \emph{Parsimonious Modeling of Yield Curves}.\\
-  Mod\`ele Nelson--Siegel : d\'ecomposition niveau/pente/courbure (chapitre H).
-
-  \item[\textbf{Svensson, L. (1994).}] \emph{Estimating and Interpreting Forward Interest Rates}.\\
-  Extension Svensson (plus flexible) et lecture \'economique des composantes (chapitre H).
-\end{description}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Gestion du risque, VaR/ES, allocation}
-
-\begin{description}[style=nextline,leftmargin=2.8cm]
-  \item[\textbf{Artzner, P., Delbaen, F., Eber, J.-M., Heath, D. (1999).}] \emph{Coherent Measures of Risk}.\\
-  Cadre axiomatique de coh\'erence (subadditivit\'e, etc.) ; utile pour discuter VaR vs ES (chapitre I).
-
-  \item[\textbf{McNeil, A., Frey, R., Embrechts, P. (2015).}] \emph{Quantitative Risk Management}.\\
-  R\'ef\'erence sur mod\'elisation des queues, VaR/ES, backtesting et d\'ependance (chapitre I).
-
-  \item[\textbf{Markowitz, H. (1952).}] \emph{Portfolio Selection}.\\
-  Texte fondateur de la moyenne--variance et de la fronti\`ere efficiente (chapitre I).
-
-  \item[\textbf{Ledoit, O., Wolf, M. (2004).}] \emph{A well-conditioned estimator for large-dimensional covariance matrices}.\\
-  Shrinkage de covariance : r\'egularisation essentielle pour stabiliser Markowitz et risk parity (chapitre I).
-\end{description}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Filtrage, r\'egimes et d\'ecision s\'equentielle (MDP/RL)}
-
-\begin{description}[style=nextline,leftmargin=2.8cm]
-  \item[\textbf{Kalman, R. (1960).}] \emph{A New Approach to Linear Filtering and Prediction Problems}.\\
-  Filtre de Kalman : estimation r\'ecursive d'\'etats latents en cadre lin\'eaire gaussien (chapitre F).
-
-  \item[\textbf{Durbin, J., Koopman, S. (2012).}] \emph{Time Series Analysis by State Space Methods}.\\
-  Approche moderne \'etat-espace, lissage (RTS), estimation par vraisemblance (chapitres F, K).
-
-  \item[\textbf{Hamilton, J. (1989).}] \emph{A new approach to the economic analysis of nonstationary time series and the business cycle}.\\
-  Mod\`eles de r\'egimes (Markov switching) ; utile pour la lecture probabiliste des phases de march\'e (chapitre K).
-
-  \item[\textbf{Sutton, R., Barto, A. (2018).}] \emph{Reinforcement Learning: An Introduction}.\\
-  R\'ef\'erence g\'en\'erale sur MDP, Bellman, MC/TD et Q-learning (chapitre J).
-
-  \item[\textbf{Bertsekas, D. (2012).}] \emph{Dynamic Programming and Optimal Control}.\\
-  Point de vue contr\^ole/DP compl\'ementaire, utile pour relier couverture et optimisation (chapitre J).
-
-  \item[\textbf{Mnih, V. et al. (2015).}] \emph{Human-level control through deep reinforcement learning}.\\
-  DQN : approximation de $Q$ par r\'eseau et stabilisation (experience replay, targets) (chapitre J).
-
-  \item[\textbf{Schulman, J. et al. (2017).}] \emph{Proximal Policy Optimization Algorithms}.\\
-  PPO : stabilisation des policy gradients via clipping (chapitre J).
-\end{description}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Pistes d'annexes (au-del\`a de celles incluses)}
-
-\begin{itemize}
-  \item \textbf{Arbitrage de surface} : d\'erivation d\'etaill\'ee des contraintes butterfly/calendar et conditions SVI arbitrage-free.
-  \item \textbf{Bates} : fonction caract\'eristique et formule Carr--Madan (mise en parall\`ele avec Heston).
-  \item \textbf{Kalman} : r\'ecursions filtre/lisseur (RTS) et log-vraisemblance pour calibration de param\`etres latents.
-  \item \textbf{R\'egimes} : estimation EM d'un Markov switching gaussien, filtres (probabilit\'es a posteriori) et limites.
-  \item \textbf{Risque} : backtesting VaR/ES (tests de couverture) et sensibilit\'e \`a la non-stationnarit\'e.
-  \item \textbf{Couverture} : d\'erivation d'une approximation de l'erreur de delta-hedging en fonction de $\Gamma$ et de la variance r\'ealis\'ee.
-\end{itemize}
-
-\iffalse % Ancienne bibliographie (ressources g\'en\'eralistes) conserv\'ee hors rendu final
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Finance quantitative}
-
-\begin{itemize}
-  \item \textbf{Hull, J.}  
-        \emph{Options, Futures and Other Derivatives}.  
-        Référence classique couvrant les dérivés, les modèles de taux, les
-        produits structurés et la gestion du risque.
-
-  \item \textbf{Natenberg, S.}  
-        \emph{Option Volatility and Pricing}.  
-        Ouvrage fondamental sur le smile, les Greeks, les stratégies de trading
-        et l’arbitrage.
-
-  \item \textbf{Gatheral, J.}  
-        \emph{The Volatility Surface: A Practitioner’s Guide}.  
-        Référence sur la surface de volatilité, le smile/skew, les conditions d’arbitrage statique et les paramétrisations.
-
-  \item \textbf{Heston, S.} (1993).  
-        \emph{A Closed-Form Solution for Options with Stochastic Volatility}.  
-        Article fondateur sur la volatilité stochastique affine et le pricing via fonction caractéristique.
-
-  \item \textbf{Carr, P., Madan, D.} (1999).  
-        \emph{Option Valuation Using the Fast Fourier Transform}.  
-        Méthode FFT (type Carr--Madan) pour valoriser rapidement des options européennes sur une grille de strikes.
-
-  \item \textbf{Hagan, P., Kumar, D., Lesniewski, A., Woodward, D.} (2002).  
-        \emph{Managing Smile Risk}.  
-        Formule asymptotique SABR et interprétation des paramètres (alpha, beta, rho, nu).
-
-  \item \textbf{Glasserman, P.}  
-        \emph{Monte Carlo Methods in Financial Engineering}.  
-        Ouvrage de référence sur Monte Carlo, réduction de variance et applications au pricing/greeks.
-
-  \item \textbf{Markowitz, H.} (1952).  
-        \emph{Portfolio Selection}.  
-        Texte fondateur de l’allocation moyenne--variance et de la frontière efficiente.
-
-  \item \textbf{Artzner, P., Delbaen, F., Eber, J.-M., Heath, D.} (1999).  
-        \emph{Coherent Measures of Risk}.  
-        Cadre axiomatique des mesures de risque (subadditivité, homogénéité, monotonicité, invariance par translation).
-
-  \item \textbf{Bouchaud, J.-P., Potters, M.}  
-        \emph{Theory of Financial Risk and Derivative Pricing}.  
-        Approche statistique et empirique de la volatilité, du risque et des
-        phénomènes de queue.
-
-  \item \textbf{Darbyshire, M.}  
-        \emph{Pricing and Trading Interest Rate Derivatives}.  
-        Référence sur les dérivés de taux, IRS, caps/floors, swaptions.
-
-  \item \textbf{Wooldridge, J.}  
-        \emph{Econometrics}.  
-        Fondements en économétrie, indispensable pour les modèles statistiques
-        appliqués à la finance.
-\end{itemize}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{FinTech et Data Science appliquée à la finance}
-
-\begin{itemize}
-  \item \textbf{Kaabar, M.}  
-        \emph{Deep Learning for Finance}.  
-
-  \item \textbf{Hilpisch, Y.}  
-        \emph{Reinforcement Learning for Finance}.  
-
-  \item \textbf{Kanungo, D.}  
-        \emph{Probabilistic Machine Learning for Finance and Investing}.  
-
-  \item \textbf{Tatsat, R.}  
-        \emph{Machine Learning \& Data Science Blueprints for Finance}.  
-
-  \item \textbf{Hanson, G.}  
-        \emph{Modern C++ for Finance}.  
-
-  \item \textbf{Lopez de Prado, M.}  
-        \emph{Advances in Financial Machine Learning}.  
-
-  \item \textbf{Chan, E.}  
-        \emph{Algorithmic Trading: Winning Strategies and Their Rationale}.  
-\end{itemize}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Mathématiques et probabilités}
-
-\begin{itemize}
-  \item \textbf{Shreve, S.}  
-        \emph{Stochastic Calculus for Finance I \& II}.  
-        Références incontournables pour le calcul stochastique appliqué aux dérivés.
-
-  \item \textbf{Ségonne, R.}  
-        \emph{Quant Basics}.  
-        Introduction rigoureuse aux EDS, au pricing et aux outils quantitatifs.
-
-  \item \textbf{Cohen, N.}  
-        \emph{Practical Linear Algebra for Data Science}.  
-
-  \item \textbf{Nelson, R.}  
-        \emph{Essential Math for AI}.  
-\end{itemize}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Machine Learning}
-
-\begin{itemize}
-  \item \textbf{Goodfellow, Bengio, Courville}.  
-        \emph{Deep Learning}.  
-        Ouvrage fondateur pour le deep learning moderne.
-
-  \item \textbf{Sutton, Barto}.  
-        \emph{Reinforcement Learning: An Introduction}.  
-        Livre de référence sur le RL, dynamique des MDP et méthodes TD.
-
-  \item \textbf{Gillard, D.}  
-        \emph{Computer Vision}.  
-
-  \item \textbf{Foster, D.}  
-        \emph{Generative Deep Learning}.  
-
-  \item \textbf{Tunstall, von Werra, Wolf}.  
-        \emph{NLP with Transformers}.  
-
-  \item \textbf{Bishop, C.}  
-        \emph{Pattern Recognition and Machine Learning}.  
-
-  \item \textbf{Hastie, T., Tibshirani, R., Friedman, J.}  
-        \emph{The Elements of Statistical Learning}.  
-
-  \item \textbf{Kirill Eremenko}.  
-        \emph{Hands-On Machine Learning with C++}.  
-
-  \item \textbf{Moses, Dezy}.  
-        \emph{Data Quality Fundamentals}.  
-
-  \item \textbf{Auffarth, B.}  
-        \emph{Machine Learning for Time Series}.  
-\end{itemize}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Vidéos de Reinforcement Learning}
-
-\vspace{0.15cm}
-Chaîne YouTube \emph{Reinforcement Learning — by the Book} :
-\begin{itemize}
-  \item Bellman Equations, Dynamic Programming — Part 2
-  \item Monte Carlo \& Off-Policy Methods — Part 3
-  \item Temporal Difference Learning — Part 4
-  \item Function Approximation — Part 5
-  \item Policy Gradient Methods — Part 6
-\end{itemize}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Ressources vidéo : mathématiques}
-
-\begin{itemize}
-  \item \emph{Practical Linear Algebra} — Introduction and Motivation  
-  \item Fourier Analysis — Overview  
-  \item Differential Equations and Dynamical Systems — Overview  
-  \item Probability and Statistics — Overview  
-  \item Introduction to Statistics and Data Analysis  
-  \item Laplace Transform — Generalized Fourier Transform  
-  \item Inner Products in Hilbert Space  
-  \item Properties of the Expected Value  
-  \item Bayesian MAP Estimation  
-  \item Lecture 1 (Motivation and Introduction)  
-\end{itemize}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Ressources vidéo : statistiques}
-
-\begin{itemize}
-  \item Maximum Likelihood (Normal Distribution)  
-  \item Why $\pi$ appears in the Gaussian distribution  
-  \item Multivariate Gaussian — definition and intuition  
-  \item The Kelly Criterion  
-  \item Learning Probability Distributions  
-  \item Chi-Square Distribution  
-  \item Jensen’s Inequality  
-  \item Accept-Reject Sampling  
-  \item Importance Sampling  
-  \item Softmax — intuition  
-  \item Linear Regression — 12 minutes  
-  \item Bernstein Basis  
-  \item Maximum Likelihood — explained  
-  \item Exponential Family (Part 1 \& 2)  
-  \item Gaussian Processes — overview  
-  \item Bias–Variance Tradeoff  
-  \item Fisher Information  
-  \item Factor Analysis \& Probabilistic PCA  
-  \item Maximum Entropy Principle  
-\end{itemize}
-
-
-\fi
-%==========================================================
-%                 ANNEXES
-%==========================================================
-\appendix
-
-\subsection*{Annexe A - Mod\`ele de Heston : d\'erivation compl\`ete}
-\addcontentsline{toc}{section}{Annexe A - Mod\`ele de Heston}
-
-
-
-\subsection{Mod\`ele de Heston et log--prix}
-
-Sous la mesure risque--neutre $Q$, le prix de l'actif $S_t$ et sa variance
-instantan\'ee $v_t$ suivent
-\begin{equation}
-\begin{cases}
-dS_t = r S_t\,dt + \sqrt{v_t}\,S_t\,dW^{(1)}_t, \\[3pt]
-dv_t = \kappa(\theta - v_t)\,dt + \xi\sqrt{v_t}\,dW^{(2)}_t, \\[3pt]
-dW^{(1)}_t\,dW^{(2)}_t = \rho\,dt,
-\end{cases}
-\end{equation}
-avec $v_0 > 0$, $\kappa>0$, $\theta>0$, $\xi>0$, $|\rho|\le 1$.
-
-On pose le log--prix
-\begin{equation}
-X_t = \ln S_t.
-\end{equation}
-Par la formule d'It\^o,
-\begin{equation}
-dX_t = \left(r - \frac{v_t}{2}\right)dt + \sqrt{v_t}\,dW^{(1)}_t.
-\end{equation}
-
-On consid\`ere une option call europ\'eenne de strike $K>0$ et maturit\'e $T>0$,
-de payoff $(S_T-K)^+$. Son prix au temps $0$ est
-\begin{equation}
-C(K,T) = e^{-rT}\,\mathbb{E}_Q\big[(S_T - K)^+\big].
-\end{equation}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Fonction caract\'eristique du log--prix sous Heston}
-
-On d\'efinit la fonction caract\'eristique du log--prix $X_T = \ln S_T$ par
-\begin{equation}
-\varphi_T(u) := \mathbb{E}\!\left[ e^{i u X_T} \right], \qquad u\in\mathbb{C}.
-\end{equation}
-On veut une expression explicite de $\varphi_T(u)$.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{PDE de Feynman--Kac et ansatz affine}
-
-Pour $0\le t\le T$, $x\in\mathbb{R}$, $v\ge0$, on introduit
-\begin{equation}
-p(t,x,v;u) := \mathbb{E}\big[ e^{i u X_T} \,\big|\, X_t=x, v_t=v \big].
-\end{equation}
-Alors $p(T,x,v;u) = e^{iux}$ et
-\begin{equation}
-\varphi_T(u) = p(0,\ln S_0, v_0;u).
-\end{equation}
-
-Le couple $(X_t,v_t)$ a pour g\'en\'erateur infinit\'esimal
-\begin{equation}
-\mathcal{L} f =
-\left(r - \frac{v}{2}\right)\partial_x f
-+ \kappa(\theta - v)\partial_v f
-+ \frac{1}{2} v\,\partial_{xx} f
-+ \rho\xi v\,\partial_{xv} f
-+ \frac{1}{2}\xi^2 v\,\partial_{vv} f.
-\end{equation}
-Par Feynman--Kac, $p$ satisfait
-\begin{equation}
-\partial_t p + \mathcal{L}p = 0, \qquad p(T,x,v;u) = e^{iux}.
-\end{equation}
-
-On cherche une solution de la forme affine en $v$:
-\begin{equation}
-p(t,x,v;u) = \exp\!\big(C(\tau;u) + D(\tau;u)v + iux\big),
-\qquad \tau := T-t.
-\end{equation}
-On impose $C(0;u)=0$, $D(0;u)=0$, de sorte que $p(T,x,v;u)=e^{iux}$.
-
-On calcule
-\[
-\partial_t p = -C'(\tau;u)p - D'(\tau;u)v p,\quad
-\partial_x p = iup,\quad
-\partial_{xx}p = -u^2p,
-\]
-\[
-\partial_v p = Dp,\quad
-\partial_{vv}p = D^2p,\quad
-\partial_{xv}p = i u D p.
-\]
-
-En injectant dans la PDE, puis en factorisant par $p\neq0$, on obtient
-\begin{align}
-0 &= -C' - D'v 
-+ \left(r - \frac{v}{2}\right)(iu)
-+ \kappa(\theta - v)D
-+ \frac{1}{2} v(-u^2)
-+ \rho\xi v(iuD)
-+ \frac{1}{2}\xi^2 v D^2.
-\end{align}
-On s\'eparant les termes constants et les termes proportionnels \`a $v$, ce qui donne
-\begin{align}
-\text{(terme constant)}  &:& -C' + iur + \kappa\theta D &= 0,\\
-\text{(terme en $v$)}    &:& -D'
- + \left(-\frac{iu}{2}\right)
- - \kappa D
- - \frac{u^2}{2}
- + \rho\xi iu D
- + \frac{1}{2}\xi^2 D^2 &= 0.
-\end{align}
-On en d\'eduit les EDO (en $\tau$):
-\begin{align}
-C'(\tau;u) &= \kappa\theta D(\tau;u) + i u r, \qquad C(0;u)=0,
-\label{eq:Cprime}\\[3pt]
-D'(\tau;u) &= \frac{1}{2}\xi^2 D(\tau;u)^2
-           + (\rho\xi i u - \kappa)D(\tau;u)
-           + \frac{1}{2}(u^2 + i u),\qquad D(0;u)=0.
-\label{eq:Dprime}
-\end{align}
-
-L'\'equation~\eqref{eq:Dprime} est de Riccati.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{R\'esolution de l'\'equation de Riccati}
-
-On note
-\begin{equation}
-a := \frac{\xi^2}{2},\qquad
-\beta(u) := \rho\xi i u - \kappa,\qquad
-\omega(u) := \frac{1}{2}(u^2+i u).
-\end{equation}
-Alors
-\begin{equation}
-D' = a D^2 + \beta(u) D + \omega(u).
-\end{equation}
-
-On introduit le discriminant
-\begin{equation}
-d(u) := \sqrt{\beta(u)^2 + 4a\omega(u)}
-      = \sqrt{(\rho\xi i u - \kappa)^2 + \xi^2(u^2+i u)},
-\end{equation}
-et on prend la racine avec $\Re[d(u)]>0$.
-
-On d\'efinit ensuite
-\begin{equation}
-g(u) := \frac{\kappa - \rho\xi i u - d(u)}{\kappa - \rho\xi i u + d(u)}.
-\end{equation}
-
-La solution classique de l'\'equation de Riccati est alors
-\begin{equation}
-D(\tau;u)
-= \frac{\kappa - \rho\xi i u - d(u)}{\xi^2}\;
-  \frac{1 - e^{-d(u)\tau}}{1 - g(u)e^{-d(u)\tau}}.
-\end{equation}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Int\'egration pour obtenir $C(\tau;u)$}
-
-En int\'egrant~\eqref{eq:Cprime}, on obtient
-\begin{equation}
-C(\tau;u) = i u r\,\tau
-+ \kappa\theta\int_0^\tau D(s;u)\,ds.
-\end{equation}
-
-L'int\'egrale en $s$ se calcule explicitement. Le r\'esultat standard (obtenu
-en faisant le changement $y=e^{-d(u)s}$ et en int\'egrant terme \`a terme) est
-\begin{equation}
-C(\tau;u)
-= i u r \tau
-+ \frac{\kappa\theta}{\xi^2}
-  \left[
-     \left(\kappa - \rho\xi i u - d(u)\right)\tau
-     - 2\ln\!\left(\frac{1 - g(u)e^{-d(u)\tau}}{1 - g(u)}\right)
-  \right].
-\end{equation}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Fonction caract\'eristique finale}
-
-En r\'esum\'e, la fonction caract\'eristique du log--prix $X_T=\ln S_T$ sous
-le mod\`ele de Heston est
-\begin{equation}
-\boxed{
-\varphi_T(u)
-= \mathbb{E}\!\left[ e^{i u X_T} \right]
-= \exp\!\Big(
-C(T;u) + D(T;u)\,v_0 + i u \ln S_0
-\Big),
-}
-\end{equation}
-avec
-\begin{align}
-d(u) &= \sqrt{(\rho\xi i u - \kappa)^2 + \xi^2(u^2+i u)},\\[3pt]
-g(u) &= \frac{\kappa - \rho\xi i u - d(u)}{\kappa - \rho\xi i u + d(u)},\\[3pt]
-D(T;u) &= \frac{\kappa - \rho\xi i u - d(u)}{\xi^2}\;
-         \frac{1 - e^{-d(u)T}}{1 - g(u)e^{-d(u)T}},\\[3pt]
-C(T;u) &= i u r T
-+ \frac{\kappa\theta}{\xi^2}
-  \left[
-     \left(\kappa - \rho\xi i u - d(u)\right)T
-     - 2\ln\!\left(\frac{1 - g(u)e^{-d(u)T}}{1 - g(u)}\right)
-  \right].
-\end{align}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Repr\'esentation de Fourier du prix de la call}
-
-\subsection{Densit\'e du log--prix}
-
-Notons $X_T=\ln S_T$ et $f_{X_T}$ sa densit\'e (sous $Q$). Le prix de la call
-en fonction de $k=\ln K$ s'\'ecrit
-\begin{equation}
-C(k) = C(K,T) = e^{-rT}\int_k^{+\infty}\big(e^x-e^k\big)\,f_{X_T}(x)\,dx,
-\qquad k:=\ln K.
-\end{equation}
-
-\subsection{Damping et transform\'ee de Fourier}
-
-On choisit un param\`etre de damping $\alpha>0$ tel que
-\begin{equation}
-\mathbb{E}\big[e^{(\alpha+1)X_T}\big] < +\infty.
-\end{equation}
-On introduit la quantit\'e
-\begin{equation}
-c_\alpha(k) := e^{\alpha k}\,C(k),
-\end{equation}
-et sa transform\'ee de Fourier
-\begin{equation}
-\psi_T(v) := \int_{-\infty}^{+\infty} e^{ivk} c_\alpha(k)\,dk
-           = \int_{-\infty}^{+\infty} e^{(\alpha+iv)k} C(k)\,dk,
-           \qquad v\in\mathbb{R}.
-\end{equation}
-
-Par un calcul direct (changement d'ordre d'int\'egration et int\'egration en
-$k$ d'abord), on obtient
-\begin{equation}
-\psi_T(v)
-= e^{-rT}\,\frac{1}{(\alpha+iv)(\alpha+iv+1)}
-      \int_{-\infty}^{+\infty} e^{(\alpha+1+iv)x}f_{X_T}(x)\,dx.
-\end{equation}
-
-Or
-\begin{equation}
-\int_{-\infty}^{+\infty} e^{(\alpha+1+iv)x}f_{X_T}(x)\,dx
-= \mathbb{E}\big[e^{(\alpha+1+iv)X_T}\big]
-= \varphi_T\big( v - i(\alpha+1)\big),
-\end{equation}
-puisque
-$e^{(\alpha+1+iv)x} = e^{i(v-i(\alpha+1))x}$.
-
-On en d\'eduit
-\begin{equation}
-\boxed{
-\psi_T(v)
-= e^{-rT}\,
-  \frac{\varphi_T\big(v - i(\alpha+1)\big)}
-       {(\alpha+iv)(\alpha+iv+1)}.
-}
-\end{equation}
-
-\subsection{Formule d'inversion}
-
-Par inversion de Fourier, on r\'ecup\`ere
-\begin{equation}
-c_\alpha(k) = \frac{1}{2\pi}
-\int_{-\infty}^{+\infty} e^{-ivk}\,\psi_T(v)\,dv.
-\end{equation}
-Comme $C(k)$ est r\'eel, $c_\alpha(k)$ l'est aussi et l'int\'egrale se
-simplifie en
-\begin{equation}
-c_\alpha(k) =
-\frac{1}{\pi}
-\int_0^{+\infty} \Re\!\bigl(e^{-ivk}\psi_T(v)\bigr)\,dv.
-\end{equation}
-
-En rappelant $C(k) = e^{-\alpha k} c_\alpha(k)$, on obtient finalement
-\begin{equation}
-\boxed{
-C(K,T)
-= C(k)
-= \frac{e^{-\alpha k}}{\pi}
-  \int_0^{+\infty}
-  \Re\!\left(
-    e^{-ivk}\,
-    e^{-rT}\,
-    \frac{\varphi_T\big(v - i(\alpha+1)\big)}
-         {(\alpha+iv)(\alpha+iv+1)}
-  \right)\,dv,
-\qquad k=\ln K.
-}
-\end{equation}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Sch\'ema num\'erique (id\'ee g\'en\'erale)}
-
-Pour calculer $C(K,T)$ num\'eriquement :
-
-\begin{enumerate}
-\item Choisir $\alpha>0$ tel que
-      $\mathbb{E}[e^{(\alpha+1)X_T}]<\infty$ (en pratique $\alpha\in[1,2]$
-      est standard).
-\item Choisir une grille pour $v$: $v_j = j\Delta v$, $j=0,\dots,N$, avec
-      $\Delta v$ et $N$ fixant la pr\'ecision.
-\item Pour chaque $v_j$,
-      \begin{enumerate}
-      \item calculer $u_j := v_j - i(\alpha+1)$,
-      \item calculer $d(u_j)$, $g(u_j)$, $D(T;u_j)$, $C(T;u_j)$,
-      \item en d\'eduire $\varphi_T(u_j)$,
-      \item calculer $\psi_T(v_j)$ via la formule ci--dessus.
-      \end{enumerate}
-\item Approcher l'int\'egrale par une somme de Riemann ou Simpson:
-      \[
-      C(K,T) \approx
-      \frac{e^{-\alpha k}}{\pi}
-      \sum_{j=0}^N
-      \Re\!\left( e^{-i v_j k} \psi_T(v_j) \right)\Delta v.
-      \]
-\end{enumerate}
-
-
-
-\subsection*{A.6. Formule finale et sch\'ema num\'erique}
-
-
-\subsection*{Formule finale de Heston pour $C(K,T)$ et sch\'ema num\'erique}
-
-\subsection*{1. Fonction caract\'eristique sous Heston}
-
-Sous la mesure risque--neutre $Q$ :
-\[
-\begin{cases}
-dS_t = r S_t\,dt + \sqrt{v_t}\,S_t\,dW_t^{(1)}, \\[3pt]
-dv_t = \kappa(\theta - v_t)\,dt + \xi\sqrt{v_t}\,dW_t^{(2)}, \\[3pt]
-dW_t^{(1)}\,dW_t^{(2)} = \rho\,dt,
-\end{cases}
-\qquad S_0>0,\; v_0>0.
-\]
-
-On pose
-\[
-X_t := \ln S_t .
-\]
-
-La fonction caract\'eristique du log--prix $X_T$ est
-\[
-\varphi_T(u) := \mathbb{E}\big[e^{iuX_T}\big], \qquad u\in\mathbb{C}.
-\]
-
-Elle s'\'ecrit sous forme affine
-\[
-\boxed{\displaystyle
-\varphi_T(u)
-= \exp\Big(C(T,u) + D(T,u)\,v_0 + iu\ln S_0\Big),
-}
-\]
-avec
-\[
-d(u) := \sqrt{(\rho\xi iu - \kappa)^2 + \xi^2(u^2+iu)},
-\qquad \Re(d(u))>0,
-\]
-\[
-g(u) := \frac{\kappa - \rho\xi iu - d(u)}{\kappa - \rho\xi iu + d(u)}.
-\]
-
-Les fonctions $C$ et $D$ sont
-\[
-\boxed{\displaystyle
-D(T,u)
-= \frac{\kappa - \rho\xi iu - d(u)}{\xi^2}
-  \,\frac{1 - e^{-d(u)T}}{1 - g(u)\,e^{-d(u)T}},
-}
-\]
-\[
-\boxed{\displaystyle
-C(T,u)
-= iurT
-+ \frac{\kappa\theta}{\xi^2}
-  \left[
-    \big(\kappa - \rho\xi iu - d(u)\big)T
-    - 2\ln\!\left(\frac{1 - g(u)e^{-d(u)T}}{1 - g(u)}\right)
-  \right].
-}
-\]
-
-Tous les param\`etres $(\kappa,\theta,\xi,\rho,v_0,r,S_0)$ apparaissent
-explicitement dans $d(u)$, $g(u)$, $C(T,u)$, $D(T,u)$ donc dans $\varphi_T(u)$.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{2. Formule de prix via transform\'ee de Fourier (type Carr--Madan)}
-
-On note $K>0$ le strike et
-\[
-k := \ln K .
-\]
-
-On fixe un param\`etre de damping $\alpha>0$ tel que
-\[
-\mathbb{E}\big[e^{(\alpha+1)X_T}\big] < \infty
-\quad\text{(en pratique $\alpha\in[1,2]$).}
-\]
-
-Pour $v\in\mathbb{R}$, on pose
-\[
-A(v) := \alpha + iv.
-\]
-
-La transform\'ee de Carr--Madan est
-\[
-\psi_T(v)
-:= \int_{\mathbb{R}} e^{A(v) k'} C(k')\,dk',
-\]
-et peut se r\'ecrire en fonction de $\varphi_T$ :
-\[
-\boxed{\displaystyle
-\psi_T(v)
-= \frac{e^{-rT}}{A(v)\big(A(v)+1\big)}\,
-  \varphi_T\big(v - i(\alpha+1)\big).
-}
-\]
-
-La formule d'inversion donne alors le prix de la call :
-\[
-\boxed{\displaystyle
-C(K,T)
-= C(k)
-= \frac{e^{-\alpha k}}{\pi}
-  \int_0^{+\infty}
-    \Re\!\left(
-      e^{-ivk}\,\psi_T(v)
-    \right)\,dv.
-}
-\]
-
-En combinant explicitement :
-\[
-\boxed{\displaystyle
-C(K,T)
-=
-\frac{e^{-\alpha k}}{\pi}
-\int_0^{+\infty}
-\Re\!\left[
-e^{-ivk}\,
-\frac{e^{-rT}}{(\alpha+iv)(\alpha+1+iv)}\,
-\exp\Big(
-C(T,u) + D(T,u)\,v_0 + iu\ln S_0
-\Big)
-\right]_{u=v-i(\alpha+1)}
-dv.
-}
-\]
-
-Tout est maintenant en fonction de
-\[
-(\kappa,\theta,\xi,\rho,v_0,r,S_0,K,T,\alpha).
-\]
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{3. Principes num\'eriques (sans pseudo-code)}
-
-\paragraph{Rappel de la formule.}
-Dans le cadre de Carr--Madan, on utilise un call damp\'e et l'on \'evalue une int\'egrale oscillante sur $v\in\R_+$ :
-\[
-C(K,T)
-=
-\frac{\ee^{-\alpha k}}{\pi}\int_0^{+\infty}\Re\!\left(\ee^{-\ii v k}\,\psi_T(v)\right)\dd v,
-\qquad
-k=\ln K,
-\]
-o\`u $\psi_T(v)$ d\'epend de la fonction caract\'eristique $\varphi_T(u)$ du log-prix \`a maturit\'e $T$ \'evalu\'ee en
-\[
-u(v)=v-\ii(\alpha+1).
-\]
-
-\paragraph{Choix du damping et int\'egrabilit\'e.}
-Le param\`etre $\alpha>0$ assure l'int\'egrabilit\'e de la transform\'ee (contr\^ole des queues en $K$). Le choix est un compromis :
-un $\alpha$ trop faible peut conduire \`a une int\'egrale mal conditionn\'ee ; un $\alpha$ trop grand amplifie certaines erreurs num\'eriques.
-
-\paragraph{Troncature, discr\'etisation et diagnostics.}
-Num\'eriquement, l'int\'egrale est tronqu\'ee \`a $[0,V_{\max}]$ et approch\'ee par quadrature sur une grille $v_n=n\,\Delta v$.
-Les erreurs proviennent (i) de la troncature (choix de $V_{\max}$), (ii) de la discr\'etisation ($\Delta v$), et (iii) de l'oscillation.
-Une validation th\'eorique consiste \`a v\'erifier la stabilit\'e du prix lorsque l'on augmente $V_{\max}$ et que l'on raffine $\Delta v$,
-et \`a croiser avec une m\'ethode ind\'ependante (Monte Carlo ou PDE) sur quelques points de grille.
-
-\paragraph{Branche complexe et stabilit\'e.}
-Dans Heston (et Bates), l'\'evaluation de $\varphi_T(u)$ requiert des racines carr\'ees et logarithmes complexes. Le choix de branche
-et la continuit\'e en $u$ conditionnent la stabilit\'e num\'erique ; en pratique, on impose une convention coh\'erente sur la racine
-et l'on surveille les discontinuit\'es.
-
-\paragraph{Version FFT.}
-La version FFT de Carr--Madan s'appuie sur une grille uniforme en fr\'equence $v$ et une grille uniforme en log-strike $k$,
-avec une relation de type $\Delta v\,\Delta k = 2\pi/N$. Elle permet d'obtenir un ensemble de prix sur une grille de strikes en un seul
-calcul, au prix d'effets d'aliasing et de fen\^etrage \`a contr\^oler (choix du domaine et des pas).
-
-\iffalse % Annexes B--C d\'etaillent des sch\'emas num\'eriques ; retir\'ees pour respecter ``z\'ero pseudo-code''
-\subsection*{Annexe B - Mouvement brownien fractionnaire (Davies--Harte)}
-\addcontentsline{toc}{section}{Annexe B - fBM et Rough Volatility}
-
-
-
-\subsection*{Simulation du mouvement brownien fractionnaire — Méthode de Davies--Harte (dérivation détaillée)}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Rappels sur le mouvement brownien fractionnaire}
-
-\subsection{Définition}
-
-Pour un paramètre de Hurst $H\in(0,1)$, le \emph{mouvement brownien fractionnaire}
-(fBm) $(\bH(t))_{t\ge 0}$ est un processus gaussien centré tel que
-\begin{equation}
-  \E[\bH(t)] = 0,\qquad t\ge 0,
-\end{equation}
-et
-\begin{equation}
-  \Cov\bigl(\bH(t),\bH(s)\bigr)
-  = R_H(t,s)
-  = \frac{1}{2}\bigl(|t|^{2H} + |s|^{2H} - |t-s|^{2H}\bigr),
-  \qquad s,t\ge 0.
-\end{equation}
-On en déduit deux propriétés clés :
-\begin{itemize}
-  \item \textbf{incréments stationnaires} :
-  \[
-    \bH(t+h)-\bH(t)
-    \stackrel{d}{=}
-    \bH(h)-\bH(0), \qquad \forall t,h\ge 0 ;
-  \]
-  \item \textbf{autosimilarité} :
-  \[
-    \bigl(\bH(ct)\bigr)_{t\ge 0}
-    \stackrel{d}{=}
-    \bigl(c^H \bH(t)\bigr)_{t\ge 0},\qquad \forall c>0.
-  \]
-\end{itemize}
-En particulier,
-\begin{equation}
-  \Var\bigl(\bH(t)\bigr) = t^{2H}.
-\end{equation}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Discrétisation sur une grille}
-
-On veut simuler une trajectoire de $\bH$ sur une période $[0,T]$.
-On fixe un nombre de pas $N\in\mathbb{N}^\ast$ et on définit
-\begin{equation}
-  \Delta t = \frac{T}{N},\qquad
-  t_k = k\,\Delta t,\quad k = 0,\dots,N.
-\end{equation}
-
-L'autosimilarité permet d'écrire, pour chaque $k$,
-\begin{equation}
-  \bH(t_k)
-  = \bH(k\Delta t)
-  \stackrel{d}{=} (\Delta t)^H \widetilde B_H(k),
-\end{equation}
-où $(\widetilde B_H(k))_{k=0,\dots,N}$ est un fBm vu aux instants entiers $k$.
-Ainsi, on peut :
-\begin{enumerate}
-  \item simuler un fBm \emph{à pas unitaire} $(\widetilde B_H(0),\dots,\widetilde B_H(N))$ ;
-  \item le rescaler ensuite par $(\Delta t)^H$ :
-  \[
-    \bH(t_k) \approx (\Delta t)^H \widetilde B_H(k).
-  \]
-\end{enumerate}
-
-On note les incréments unitaires
-\begin{equation}
-  X_k = \widetilde B_H(k+1) - \widetilde B_H(k),\qquad k=0,\dots,N-1.
-\end{equation}
-La suite $(X_k)_{k\ge 0}$ est le \emph{fractional Gaussian noise} (fGn).
-On a alors
-\begin{equation}
-  \widetilde B_H(k)
-  = \sum_{j=0}^{k-1} X_j,\qquad k\ge 1,
-\end{equation}
-et
-\begin{equation}
-  \bH(t_k)
-  \approx (\Delta t)^H \sum_{j=0}^{k-1} X_j.
-\end{equation}
-
-Toute la difficulté se ramène donc à simuler le vecteur gaussien corrélé
-\[
-  (X_0,\dots,X_{N-1})
-\]
-avec la bonne structure de covariance.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Covariance du bruit fractionnaire}
-
-\subsection{Dérivation explicite de $\gamma(k)$}
-
-On veut la covariance
-\begin{equation}
-  \gamma(k)
-  = \Cov(X_n,X_{n+k}),
-\end{equation}
-qui, par stationnarité des incréments, ne dépend pas de $n$.
-
-On se place sur le fBm à pas unitaire $\widetilde B_H$ et on note
-\begin{equation}
-  X_n = \widetilde B_H(n+1)-\widetilde B_H(n).
-\end{equation}
-En développant la covariance à l'aide de la bilinéarité :
-\begin{align}
-  \gamma(k)
-  &= \Cov\bigl(\widetilde B_H(n+1)-\widetilde B_H(n),
-               \widetilde B_H(n+k+1)-\widetilde B_H(n+k)\bigr)
-  \\[0.3em]
-  &= \Cov\bigl(\widetilde B_H(n+1),\widetilde B_H(n+k+1)\bigr)
-   - \Cov\bigl(\widetilde B_H(n+1),\widetilde B_H(n+k)\bigr)
-  \notag\\
-  &\quad
-   - \Cov\bigl(\widetilde B_H(n),\widetilde B_H(n+k+1)\bigr)
-   + \Cov\bigl(\widetilde B_H(n),\widetilde B_H(n+k)\bigr).
-  \label{eq:gamma-dev}
-\end{align}
-Par stationnarité des accroissements et invariance par translation,
-on peut prendre $n=0$ sans perte de généralité :
-\begin{equation}
-  \gamma(k)
-  = \Cov\bigl(\widetilde B_H(1)-\widetilde B_H(0),
-               \widetilde B_H(k+1)-\widetilde B_H(k)\bigr).
-\end{equation}
-Comme $\widetilde B_H(0)=0$ presque sûrement, on a
-\[
-  \Cov\bigl(\widetilde B_H(0),\widetilde B_H(t)\bigr)=0,\qquad \forall t\ge 0,
-\]
-et \eqref{eq:gamma-dev} se simplifie en
-\begin{equation}
-  \gamma(k)
-  = R_H(1,k+1) - R_H(1,k),
-\end{equation}
-où
-\[
-  R_H(s,t)
-  = \frac{1}{2}\Bigl(|s|^{2H} + |t|^{2H} - |t-s|^{2H}\Bigr).
-\]
-
-On calcule explicitement :
-\begin{align}
-  R_H(1,k+1)
-  &= \frac{1}{2}\Bigl(|1|^{2H} + |k+1|^{2H} - |(k+1)-1|^{2H}\Bigr)
-   = \frac{1}{2}\Bigl(1 + |k+1|^{2H} - |k|^{2H}\Bigr),
-\\
-  R_H(1,k)
-  &= \frac{1}{2}\Bigl(|1|^{2H} + |k|^{2H} - |k-1|^{2H}\Bigr)
-   = \frac{1}{2}\Bigl(1 + |k|^{2H} - |k-1|^{2H}\Bigr).
-\end{align}
-D'où
-\begin{align}
-  \gamma(k)
-  &= R_H(1,k+1) - R_H(1,k)
-\\[0.3em]
-  &= \frac{1}{2}\Bigl(1 + |k+1|^{2H} - |k|^{2H}
-                      - 1 - |k|^{2H} + |k-1|^{2H}\Bigr)
-\\[0.3em]
-  &= \frac{1}{2}\Bigl(|k+1|^{2H} + |k-1|^{2H} - 2|k|^{2H}\Bigr).
-\end{align}
-
-Ainsi, la covariance théorique du bruit fractionnaire (fGn) est
-\begin{equation}
-  \boxed{
-  \gamma(k)
-  = \Cov(X_t,X_{t+k})
-  = \E[X_t X_{t+k}]
-  = \frac{1}{2}\Bigl(|k+1|^{2H} + |k-1|^{2H} - 2|k|^{2H}\Bigr).
-  }
-\end{equation}
-
-\subsection{Matrice de covariance Toeplitz}
-
-On regroupe les $N$ premiers incréments dans le vecteur
-\[
-  X = (X_0,\dots,X_{N-1})^\top.
-\]
-Sa matrice de covariance est la matrice Toeplitz
-\begin{equation}
-  \Gamma
-  = \Cov(X,X^\top)
-  = \bigl(\gamma(|i-j|)\bigr)_{0\le i,j\le N-1}.
-\end{equation}
-Autrement dit, la première ligne de $\Gamma$ est
-\[
-  (\gamma(0),\gamma(1),\dots,\gamma(N-1)),
-\]
-et chaque ligne suivante est une translation vers la droite.
-
-La méthode de Davies--Harte consiste à \emph{embeder} cette matrice Toeplitz
-dans une matrice \textbf{circulante} de taille $2N\times 2N$, ce qui
-permet d'utiliser la FFT.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Embedding circulant et vecteur $c$}
-
-On construit le vecteur
-\begin{equation}
-  c
-  = \bigl(
-    \gamma(0),\gamma(1),\dots,\gamma(N),\gamma(N-1),\dots,\gamma(1)
-    \bigr)^\top
-  \in\R^{2N}.
-\end{equation}
-On en déduit la matrice circulante $C\in\R^{2N\times 2N}$ définie par
-\begin{equation}
-  C_{jk} = c_{(k-j)\bmod 2N},
-  \qquad j,k = 0,\dots,2N-1.
-\end{equation}
-Ainsi :
-\begin{itemize}
-  \item la première ligne de $C$ est exactement $c^\top$ ;
-  \item la $(j+1)$-ème ligne est obtenue en décalant circulairement la
-        précédente d'un cran vers la droite.
-\end{itemize}
-
-Par construction, le bloc $N\times N$ en haut à gauche de $C$ coïncide
-avec la matrice Toeplitz $\Gamma$.  
-L'idée est alors :
-\begin{quote}
-  simuler un vecteur gaussien $Y\in\R^{2N}$ de covariance $C$,
-  puis ne garder que ses $N$ premières composantes ; celles-ci auront
-  la covariance désirée $\Gamma$.
-\end{quote}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Diagonalisation de la matrice circulante par la FFT}
-
-\subsection{Matrice de Fourier}
-
-On pose $M=2N$ et on considère la matrice de Fourier \emph{unitaire}
-\begin{equation}
-  F_{pj} = \frac{1}{\sqrt{M}} e^{-2\pi i pj/M},
-  \qquad p,j = 0,\dots,M-1.
-\end{equation}
-Cette normalisation donne
-\[
-  F^{-1} = F^\ast,
-\]
-la transposée conjuguée.
-
-Pour un vecteur $v\in\C^M$, on définit sa transformée de Fourier discrète
-(DFT) par
-\begin{equation}
-  \widehat v = F v,
-\end{equation}
-et la transformée inverse (IDFT) par
-\begin{equation}
-  v = F^\ast \widehat v.
-\end{equation}
-En pratique numérique, $F$ et $F^\ast$ sont calculés via la FFT/IFFT.
-
-\subsection{Diagonalisation d'une matrice circulante}
-
-Un résultat standard est : \emph{toute matrice circulante est diagonalisée
-par la matrice de Fourier}.  
-Plus précisément, si $C$ est la matrice circulante dont la première ligne
-est $c^\top$, alors
-\begin{equation}
-  \widehat c = F c
-  = (\lambda_0,\dots,\lambda_{M-1})^\top
-\end{equation}
-contient les valeurs propres de $C$, et on a
-\begin{equation}
-  \boxed{
-  C = F^\ast \,\Delta\, F,
-  }
-\end{equation}
-où
-\begin{equation}
-  \Delta = \mathrm{diag}(\lambda_0,\dots,\lambda_{M-1})
-\end{equation}
-est diagonale.
-
-Dans le langage numérique, on écrit simplement
-\[
-  \Lambda = \mathrm{FFT}(c),
-\]
-où $\Lambda=(\lambda_k)_{0\le k<M}$.
-
-Comme $c$ est réel et symétrique, les $\lambda_k$ sont réels et,
-dans le cas idéal, non négatifs.  
-En pratique, la méthode de Davies--Harte requiert $\lambda_k\ge 0$ ;
-si certains $\lambda_k$ sont négatifs (erreurs numériques mises à part),
-l'algorithme n'est pas applicable pour ce couple $(H,N)$.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Simulation gaussienne via la représentation spectrale}
-
-\subsection{Principe général}
-
-Soit $Y\in\C^M$ un vecteur gaussien centré.  
-Si l'on peut écrire la covariance sous la forme
-\[
-  \Cov(Y,Y^\ast) = C = F^\ast \Delta F,
-\]
-alors il suffit de prendre
-\begin{equation}
-  Y = F^\ast Z,
-\end{equation}
-où $Z$ est un vecteur gaussien complexe tel que
-\[
-  \E[Z]=0,\qquad \E[Z Z^\ast] = \Delta.
-\]
-En effet,
-\begin{align}
-  \Cov(Y,Y^\ast)
-  &= \E[YY^\ast]
-   = \E[F^\ast Z Z^\ast F]
-   = F^\ast \E[Z Z^\ast] F
-   = F^\ast \Delta F
-   = C.
-\end{align}
-
-On a donc transformé un problème de covariance générale $C$
-en un problème diagonal beaucoup plus simple.
-
-\subsection{Construction du vecteur $Z$}
-
-On veut un vecteur
-\[
-  Z = (Z_0,\dots,Z_{M-1})^\top \in\C^M
-\]
-tel que
-\[
-  \E[Z]=0,\qquad \E[Z Z^\ast] = \Delta
-  = \mathrm{diag}(\lambda_0,\dots,\lambda_{M-1}).
-\]
-Comme $\Delta$ est diagonale, cela revient à imposer que
-\[
-  \E[Z_k \overline{Z_\ell}] = 0\quad\text{si }k\ne\ell,
-  \qquad
-  \E[|Z_k|^2] = \lambda_k.
-\]
-
-On tient compte du fait que l'on veut finalement un \emph{vecteur réel}
-$Y$, donc on impose en plus la symétrie conjuguée
-\begin{equation}
-  Z_{M-k} = \overline{Z_k},\qquad 1\le k\le M-1.
-\end{equation}
-Comme $c$ est réel et symétrique, on a $\lambda_k = \lambda_{M-k}$,
-ce qui rend cette construction cohérente.
-
-Une construction explicite standard est :
-\begin{itemize}
-  \item Générer des gaussiennes réelles indépendantes
-        $U_0,\dots,U_N,V_1,\dots,V_{N-1}\sim\N(0,1)$.
-  \item Poser
-    \begin{align}
-      Z_0   &= \sqrt{\lambda_0}\,U_0,\\
-      Z_N   &= \sqrt{\lambda_N}\,U_N,\\
-      Z_k   &= \sqrt{\frac{\lambda_k}{2}}\,(U_k + iV_k),
-              &&k=1,\dots,N-1,\\
-      Z_{M-k} &= \sqrt{\frac{\lambda_k}{2}}\,(U_k - iV_k)
-              = \overline{Z_k},
-              &&k=1,\dots,N-1.
-    \end{align}
-\end{itemize}
-On vérifie alors :
-\[
-  \E[Z_k] = 0,\qquad
-  \E[|Z_k|^2] = \lambda_k,\qquad
-  \E[Z_k\overline{Z_\ell}] = 0\ (k\ne\ell),
-\]
-donc $\E[Z Z^\ast] = \Delta$.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Génération du bruit fractionnaire par IFFT}
-
-\subsection{Application de l’IFFT}
-
-On définit
-\begin{equation}
-  Y = F^\ast Z = \mathrm{IFFT}(Z).
-\end{equation}
-Par ce qui précède, on a
-\begin{equation}
-  \Cov(Y,Y^\ast) = C.
-\end{equation}
-De plus, grâce aux relations $Z_{M-k}=\overline{Z_k}$, on montre que
-$Y$ est \emph{réel} (à des erreurs numériques près) :
-\[
-  Y \in \R^M.
-\]
-Dans l'implémentation, on prend donc
-\[
-  Y = \Re\bigl(\mathrm{IFFT}(Z)\bigr).
-\]
-
-On note
-\[
-  Y = (Y_0,\dots,Y_{M-1})^\top.
-\]
-Par construction, la covariance de $Y$ est la matrice circulante $C$.
-Le bloc $N\times N$ en haut à gauche de $C$ est la matrice de covariance
-$\Gamma$ du fGn.  
-Donc, en ne conservant que les $N$ premières composantes de $Y$,
-on obtient un vecteur ayant la bonne covariance.
-
-On définit donc le bruit fractionnaire simulé par
-\begin{equation}
-  (X_0,X_1,\dots,X_{N-1})^\top
-  =
-  (Y_0,Y_1,\dots,Y_{N-1})^\top
-  \approx \text{fGn de covariance }\gamma(k).
-\end{equation}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Reconstruction du mouvement brownien fractionnaire}
-
-On part de
-\[
-  \widetilde B_H(0) = 0,\qquad
-  \widetilde B_H(k) = \sum_{j=0}^{k-1} X_j,\quad k=1,\dots,N,
-\]
-où $(X_j)$ est le fGn simulé ci-dessus.
-
-Pour revenir aux temps $t_k = k\Delta t$ sur $[0,T]$, on utilise
-l'autosimilarité :
-\[
-  \bH(t_k) \stackrel{d}{=} (\Delta t)^H \widetilde B_H(k).
-\]
-On pose donc
-\begin{equation}
-  \boxed{
-  \bH(t_k) = (\Delta t)^H \sum_{j=0}^{k-1} X_j,
-  \qquad k=0,\dots,N,
-  }
-\end{equation}
-avec la convention $\bH(t_0)=\bH(0)=0$.
-
-On vérifie que, au moins au premier ordre, la variance est correctement
-ajustée :
-\begin{align}
-  \Var\bigl(\bH(t_k)\bigr)
-  &= (\Delta t)^{2H}\,\Var\Bigl(\sum_{j=0}^{k-1} X_j\Bigr)
-\\[0.3em]
-  &= (\Delta t)^{2H}
-     \sum_{i=0}^{k-1}\sum_{j=0}^{k-1} \gamma(|i-j|)
-\\[0.3em]
-  &\approx (k\Delta t)^{2H} = t_k^{2H},
-\end{align}
-ce qui est cohérent avec la définition de la fBm.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Récapitulatif de la méthode de Davies--Harte}
-
-\subsection*{Étape 1 : covariance du bruit fractionnaire}
-\begin{itemize}
-  \item Pour $k=0,\dots,N$, calculer
-    \[
-      \gamma(k) = \frac{1}{2}\Bigl(|k+1|^{2H} + |k-1|^{2H} - 2|k|^{2H}\Bigr).
-    \]
-\end{itemize}
-
-\subsection*{Étape 2 : vecteur circulant $c$}
-\begin{itemize}
-  \item Construire
-    \[
-      c = \bigl(
-        \gamma(0),\gamma(1),\dots,\gamma(N),
-        \gamma(N-1),\dots,\gamma(1)
-      \bigr)^\top \in\R^{2N}.
-    \]
-\end{itemize}
-
-\subsection*{Étape 3 : FFT et valeurs propres}
-\begin{itemize}
-  \item Calculer la FFT :
-    \[
-      \Lambda = \mathrm{FFT}(c)
-              = (\lambda_0,\dots,\lambda_{2N-1})^\top.
-    \]
-  \item Vérifier que toutes les $\lambda_k$ sont non négatives
-        (à un petit $\varepsilon$ près pour les erreurs numériques).
-\end{itemize}
-
-\subsection*{Étape 4 : génération du vecteur gaussien complexe}
-\begin{itemize}
-  \item Générer des $U_0,\dots,U_N,V_1,\dots,V_{N-1}\sim\N(0,1)$ indépendants.
-  \item Construire $Z\in\C^{2N}$ par
-    \begin{align*}
-      Z_0   &= \sqrt{\lambda_0}\,U_0,\\
-      Z_N   &= \sqrt{\lambda_N}\,U_N,\\
-      Z_k   &= \sqrt{\frac{\lambda_k}{2}}\,(U_k + iV_k),
-              &&k=1,\dots,N-1,\\
-      Z_{2N-k} &= \sqrt{\frac{\lambda_k}{2}}\,(U_k - iV_k)
-              = \overline{Z_k},
-              &&k=1,\dots,N-1.
-    \end{align*}
-\end{itemize}
-
-\subsection*{Étape 5 : IFFT et extraction du fGn}
-\begin{itemize}
-  \item Calculer
-    \[
-      Y = \mathrm{IFFT}(Z) = F^\ast Z.
-    \]
-  \item Prendre la partie réelle et garder les $N$ premières composantes :
-    \[
-      X_k = \Re(Y_k),\qquad k=0,\dots,N-1.
-    \]
-    Le vecteur $(X_0,\dots,X_{N-1})$ est le \emph{fractional Gaussian noise}.
-\end{itemize}
-
-\subsection*{Étape 6 : reconstruction du fBm sur $[0,T]$}
-\begin{itemize}
-  \item Fixer $\Delta t = T/N$.
-  \item Poser
-    \[
-      \bH(t_0)=0,\qquad
-      \bH(t_k) = (\Delta t)^H \sum_{j=0}^{k-1} X_j,\quad k=1,\dots,N.
-    \]
-\end{itemize}
-
-On obtient ainsi une trajectoire discrète
-\[
-  \bigl(\bH(t_0),\bH(t_1),\dots,\bH(t_N)\bigr)
-\]
-qui suit, en loi, un mouvement brownien fractionnaire de paramètre $H$
-sur l'intervalle $[0,T]$.
-
-
-
-\subsection*{Annexe C - SDE de Volterra et rough Bergomi}
-\addcontentsline{toc}{section}{Annexe C - SDE de Volterra}
-
-
-
-\subsection*{Simulation du mouvement brownien fractionnaire — Méthode de Davies--Harte et lien avec le modèle rough Bergomi}
+\subsection*{Simulation du mouvement brownien fractionnaire --- Méthode de Davies--Harte et lien avec le modèle rough Bergomi}
 
 Dans tout ce qui suit, $H\in(0,1)$ désigne le paramètre de Hurst.
 On note $(\bH(t))_{t\ge 0}$ un mouvement brownien fractionnaire
@@ -6564,14 +6183,14 @@ $\Delta^{1/2}Z$ vérifie la même symétrie conjuguée :
 \]
 et $(\Delta^{1/2}Z)_0$, $(\Delta^{1/2}Z)_N$ sont réels.
 
-Cette symétrie conjuguée, injectée dans l’IFFT (multiplication par
+Cette symétrie conjuguée, injectée dans l'IFFT (multiplication par
 $F^{\ast}$), garantit que les composantes de $Y$ sont réelles en
 arithmétique exacte:
 \begin{equation}
   Y_j \in\R,\qquad j=0,\dots,M-1.
 \end{equation}
 En pratique numérique, de petits résidus imaginaires dus aux erreurs
-d’arrondi peuvent subsister; on prend alors la partie réelle
+d'arrondi peuvent subsister; on prend alors la partie réelle
 $\Re(Y_j)$.
 
 On résume donc :
@@ -6604,11 +6223,11 @@ Ces variables vérifient
   = \gamma_0(m),
   \qquad 0\le j, j+m \le N-1,
 \end{equation}
-c’est-à-dire qu’elles ont la covariance correspondant à un pas de
+c'est-à-dire qu'elles ont la covariance correspondant à un pas de
 temps unité.
 
 Pour retrouver la covariance au pas $\Delta t$, on applique le
-facteur d’échelle $(\Delta t)^H$ :
+facteur d'échelle $(\Delta t)^H$ :
 \begin{equation}
   X_k = (\Delta t)^H \tilde{X}_k,
   \qquad k=0,\dots,N-1.
@@ -6637,7 +6256,7 @@ la trajectoire discrète de la fBm par cumul des incréments :
   \bH(t_k) = \sum_{j=0}^{k-1} X_j,
   \quad k=1,\dots,N.
 \end{equation}
-En insistant sur l’échelle en temps :
+En insistant sur l'échelle en temps :
 \begin{equation}
   \bH(t_k)
   = \sum_{j=0}^{k-1} X_j
@@ -6733,7 +6352,7 @@ $\rho\in[-1,1]$ et on définit
 \begin{equation}
   Z_t = \rho\,W_t + \sqrt{1-\rho^2}\,W_t^\perp.
 \end{equation}
-Le prix $S_t$ d’un actif sans dividende suit
+Le prix $S_t$ d'un actif sans dividende suit
 \begin{equation}
   dS_t = S_t \sqrt{V_t}\,dZ_t,
 \end{equation}
@@ -6759,17 +6378,17 @@ Ici :
         (déterministe) ;
   \item $\eta>0$ est le paramètre de ``vol-of-vol'' ;
   \item $W^H$ est un processus gaussien de type fBm défini par
-        l’intégrale de Volterra \eqref{eq:def-WH-Volterra}.
+        l'intégrale de Volterra \eqref{eq:def-WH-Volterra}.
 \end{itemize}
 
 %-------------------------------------------------------------
 \subsubsection*{IX.2. Vérification que $W^H$ est un mouvement brownien fractionnaire}
 
 On vérifie que $W^H$ défini par \eqref{eq:def-WH-Volterra} a bien
-la même covariance qu’un fBm de paramètre $H$.
+la même covariance qu'un fBm de paramètre $H$.
 
 \paragraph{Espérance.}
-Par linéarité de l’intégrale d’Itô,
+Par linéarité de l'intégrale d'Itô,
 \begin{equation}
   \E[W_t^H]
   = \sqrt{2H}\,\E\Bigl[\int_0^t (t-s)^{H-\frac12}\,dW_s\Bigr]
@@ -6790,7 +6409,7 @@ Pour $t\ge 0$,
   &= 2H \cdot \frac{t^{2H}}{2H}
    = t^{2H}.
 \end{align}
-On retrouve donc la variance d’un fBm de paramètre $H$.
+On retrouve donc la variance d'un fBm de paramètre $H$.
 
 \paragraph{Covariance.}
 Pour $s,t\ge 0$,
@@ -6816,7 +6435,7 @@ Ainsi,
 \begin{equation}
   \Cov(W_t^H,W_s^H) = R_H(t,s),
 \end{equation}
-exactement la covariance d’un mouvement brownien fractionnaire de
+exactement la covariance d'un mouvement brownien fractionnaire de
 paramètre $H$. Par unicité de la loi gaussienne à partir de la
 covariance, on a
 \begin{equation}
@@ -6830,13 +6449,13 @@ paramètre $H$.
 
 Conséquence importante : sur une grille
 $t_k=k\Delta t$, on peut simuler directement $(\bH(t_k))$ par
-Davies--Harte et l’utiliser comme échantillonnage de
+Davies--Harte et l'utiliser comme échantillonnage de
 $(W_{t_k}^H)$, puisque les lois finies-dimensionnelles coïncident.
 
 %-------------------------------------------------------------
 \subsubsection*{IX.3. Log-volatilité et espérance conditionnelle}
 
-La log-volatilité définie par \eqref{eq:def-V-rBergomi} s’écrit
+La log-volatilité définie par \eqref{eq:def-V-rBergomi} s'écrit
 \begin{equation}
   \log V_t
   = \log \xi_0(t)
@@ -6911,11 +6530,11 @@ Cette suite $(V_k)$ est log-normale, et la relation
 $\E[V_k]=\xi_0(t_k)$ reste vérifiée.
 
 \paragraph{3. Discrétisation de la dynamique du prix.}
-L’équation
+L'équation
 \[
   dS_t = S_t \sqrt{V_t}\,dZ_t
 \]
-est un SDE de type Black–Scholes avec volatilité stochastique
+est un SDE de type Black--Scholes avec volatilité stochastique
 $\sqrt{V_t}$. Par Itô,
 \begin{equation}
   d\log S_t
@@ -6953,9 +6572,9 @@ et $W^H$ est une intégrale stochastique de $W$ (voir
 \eqref{eq:def-WH-Volterra}). Ceci implique une structure de
 corrélation non triviale entre $W^H$ et $Z$.
 
-Si l’on se contente de simuler la fBm $(\bH(t_k))$ \emph{indépendamment}
-d’un Brownien discrétisé $(Z_{t_k})$, alors le prix $S$ est
-indépendant du facteur rough : ce n’est plus le modèle rBergomi mais
+Si l'on se contente de simuler la fBm $(\bH(t_k))$ \emph{indépendamment}
+d'un Brownien discrétisé $(Z_{t_k})$, alors le prix $S$ est
+indépendant du facteur rough : ce n'est plus le modèle rBergomi mais
 un modèle à volatilité rough décorrélée. Pour avoir le rBergomi
 correct, il faut construire conjointement un vecteur gaussien
 \[
@@ -7017,7 +6636,7 @@ modèle rough Bergomi sur une grille $t_k=k\Delta t$ :
 \begin{enumerate}
   \item Simuler une trajectoire de fBm $(\bH(t_k))_{k=0,\dots,N}$ via
         Davies--Harte.
-  \item L’identifier en loi au facteur rough
+  \item L'identifier en loi au facteur rough
         $W_{t_k}^H$, i.e. poser $W_{t_k}^H=\bH(t_k)$.
   \item Construire la variance
         \[
@@ -7031,7 +6650,7 @@ modèle rough Bergomi sur une grille $t_k=k\Delta t$ :
         par le modèle (via la covariance $\Sigma^{HZ}$ ci-dessus) ;
         dans une implémentation approximative plus simple, on peut
         prendre $\Delta Z_k$ simplement corrélés avec les incréments
-        de $W$ ou considérer l’approximation de corrélation locale.
+        de $W$ ou considérer l'approximation de corrélation locale.
   \item Mettre à jour le prix par
         \[
           S_{t_{k+1}}
@@ -7049,16 +6668,11 @@ se branche dans la construction de la variance et du prix.
 
 
 
-\fi
-\subsection*{Annexe D - Mod\`ele SABR (expansion asymptotique)}
-\addcontentsline{toc}{section}{Annexe D - Mod\`ele SABR}
-
-
-
-\subsection*{Annexe D — Mod\`ele SABR (expansion asymptotique)}
+\section{Mod\`ele SABR : expansion asymptotique (Hagan)}
+\label{sec:deriv-sabr}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{D.1. Dynamique}
+\subsection*{Dynamique}
 
 \[
 \begin{cases}
@@ -7069,7 +6683,7 @@ dW_t^{(1)}dW_t^{(2)} = \rho dt.
 \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{D.2. Formule asymptotique de la vol implicite}
+\subsection*{Formule asymptotique de la vol implicite}
 
 La volatilité implicite obtenue par expansion en $\nu$ (Hagan et al.) est :
 \[
@@ -7077,7 +6691,7 @@ La volatilité implicite obtenue par expansion en $\nu$ (Hagan et al.) est :
 =
 \frac{\alpha_0}{(F_0 K)^{\frac{1-\beta}{2}}}
 \left[
-1 + \frac{(1-\beta)^2}{24}(\ln(F_0/K))^2 
+1 + \frac{(1-\beta)^2}{24}(\ln(F_0/K))^2
 + \frac{(1-\beta)^4}{1920}(\ln(F_0/K))^4
 \right]
 \Bigg/
@@ -7097,7 +6711,7 @@ La forme finale couramment utilisée est :
 =
 \frac{\alpha_0}{(F_0 K)^{\frac{1-\beta}{2}}}
 \left[
-1 
+1
 +
 \left(
 \frac{(1-\beta)^2}{24}\ln^2\frac{F_0}{K}
@@ -7109,12 +6723,12 @@ La forme finale couramment utilisée est :
 \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{D.3. Utilisation en calibration}
+\subsection*{Utilisation en calibration}
 
 La structure $(\beta,\nu,\rho,\alpha_0)$ permet de calibrer finement le smile :
 
 \[
-\theta^\*
+\theta^*
 =
 \arg\min_{\theta}
 \sum_{K\in\mathcal{K}}
@@ -7126,31 +6740,27 @@ La structure $(\beta,\nu,\rho,\alpha_0)$ permet de calibrer finement le smile :
 \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{D.4. Remarques}
+\subsection*{Remarques}
 
 \begin{itemize}
-  \item L’expansion est très précise pour $\nu$ modéré et $|F_0-K|$ raisonnable.
+  \item L'expansion est très précise pour $\nu$ modéré et $|F_0-K|$ raisonnable.
   \item Des variantes existent (SABR normal, shifted-SABR).
-  \item La dérivation complète nécessite des développements asymptotiques 
-        détaillés (reportés en annexe technique).
+  \item La dérivation complète nécessite des développements asymptotiques
+        détaillés (au-delà du niveau de détail visé ici ; voir la littérature spécialisée).
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 
-\subsection*{Annexe E - Mod\`ele de Rough Heston}
-\addcontentsline{toc}{section}{Annexe E - Rough Heston}
-
-
-
-\subsection*{Annexe E — Mod\`ele de Rough Heston (dynamique, caract\'eristique, simulation)}
+\section{Mod\`ele de Rough Heston : dynamique, caract\'eristique, simulation}
+\label{sec:deriv-rough-heston}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{E.1. Motivation}
+\subsection*{Motivation}
 
 Le mod\`ele de Heston classique g\'enère une variance $v_t$ markovienne de type
-CIR.  
+CIR.
 Cependant, les observations empiriques montrent un comportement plus ``rugbueux''
 de la variance, avec une r\'egularité H\"older strictement inférieure à $1/2$ et
 une d\'ecorrélation lente.
@@ -7160,13 +6770,13 @@ par une SDE de Volterra reposant sur un noyau de type $t^{H-\frac12}$ avec
 $H<\frac12$.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{E.2. Dynamique du Rough Heston}
+\subsection*{Dynamique du Rough Heston}
 
 On considère le modèle suivant (sous la mesure risque--neutre) :
 \[
 \begin{cases}
 dS_t = S_t \sqrt{v_t}\, dW_t^{(1)} + r S_t\, dt, \\[6pt]
-v_t = v_0 + \frac{1}{\Gamma(H+\tfrac12)} 
+v_t = v_0 + \frac{1}{\Gamma(H+\tfrac12)}
       \int_0^t (t-s)^{H-\frac12}
       \bigl( \kappa(\theta - v_s)\, ds + \xi \sqrt{v_s}\, dW_s^{(2)} \bigr),
 \end{cases}
@@ -7183,7 +6793,7 @@ K(t) = \frac{ t^{H-\frac12} }{\Gamma(H+\frac12)}, \qquad H<\frac12,
 introduit une m\'emoire longue et une r\'egularit\'e faible.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{E.3. Formulation Volterra}
+\subsection*{Formulation Volterra}
 
 La variance satisfait la Volterra SDE affine :
 \[
@@ -7195,12 +6805,12 @@ La structure affine demeure, ce qui permet des formules fermées pour la fonctio
 caractéristique du log--prix.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{E.4. Fonction caract\'eristique du log--prix}
+\subsection*{Fonction caract\'eristique du log--prix}
 
-On pose $X_t = \ln S_t$.  
+On pose $X_t = \ln S_t$.
 On cherche la fonction caractéristique :
 \[
-\phi(u,t) 
+\phi(u,t)
 =
 \mathbb{E}\bigl[ e^{iu X_t} \mid X_0,v_0 \bigr].
 \]
@@ -7215,7 +6825,7 @@ Comme le modèle est affine Volterra, on a :
 Les fonctions $C(u,t)$ et $D(u,t)$ satisfont des \emph{équations de Riccati fractionnaires}
 \[
 D(u,t) = \int_0^t K(t-s)
-\biggl( 
+\biggl(
 \frac12 (u^2+iu)
 - (\kappa - \rho\xi iu) D(u,s)
 - \frac12\xi^2 D(u,s)^2
@@ -7225,21 +6835,21 @@ D(u,t) = \int_0^t K(t-s)
 C(u,t) = iu r t + \kappa\theta \int_0^t D(u,s)\, ds.
 \]
 
-Il s'agit de convolutions Volterra nécessitant des méthodes numériques dédiées 
+Il s'agit de convolutions Volterra nécessitant des méthodes numériques dédiées
 (FFT accélérée, quadrature rapide, schémas hybrides).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{E.5. Prix du call europ\'een}
+\subsection*{Prix du call europ\'een}
 
-Le prix du call est obtenu via la représentation de Carr–Madan / Fourier :
+Le prix du call est obtenu via la représentation de Carr--Madan / Fourier :
 \[
 C_0 = S_0 P_1 - K e^{-rT} P_2,
 \]
 où
 \[
-P_j 
-= 
-\frac12 + \frac1\pi 
+P_j
+=
+\frac12 + \frac1\pi
 \int_0^\infty
 \Re\left(
 \frac{ e^{-iu\ln K}\, \phi_j(u,T) }{iu}
@@ -7247,14 +6857,14 @@ P_j
 \qquad j=1,2.
 \]
 
-La différence avec Heston classique provient du calcul de $\phi_j(u,T)$, qui 
+La différence avec Heston classique provient du calcul de $\phi_j(u,T)$, qui
 utilise les Riccati fractionnaires ci-dessus.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{E.6. Simulation : schéma hybride (hybrid scheme)}
+\subsection*{Simulation : schéma hybride (hybrid scheme)}
 
 La simulation directe du rough Heston est coûteuse car la convolution Volterra
-est de complexité naïve $\mathcal{O}(n^2)$.  
+est de complexité naïve $\mathcal{O}(n^2)$.
 Bayer, Friz et Gatheral (2016) proposent une approche \emph{hybride} qui combine
 une d\'ecomposition du noyau (partie singuli\`ere vs r\'eguli\`ere) et une acc\'el\'eration des convolutions,
 afin de r\'eduire le co\^ut de calcul sur une grille. Le point essentiel (au niveau th\'eorique) est la gestion
@@ -7262,11 +6872,11 @@ de la non-markovianit\'e : l'\'etat d\'epend d'un historique, ce qui impose des 
 des trajectoires utilisables en pricing/greeks.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{E.7. Calibration}
+\subsection*{Calibration}
 
 La calibration consiste à résoudre :
 \[
-\theta^\*
+\theta^*
 =
 \arg\min_{\theta}
 \sum_{(K,T)}
@@ -7290,7 +6900,7 @@ Le paramètre clé est le Hurst $H$ :
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection*{E.8. Synthèse}
+\subsection*{Synthèse}
 
 Le Rough Heston combine :
 \begin{itemize}
@@ -7305,10 +6915,10 @@ Plus g\'en\'eralement, c'est un cadre avanc\'e (structure affine + m\'emoire) do
 \'evalu\'ee par des diagnostics de calibration et de couverture, en tenant compte des co\^uts et du risque de mod\`ele.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section*{Annexe F — M\'ethodes num\'eriques (FFT, Crank--Nicolson)}
-\addcontentsline{toc}{section}{Annexe F — M\'ethodes num\'eriques}
+\section{M\'ethodes num\'eriques : FFT et Crank--Nicolson}
+\label{sec:numerical-methods}
 
-\subsection*{F.1. M\'ethode de Crank--Nicolson pour la PDE de Black--Scholes}
+\subsection*{M\'ethode de Crank--Nicolson pour la PDE de Black--Scholes}
 
 On consid\`ere la PDE de Black--Scholes :
 \[
@@ -7317,7 +6927,7 @@ On consid\`ere la PDE de Black--Scholes :
 \]
 
 En changeant de variable $x = \ln S$ et $\tau = T-t$, on obtient une PDE de type
-chaleur pour $\tilde V(\tau,x)$, que l’on discrétise sur une grille $(\tau_n, x_j)$.
+chaleur pour $\tilde V(\tau,x)$, que l'on discrétise sur une grille $(\tau_n, x_j)$.
 
 Le schéma de Crank--Nicolson consiste à moyenniser les schémas implicite et explicite :
 \[
@@ -7325,18 +6935,18 @@ Le schéma de Crank--Nicolson consiste à moyenniser les schémas implicite et e
 =
 \frac12 \bigl( \mathcal{L}V^{n+1}_j + \mathcal{L}V^{n}_j \bigr),
 \]
-o\`u $\mathcal{L}$ est l’opérateur spatial issu de la PDE.
+o\`u $\mathcal{L}$ est l'opérateur spatial issu de la PDE.
 
 En pratique, cela donne un syst\`eme tridiagonal à chaque pas de temps :
 \[
 A V^{n+1} = B V^n + b^n,
 \]
-que l’on r\'esout via un algorithme de Thomas (co\^ut en $\mathcal{O}(M)$ pour 
+que l'on r\'esout via un algorithme de Thomas (co\^ut en $\mathcal{O}(M)$ pour
 $M$ points en espace).
 
-\subsection*{F.2. FFT pour le pricing d’options (Carr--Madan)}
+\subsection*{FFT pour le pricing d'options (Carr--Madan)}
 
-L’id\'ee est d’exprimer le prix d’un call en termes de transformée de Fourier
+L'id\'ee est d'exprimer le prix d'un call en termes de transformée de Fourier
 de la fonction caract\'eristique du log--prix.
 
 Soit
@@ -7352,7 +6962,7 @@ k = \ln K,
 \]
 avec $\alpha > 0$.
 
-La transformée de Fourier de $c_\alpha(k)$ s’exprime alors en fonction de 
+La transformée de Fourier de $c_\alpha(k)$ s'exprime alors en fonction de
 $\phi_T(u)$ :
 \[
 \hat c_\alpha(u)
@@ -7365,7 +6975,7 @@ $\phi_T(u)$ :
 Les prix pour un ensemble de strikes équidistants $k_m$ sont obtenus par FFT :
 \[
 c_\alpha(k_m)
-\approx 
+\approx
 \frac{e^{-i u_0 k_m}}{2\pi}
 \sum_{n=0}^{N-1} e^{i u_n k_m} \hat c_\alpha(u_n) \Delta u,
 \]
@@ -7376,24 +6986,24 @@ Enfin, on récupère le prix du call :
 C(k_m) = e^{-\alpha k_m} c_\alpha(k_m).
 \]
 
-Cette m\'ethode est particulièrement efficace pour les mod\`eles à fonction 
+Cette m\'ethode est particulièrement efficace pour les mod\`eles à fonction
 caract\'eristique explicite (Heston, Merton, Variance Gamma, etc.).
 
-\subsection*{F.3. Résumé}
+\subsection*{Résumé}
 
 \begin{itemize}
   \item Le schéma de Crank--Nicolson fournit une solution stable et seconde-ordre
         en temps pour les PDE de pricing.
-  \item Les méthodes FFT de type Carr--Madan permettent d’obtenir de nombreux prix
-        d’options en un seul appel de Fourier, particulièrement bien adaptées aux
+  \item Les méthodes FFT de type Carr--Madan permettent d'obtenir de nombreux prix
+        d'options en un seul appel de Fourier, particulièrement bien adaptées aux
         mod\`eles de type affine.
 \end{itemize}
 
-\section*{Annexe G --- Projet annexe : pipeline de pr\'ediction tabulaire structur\'e par eras (cas Numerai)}
-\addcontentsline{toc}{section}{Annexe G --- Projet annexe : pipeline Numerai}
+\section{\'Etude de cas : pipeline de pr\'ediction tabulaire par eras (Numerai)}
+\label{sec:case-numerai}
 
 \subsection*{Objectif et positionnement}
-Cette annexe pr\'esente, au niveau conceptuel (sans code), un \emph{pipeline} de pr\'ediction tabulaire structur\'e par p\'eriodes (``eras'') tel
+Cette section pr\'esente, au niveau conceptuel (sans code), un \emph{pipeline} de pr\'ediction tabulaire structur\'e par p\'eriodes (``eras'') tel
 qu'on en rencontre dans certains tournois de pr\'evision (cas Numerai). L'int\'er\^et est m\'ethodologique : (i) g\'erer une non-stationnarit\'e
 explicite, (ii) \'eviter le \emph{leakage} temporel, et (iii) privil\'egier la stabilit\'e du signal plut\^ot qu'une performance moyenne illusoire.
 
@@ -7428,7 +7038,7 @@ Le pipeline peut \^etre r\'esum\'e par les \'etapes suivantes :
 \end{itemize}
 
 \subsection*{Lien avec le m\'emoire}
-Ce projet annexe illustre les principes d\'evelopp\'es au chapitre sur l'apprentissage supervis\'e sous non-stationnarit\'e
+Cette \'etude de cas illustre les principes d\'evelopp\'es au chapitre sur l'apprentissage supervis\'e sous non-stationnarit\'e
 (\emph{validation temporelle, leakage, m\'etriques par p\'eriode, ensembles et post-traitements monotones}). Dans le contexte de
 \emph{PaperTradingApp}, ces principes cadrent la validation de briques apprenantes (surrogates, r\'egimes, diagnostics) et compl\`etent les exigences
 de tra\c{c}abilit\'e et de gouvernance des hypoth\`eses discut\'ees dans la partie m\'ethodologie.
