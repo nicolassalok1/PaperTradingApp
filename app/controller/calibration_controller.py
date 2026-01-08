@@ -586,9 +586,7 @@ class CalibrationController:
         return [
             {"key": "sabr", "label": "SABR (Hagan analytic)", "pricing": "analytic_iv", "calibration": "least_squares", "expensive": False},
             {"key": "merton_jump_diffusion", "label": "Jump Diffusion (Merton) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
-            {"key": "bates", "label": "Bates (Heston + Jumps) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
             {"key": "heston_fft", "label": "Heston via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
-            {"key": "heston_v1", "label": "Heston (legacy V1 engine)", "pricing": "cf_integral", "calibration": "least_squares", "expensive": False},
             {"key": "rheston", "label": "rHeston (Markovian approx) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": True},
             {"key": "rbergomi", "label": "rBergomi (MC + surrogate)", "pricing": "mc", "calibration": "mc_surrogate", "expensive": True},
             {"key": "volterra", "label": "Volterra SDE (MC proxy)", "pricing": "mc", "calibration": "mc_proxy", "expensive": True},
@@ -620,9 +618,7 @@ class CalibrationController:
         from app.model.calibration.base_calibrator import CalibratorSettings, SurfaceGrid
         from app.model.volatility_models.sabr.calibrator import SABRAnalyticCalibrator
         from app.model.volatility_models.jump_diffusion.calibrator import MertonJumpDiffusionCalibrator
-        from app.model.volatility_models.jump_diffusion.calibrator_bates import BatesCalibrator
         from app.model.volatility_models.heston.calibrator_fft import HestonFFTCalibrator
-        from app.model.volatility_models.heston.calibrator_legacy import HestonLegacyLeastSquaresCalibrator
         from app.model.volatility_models.rheston.calibrator_fft import RHestonFFTMarkovianCalibrator
         from app.model.volatility_models.rbergomi.calibrator_mc_surrogate import RBergomiMCSurrogateCalibrator
         from app.model.volatility_models.volterra.calibrator_mc import VolterraSDECalibrator
@@ -688,9 +684,7 @@ class CalibrationController:
         calibrator_map = {
             "sabr": SABRAnalyticCalibrator(),
             "merton_jump_diffusion": MertonJumpDiffusionCalibrator(),
-            "bates": BatesCalibrator(),
             "heston_fft": HestonFFTCalibrator(),
-            "heston_v1": HestonLegacyLeastSquaresCalibrator(),
             "rheston": RHestonFFTMarkovianCalibrator(),
             "rbergomi": RBergomiMCSurrogateCalibrator(),
             "volterra": VolterraSDECalibrator(),

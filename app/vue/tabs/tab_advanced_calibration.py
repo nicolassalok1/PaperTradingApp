@@ -139,7 +139,6 @@ def render_tab() -> None:
 
     override_labels = {
         "heston_fft": "Heston",
-        "heston_v1": "Heston v1 (legacy)",
         "rheston": "rHeston",
         "rbergomi": "rBergomi",
         "volterra": "Volterra SDE",
@@ -148,7 +147,6 @@ def render_tab() -> None:
     }
     desired_order = [
         "heston_fft",
-        "heston_v1",
         "rheston",
         "rbergomi",
         "volterra",
