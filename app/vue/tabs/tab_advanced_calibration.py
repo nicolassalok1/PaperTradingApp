@@ -35,6 +35,7 @@ _LAST_RESULT_KEY = "last_advanced_calibration_result"
 _OPTIONABLE_TICKERS_CSV = Path(
     os.getenv("ALPACA_OPTIONABLE_TICKERS_PATH", "data/alpaca_optionable_tickers.csv")
 )
+_YAHOO_CHAINS_DIR = Path("cache/YahooOptionChains")
 
 
 def _parse_json_dict(raw: str) -> Dict[str, Any] | None:
@@ -85,6 +86,26 @@ def _get_chain_from_state() -> pd.DataFrame | None:
     if isinstance(df, pd.DataFrame) and not df.empty:
         return df
     return None
+
+
+def _load_chain_meta(ticker: str | None) -> dict[str, Any]:
+    if not ticker:
+        return {}
+    safe = str(ticker).strip().upper()
+    if not safe:
+        return {}
+    try:
+        if not _YAHOO_CHAINS_DIR.exists():
+            return {}
+        matches = sorted(_YAHOO_CHAINS_DIR.glob(f"yahoo_chain_{safe}_*.json"))
+        if not matches:
+            matches = sorted(_YAHOO_CHAINS_DIR.glob(f"yahoo_chain_{safe}*.json"))
+        if not matches:
+            return {}
+        with open(matches[-1], "r", encoding="utf-8") as fh:
+            return json.load(fh) or {}
+    except Exception:
+        return {}
 
 
 def render_tab() -> None:
@@ -175,29 +196,7 @@ def render_tab() -> None:
         constraints = parsed or {}
 
     st.markdown("### Surface IV marché")
-    surface_sources = [
-        "Ticker (Yahoo)",
-        "Upload CSV",
-        "Cache (cache/*.csv, cache/YahooOptionChains/*.csv)",
-        "Alpaca (live)",
-    ]
-    disabled_sources = [s for s in surface_sources if s != "Ticker (Yahoo)"]
-    if st.session_state.get("adv_calib_surface_source") not in surface_sources:
-        st.session_state["adv_calib_surface_source"] = surface_sources[0]
-
-    def _fmt_source(src: str) -> str:
-        return f"{src} (désactivé)" if src in disabled_sources else src
-
-    _selected_source = st.radio(
-        "Source",
-        options=surface_sources,
-        format_func=_fmt_source,
-        horizontal=True,
-        index=0,
-        key="adv_calib_surface_source",
-    )
-    if _selected_source != "Ticker (Yahoo)":
-        st.info("Seule la source Yahoo est active. Les autres options sont temporairement désactivées.")
+    st.caption("Source: Ticker (Yahoo) uniquement (autres sources désactivées).")
     source = "Ticker (Yahoo)"
 
     preview_df: pd.DataFrame | None = None
@@ -384,63 +383,51 @@ def render_tab() -> None:
             with st.expander("Filtrage surface", expanded=False):
                 calib_df = render_surface_filters(canon_df, key_prefix="adv_calib")
 
-    s0_default = median_s0(calib_df) or median_s0(canon_df) or float(st.session_state.get("common_spot_value", 100.0))
+    chain_meta = _load_chain_meta(surface_ticker or ticker)
+    spot_chain = chain_meta.get("spot")
+    div_chain = chain_meta.get("div")
+    max_chain_years = chain_meta.get("max_maturity_years")
 
-    st.markdown("### Paramètres du sous-jacent")
+    s0_default = (
+        (float(spot_chain) if spot_chain is not None else None)
+        or median_s0(calib_df)
+        or median_s0(canon_df)
+        or float(st.session_state.get("common_spot_value", 100.0))
+    )
+
+    # Risk-free rate from yield curve at max maturity (slider or chain)
+    t_ref_for_r = float(max_years)
+    try:
+        if max_chain_years is not None:
+            t_ref_for_r = max(float(t_ref_for_r), float(max_chain_years))
+    except Exception:
+        t_ref_for_r = float(max_years)
+
+    try:
+        currencies = yc.available_currencies()
+    except Exception:
+        currencies = []
+    default_currency = "USD" if "USD" in currencies else (currencies[0] if currencies else "USD")
+    currency = default_currency
+    try:
+        r_val = float(yc.get_risk_free_rate(T_ref=float(t_ref_for_r), currency=str(currency)))
+    except Exception:
+        r_val = float(st.session_state.get("common_rate_value", 0.02))
+
+    q_val = float(div_chain) if div_chain is not None else float(st.session_state.get("d_common", 0.0))
+
+    st.session_state["common_spot_value"] = float(s0_default)
+    st.session_state["common_rate_value"] = float(r_val)
+    st.session_state["d_common"] = float(q_val)
+
+    st.markdown("### Paramètres du sous-jacent (auto)")
     col1, col2, col3 = st.columns(3)
     with col1:
-        S0 = st.number_input("S0", value=float(s0_default), min_value=0.01, step=1.0, key="adv_calib_S0")
+        st.metric("S0 (spot)", f"{float(s0_default):.4f}")
     with col2:
-        r_source = st.selectbox("Source r", options=["Manuel", "Yield Curve"], index=0, key="adv_calib_r_source")
-        r_val = 0.02
-        if r_source == "Yield Curve":
-            try:
-                currencies = yc.available_currencies()
-            except Exception:
-                currencies = []
-            default_currency = "USD" if "USD" in currencies else (currencies[0] if currencies else "USD")
-            currency_options = currencies or [default_currency]
-            default_ccy_index = currency_options.index(default_currency) if default_currency in currency_options else 0
-            currency = st.selectbox(
-                "Currency",
-                options=currency_options,
-                index=default_ccy_index,
-                key="adv_calib_r_ccy",
-            )
-            t_ref_options = [0.25, 0.5, 1.0, 2.0, 5.0, 10.0]
-            t_ref = st.selectbox("T", options=t_ref_options, index=t_ref_options.index(1.0), key="adv_calib_r_T")
-            try:
-                r_val = float(yc.get_risk_free_rate(T_ref=float(t_ref), currency=str(currency)))
-            except Exception:
-                r_val = 0.02
-            st.number_input(
-                "r(T)",
-                value=float(r_val),
-                step=0.001,
-                format="%.4f",
-                disabled=True,
-                key="adv_calib_r_val_curve",
-            )
-        else:
-            r_val = float(
-                st.number_input(
-                    "Taux sans risque r",
-                    value=float(st.session_state.get("common_rate_value", 0.02)),
-                    step=0.001,
-                    format="%.4f",
-                    key="adv_calib_r_val_manual",
-                )
-            )
+        st.metric(f"r(T={t_ref_for_r}) via Yield Curve ({currency})", f"{float(r_val):.4f}")
     with col3:
-        q_val = float(
-            st.number_input(
-                "Dividende q",
-                value=float(st.session_state.get("d_common", 0.0)),
-                step=0.001,
-                format="%.4f",
-                key="adv_calib_q_val",
-            )
-        )
+        st.metric("Dividende q", f"{float(q_val):.4f}")
 
     fit_to_observed_only = True
     max_nfev = 60
@@ -607,8 +594,7 @@ def render_tab() -> None:
             try:
                 st.session_state["common_rate_value"] = float(result.get("r") or r_val)
                 st.session_state["d_common"] = float(result.get("q") or q_val)
-                if str(r_source).lower().startswith("man"):
-                    st.session_state["opt_use_yield_curve_rate"] = False
+                st.session_state["opt_use_yield_curve_rate"] = True
             except Exception:
                 pass
 
