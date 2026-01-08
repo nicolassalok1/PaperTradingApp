@@ -394,6 +394,7 @@ def render_tab() -> None:
         or median_s0(canon_df)
         or float(st.session_state.get("common_spot_value", 100.0))
     )
+    S0 = float(s0_default)
 
     # Risk-free rate from yield curve at max maturity (slider or chain)
     t_ref_for_r = float(max_years)
@@ -485,8 +486,26 @@ def render_tab() -> None:
         if t_raw.strip() and t_grid is None:
             st.warning("t_grid invalide (liste de floats séparés par des virgules).")
 
+    def _eta_human(seconds: float) -> str:
+        seconds = max(0.0, float(seconds))
+        if seconds < 60:
+            return f"{seconds:.0f} s"
+        mins = seconds / 60.0
+        if mins < 60:
+            return f"{mins:.1f} min"
+        hours = mins / 60.0
+        return f"{hours:.1f} h"
+
+    per_eval = 0.05
+    if model_key in {"rheston", "rbergomi", "volterra"}:
+        per_eval *= 5.0
+    eta_seconds = per_eval * float(max_nfev) * float(max(1, n_starts))
+    eta_label = _eta_human(eta_seconds)
+    st.caption(f"ETA estimée: ~{eta_label} (heuristique; dépend du modèle et des données).")
+
     can_run = isinstance(calib_df, pd.DataFrame) and not calib_df.empty
     if st.button("Calibrer", type="primary", disabled=not can_run, width="stretch", key="adv_calib_run_btn"):
+        progress = st.progress(0, text="Préparation…")
         payload: Dict[str, Any] = {
             "model": model_key,
             "df": calib_df,
@@ -504,8 +523,11 @@ def render_tab() -> None:
         if t_grid is not None:
             payload["t_grid"] = t_grid
 
+        progress.progress(30, text="Calibration en cours…")
         with st.spinner("Calibration..."):
             result = ctrl.run_advanced_surface_calibration(payload)
+        progress.progress(100, text="Terminé")
+        progress.empty()
 
         if surface_ticker:
             try:
