@@ -78,11 +78,11 @@ def render_tab() -> None:
     with st.expander("Gestion de la courbe (import / édition)", expanded=False):
         col_a, col_b, col_c = st.columns([1, 1, 2])
         with col_a:
-            if st.button("Invalidate cache", use_container_width=True):
+            if st.button("Invalidate cache", width="stretch"):
                 yc.invalidate_curve_cache(currency)
                 st.rerun()
         with col_b:
-            if st.button("Refresh API (USD/EUR)", use_container_width=True):
+            if st.button("Refresh API (USD/EUR)", width="stretch"):
                 ok = yc.refresh_curve_cache_from_api(currency)
                 if ok:
                     st.success("Courbe rafraîchie depuis l'API.")
@@ -101,12 +101,12 @@ def render_tab() -> None:
                 if df_parsed.empty:
                     st.error("Aucun nœud détecté dans ce fichier.")
                 else:
-                    st.dataframe(df_parsed, hide_index=True, use_container_width=True)
+                    st.dataframe(df_parsed, hide_index=True, width="stretch")
                 if st.button(
                     f"Sauvegarder pour {currency}",
                     disabled=df_parsed.empty,
                     type="primary",
-                    use_container_width=True,
+                    width="stretch",
                 ):
                     res = yc.import_curve_nodes_upload(currency, uploaded.name, raw)
                     if res.get("success"):
@@ -126,10 +126,10 @@ def render_tab() -> None:
         df_edit = st.data_editor(
             df_nodes_editor,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             key=f"yc_nodes_editor_{currency}",
         )
-        if st.button("Sauvegarder l'éditeur", use_container_width=True, disabled=df_edit.empty):
+        if st.button("Sauvegarder l'éditeur", width="stretch", disabled=df_edit.empty):
             result = yc.save_curve_nodes(currency, df_edit.to_dict(orient="records"))
             if result.get("success"):
                 st.success(f"Sauvegardé: {result.get('path')}")
@@ -156,7 +156,7 @@ def render_tab() -> None:
         st.dataframe(
             df_nodes[["tenor", "t_years", "zero_rate", "discount_factor"]],
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
     else:
         st.info("Aucun nœud trouvé, courbe plate par défaut (DEFAULT_RF_RATE).")
@@ -204,7 +204,7 @@ def render_tab() -> None:
             for ch in charts[1:]:
                 chart = chart + ch
             chart = chart.properties(height=260)
-            st.altair_chart(chart, use_container_width=True)
+            st.altair_chart(chart, width="stretch")
 
         if not df_grid.empty:
             df_grid = df_grid.sort_values("t_years").set_index("t_years")
@@ -213,7 +213,7 @@ def render_tab() -> None:
                     columns={"t_years": "T (years)", "zero_rate": "Zero rate", "discount_factor": "DF"}
                 ),
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
     else:
         st.info("Aucune courbe à afficher. Ajoute des fichiers *_nodes.csv sous data/yield_curves/.")
@@ -253,7 +253,7 @@ def render_tab() -> None:
                 )
                 .properties(height=220)
             )
-            st.altair_chart(chart, use_container_width=True)
+            st.altair_chart(chart, width="stretch")
     else:
         st.info("Pas de discount factors calculables sans courbe.")
 
@@ -271,7 +271,7 @@ def render_tab() -> None:
                 }
             )[["Start (y)", "End (y)", "Forward rate (%)"]],
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
     else:
         st.info("Forward rates indisponibles.")
@@ -288,7 +288,7 @@ def render_tab() -> None:
                 y=alt.Y("fwd_pct:Q", title="Instantaneous forward (%)"),
             )
             .properties(height=220),
-            use_container_width=True,
+            width="stretch",
         )
     else:
         st.info("Instantaneous forward curve indisponible.")

@@ -193,7 +193,7 @@ def render_tab() -> None:
                 key="adv_calib_yahoo_max_years",
             )
         with col_load:
-            load_clicked = st.button("Load", use_container_width=True, key="adv_calib_yahoo_load_btn")
+            load_clicked = st.button("Load", width="stretch", key="adv_calib_yahoo_load_btn")
 
         ticker = (ticker_raw or "").strip().upper()
         cached_df = st.session_state.get(_YAHOO_SURFACE_STATE_KEY)
@@ -302,7 +302,7 @@ def render_tab() -> None:
             else:
                 ticker = st.text_input("Underlying ticker", value=str(default_ticker)).upper().strip()
         with col_load:
-            load_clicked = st.button("Load chain", use_container_width=True, key="adv_calib_alpaca_load_btn")
+            load_clicked = st.button("Load chain", width="stretch", key="adv_calib_alpaca_load_btn")
 
         if load_clicked and ticker:
             with st.spinner(f"Loading options for {ticker} from Alpaca..."):
@@ -453,7 +453,7 @@ def render_tab() -> None:
             st.warning("t_grid invalide (liste de floats séparés par des virgules).")
 
     can_run = isinstance(calib_df, pd.DataFrame) and not calib_df.empty
-    if st.button("Calibrer", type="primary", disabled=not can_run, use_container_width=True, key="adv_calib_run_btn"):
+    if st.button("Calibrer", type="primary", disabled=not can_run, width="stretch", key="adv_calib_run_btn"):
         payload: Dict[str, Any] = {
             "model": model_key,
             "df": calib_df,
@@ -519,7 +519,7 @@ def render_tab() -> None:
                         }
                     )
                 df_runs = pd.DataFrame(rows).sort_values("cost", ascending=True, na_position="last")
-                st.dataframe(df_runs, hide_index=True, use_container_width=True)
+                st.dataframe(df_runs, hide_index=True, width="stretch")
             except Exception as exc:
                 st.warning(f"Impossible d'afficher les runs: {exc}")
 
@@ -533,7 +533,7 @@ def render_tab() -> None:
     st.markdown("### Paramètres calibrés")
     st.json(result.get("params") or {})
 
-    if st.button("Envoyer IV modèle vers Options", use_container_width=True, type="secondary", key="adv_calib_send_to_opt"):
+    if st.button("Envoyer IV modèle vers Options", width="stretch", type="secondary", key="adv_calib_send_to_opt"):
         try:
             S0_res = float(result.get("S0") or S0)
             m_grid_res = np.array(result.get("m_grid") or [])

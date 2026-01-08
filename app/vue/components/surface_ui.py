@@ -33,7 +33,7 @@ def plot_iv_heatmap(z: np.ndarray, x: np.ndarray, y: np.ndarray, title: str) -> 
         )
     )
     fig.update_layout(title=title, xaxis_title="Moneyness", yaxis_title="Time to maturity (y)")
-    st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True, "scrollZoom": False})
+    st.plotly_chart(fig, width="stretch", config={"staticPlot": True, "scrollZoom": False})
 
 
 def grid_to_surface_df(
@@ -272,14 +272,14 @@ def render_surface_filters(df_canon: pd.DataFrame, *, key_prefix: str) -> pd.Dat
         df_f = df_f.sample(max_rows, random_state=42).reset_index(drop=True)
 
     st.caption(f"Après filtre: {len(df_f):,} lignes")
-    st.dataframe(df_f.head(30), hide_index=True, use_container_width=True)
+    st.dataframe(df_f.head(30), hide_index=True, width="stretch")
     try:
         st.download_button(
             "Télécharger la surface filtrée (CSV)",
             data=df_f[["K", "T", "S0", "iv", "type"]].to_csv(index=False).encode("utf-8"),
             file_name="surface_filtered.csv",
             mime="text/csv",
-            use_container_width=True,
+            width="stretch",
         )
     except Exception:
         pass
@@ -373,7 +373,7 @@ def surface_diagnostics(df: pd.DataFrame, *, scatter_key: str) -> None:
                 )
             )
             fig.update_layout(xaxis_title="Moneyness (K/S0)", yaxis_title="T (years)", height=360)
-            st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True, "scrollZoom": False})
+            st.plotly_chart(fig, width="stretch", config={"staticPlot": True, "scrollZoom": False})
         except Exception as exc:
             st.warning(f"Plot impossible: {exc}")
 
@@ -392,7 +392,7 @@ def render_surface_preview_dropdown(
     preview_n = 30
 
     def _render() -> None:
-        st.dataframe(df.head(preview_n), hide_index=True, use_container_width=True)
+        st.dataframe(df.head(preview_n), hide_index=True, width="stretch")
         if len(df) > preview_n:
             st.caption(f"Aperçu: {preview_n} premières lignes affichées (sur {len(df):,}).")
         st.divider()

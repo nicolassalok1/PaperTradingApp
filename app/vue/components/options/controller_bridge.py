@@ -282,7 +282,7 @@ def render_static_line_chart(series, title: str | None = None, y_label: str | No
         .interactive(False)
         .configure_view(continuousHeight=260, strokeWidth=0)
     )
-    st.altair_chart(chart, use_container_width=True, theme=None)
+    st.altair_chart(chart, width="stretch", theme=None)
     return True
 
 

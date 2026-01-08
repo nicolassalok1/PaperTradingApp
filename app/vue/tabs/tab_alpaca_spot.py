@@ -68,7 +68,7 @@ def _render_positions_section() -> None:
     cols = [c for c in preferred_cols if c in df.columns]
     if cols:
         df = df[cols]
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, width="stretch")
 
 
 def _render_orders_section() -> None:
@@ -88,7 +88,7 @@ def _render_orders_section() -> None:
     cols = [c for c in preferred_cols if c in df.columns]
     if cols:
         df = df[cols]
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, width="stretch")
 
 
 def _render_order_form() -> None:
@@ -149,10 +149,10 @@ def _render_price_history() -> None:
             break
 
     if not price_col:
-        st.dataframe(df_hist, hide_index=True, use_container_width=True)
+        st.dataframe(df_hist, hide_index=True, width="stretch")
         return
 
-    st.line_chart(df_hist[[price_col]], height=300, use_container_width=True)
+    st.line_chart(df_hist[[price_col]], height=300, width="stretch")
     st.caption(f"{len(df_hist)} bars loaded for {symbol} ({timeframe}).")
 
 

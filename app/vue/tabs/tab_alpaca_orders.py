@@ -63,7 +63,7 @@ def _render_positions_section() -> None:
     cols = [c for c in preferred_cols if c in df.columns]
     if cols:
         df = df[cols]
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, width="stretch")
 
 
 def _render_orders_section() -> None:
@@ -83,7 +83,7 @@ def _render_orders_section() -> None:
     cols = [c for c in preferred_cols if c in df.columns]
     if cols:
         df = df[cols]
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, width="stretch")
 
 
 def _submit_with_feedback(label: str, submit_fn, *args):

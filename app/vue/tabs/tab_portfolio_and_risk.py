@@ -35,7 +35,7 @@ def _render_exposure(
         .mark_arc()
         .encode(theta="Exposure", color="symbol", tooltip=["symbol", "Exposure"])
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
     st.caption(f"Total exposure: ${exposure:,.2f}")
 
     st.markdown("### Exposition net (long vs short)")
@@ -44,7 +44,7 @@ def _render_exposure(
     net_df = pd.DataFrame(
         {"Side": ["Long", "Short"], "Exposure": [long_expo, short_expo]}
     )
-    st.bar_chart(net_df.set_index("Side"), use_container_width=True)
+    st.bar_chart(net_df.set_index("Side"), width="stretch")
     st.caption(f"Net exposure: ${net_exposure:,.2f}")
 
 
@@ -62,7 +62,7 @@ def _render_position_table(per_position: list[dict]) -> None:
         return
     df = pd.DataFrame(per_position)
     if not df.empty:
-        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.dataframe(df, hide_index=True, width="stretch")
 
 
 def _render_alerts(alerts: list[str]) -> None:
@@ -82,7 +82,7 @@ def _render_pnl_chart(pnl_series: pd.Series | None) -> None:
     df = pnl_series.reset_index()
     df.columns = ["Date", "PnL"]
     df["Date"] = pd.to_datetime(df["Date"])
-    st.line_chart(df.set_index("Date"), height=260, use_container_width=True)
+    st.line_chart(df.set_index("Date"), height=260, width="stretch")
 
 
 def _alloc_method_mapping(label: str) -> str:
@@ -102,7 +102,7 @@ def _render_allocation_results(result: dict) -> None:
         st.warning("No allocation results.")
         return
     df = pd.DataFrame({"Symbol": symbols, "Target Weight": weights})
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, width="stretch")
     st.caption("Target weights (sum=1).")
     fig = df.set_index("Symbol").plot.pie(y="Target Weight", autopct="%1.1f%%").figure
     st.pyplot(fig, clear_figure=True)
@@ -113,7 +113,7 @@ def _render_orders_table(orders: list[dict]) -> None:
         st.info("No rebalance orders required.")
         return
     df_orders = pd.DataFrame(orders)
-    st.dataframe(df_orders, hide_index=True, use_container_width=True)
+    st.dataframe(df_orders, hide_index=True, width="stretch")
     turnover = df_orders["qty"].abs().sum()
     st.caption(f"Approx turnover (sum abs qty): {turnover:.4f}")
 
@@ -153,7 +153,7 @@ def _render_rebalancing_tools() -> None:
         if executions:
             st.success("Rebalance executed.")
             st.dataframe(
-                pd.DataFrame(executions), hide_index=True, use_container_width=True
+                pd.DataFrame(executions), hide_index=True, width="stretch"
             )
         else:
             st.info("No executions performed.")

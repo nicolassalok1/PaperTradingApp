@@ -11,7 +11,9 @@ from app.vue.components.ui_helpers import render_quickstart
 
 
 TAB_LABEL = "🤖 Bots"
-
+IN_PROGRESS_NOTE = (
+    "Cette section est en cours d'implementation. Le contenu est masque le temps de finaliser les features."
+)
 
 def _as_df(rows) -> pd.DataFrame:
     try:
@@ -26,7 +28,7 @@ def _render_assistant() -> None:
 
     col_a, col_b = st.columns([1, 1])
     with col_a:
-        refresh = st.button("Refresh snapshot", use_container_width=True)
+        refresh = st.button("Refresh snapshot", width="stretch")
     with col_b:
         st.caption("OpenAI est optionnel; l’onglet fonctionne sans clé.")
 
@@ -43,13 +45,13 @@ def _render_assistant() -> None:
     st.json(account)
 
     st.markdown("**Positions (spot)**")
-    st.dataframe(_as_df(snapshot.get("spot_positions")), use_container_width=True)
+    st.dataframe(_as_df(snapshot.get("spot_positions")), width="stretch")
 
     st.markdown("**Positions (options)**")
-    st.dataframe(_as_df(snapshot.get("option_positions")), use_container_width=True)
+    st.dataframe(_as_df(snapshot.get("option_positions")), width="stretch")
 
     st.markdown("**Open orders**")
-    st.dataframe(_as_df(snapshot.get("open_orders")), use_container_width=True)
+    st.dataframe(_as_df(snapshot.get("open_orders")), width="stretch")
 
     st.divider()
     st.markdown("**Copilot**")
@@ -119,7 +121,7 @@ def _render_execution() -> None:
             st.success(f"Saved: {cfg.symbol}")
 
     st.markdown("**Saved configs**")
-    st.dataframe(_as_df([asdict(c) for c in configs.values()]), use_container_width=True)
+    st.dataframe(_as_df([asdict(c) for c in configs.values()]), width="stretch")
 
     if selected_cfg is None:
         st.info("Sélectionne un bot existant pour le lancer.")
@@ -134,7 +136,7 @@ def _render_execution() -> None:
     with col2:
         allow_live = st.checkbox("Allow live trading", value=False)
     with col3:
-        if st.button("Run", use_container_width=True):
+        if st.button("Run", width="stretch"):
             st.session_state["bots_grid_last_report"] = bots_controller.run_grid_once(
                 selected_cfg,
                 allow_submit=allow_submit,
@@ -162,10 +164,10 @@ def _render_execution() -> None:
 
     if report.get("submitted_orders"):
         st.markdown("**Submitted orders**")
-        st.dataframe(_as_df(report.get("submitted_orders")), use_container_width=True)
+        st.dataframe(_as_df(report.get("submitted_orders")), width="stretch")
     if report.get("simulated_orders"):
         st.markdown("**Simulated orders**")
-        st.dataframe(_as_df(report.get("simulated_orders")), use_container_width=True)
+        st.dataframe(_as_df(report.get("simulated_orders")), width="stretch")
 
 
 def _render_volatility() -> None:
@@ -180,7 +182,7 @@ def _render_volatility() -> None:
         sym = st.text_input("Ticker (optional)", value="SPY", key="bots_straddle_ticker")
         c1, c2 = st.columns([1, 1])
         with c1:
-            if st.button("Load spot", use_container_width=True):
+            if st.button("Load spot", width="stretch"):
                 spot = bots_controller.get_spot_price(sym)
                 if spot:
                     st.session_state["bots_straddle_spot"] = float(spot)
@@ -266,7 +268,7 @@ def _render_volatility() -> None:
                 df = df.dropna(subset=["date"]).set_index("date")
             if not df.empty and "vol" in df.columns:
                 st.line_chart(df["vol"], height=220)
-            st.dataframe(df.tail(30), use_container_width=True)
+            st.dataframe(df.tail(30), width="stretch")
 
     with meanrev_tab:
         st.markdown("Analyse de mean-reversion sur la volatilité réalisée (OHLC).")
@@ -342,14 +344,14 @@ def _render_volatility() -> None:
                 except Exception:
                     st.dataframe(
                         df[["current_vol", "forward_vol"]].tail(200),
-                        use_container_width=True,
+                        width="stretch",
                     )
 
                 st.markdown("**Scatter: current vs (forward-current)**")
                 try:
                     st.scatter_chart(df, x="current_vol", y="vol_diff", height=240)
                 except Exception:
-                    st.dataframe(df[["current_vol", "vol_diff"]].tail(200), use_container_width=True)
+                    st.dataframe(df[["current_vol", "vol_diff"]].tail(200), width="stretch")
 
                 if "date" in df.columns:
                     df_ts = df.set_index("date")
@@ -358,7 +360,7 @@ def _render_volatility() -> None:
                         st.markdown("**Time series**")
                         st.line_chart(df_ts[cols], height=220)
 
-                st.dataframe(df.tail(30), use_container_width=True)
+                st.dataframe(df.tail(30), width="stretch")
 
     with markov_tab:
         st.markdown("Matrice de transition Markov sur régimes de volatilité réalisée (quantiles).")
@@ -415,13 +417,13 @@ def _render_volatility() -> None:
             if labels and mat:
                 df_m = pd.DataFrame(mat, index=labels, columns=labels)
                 st.markdown("**Transition matrix (rows sum to 1)**")
-                st.dataframe(df_m, use_container_width=True)
+                st.dataframe(df_m, width="stretch")
 
             df_s = _as_df(res.get("series"))
             if not df_s.empty and "date" in df_s.columns:
                 df_s["date"] = pd.to_datetime(df_s["date"], errors="coerce")
             if not df_s.empty:
-                st.dataframe(df_s.tail(40), use_container_width=True)
+                st.dataframe(df_s.tail(40), width="stretch")
 
 
 def render_tab() -> None:

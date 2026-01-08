@@ -33,11 +33,11 @@ def _render_positions() -> list[dict]:
 
     if equities:
         st.caption("Equity positions")
-        st.dataframe(pd.DataFrame(equities), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(equities), hide_index=True, width="stretch")
 
     if options:
         st.caption("Option positions")
-        st.dataframe(pd.DataFrame(options), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(options), hide_index=True, width="stretch")
 
     return options or []
 

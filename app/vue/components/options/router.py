@@ -219,7 +219,7 @@ def _render_iv_surface_section(ticker: str) -> None:
             ),
             height=520,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     if source_kind.lower().startswith("calib"):
         df_cal = st.session_state.get("calib_model_surface_df")
@@ -252,7 +252,7 @@ def _render_iv_surface_section(ticker: str) -> None:
         st.session_state[_IV_SURFACE_TKR_KEY] = tkr
         st.session_state[_IV_SURFACE_DF_KEY] = None
 
-    refresh = st.button("Refresh IV surface", use_container_width=True, type="secondary")
+    refresh = st.button("Refresh IV surface", width="stretch", type="secondary")
     df_iv = st.session_state.get(_IV_SURFACE_DF_KEY)
 
     if refresh:

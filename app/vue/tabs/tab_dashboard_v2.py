@@ -59,7 +59,7 @@ def _render_performance_section(lookback_days: int) -> None:
                 df_eq = df_eq.set_index("date")
                 st.line_chart(
                     df_eq[["equity", "portfolio_value"]],
-                    use_container_width=True,
+                    width="stretch",
                 )
             else:
                 st.info("Equity curve unavailable.")
@@ -76,7 +76,7 @@ def _render_performance_section(lookback_days: int) -> None:
                 df_pnl = df_pnl.set_index("date")
                 cols = [c for c in ["pnl", "cum_pnl"] if c in df_pnl.columns]
                 if cols:
-                    st.line_chart(df_pnl[cols], use_container_width=True)
+                    st.line_chart(df_pnl[cols], width="stretch")
                 else:
                     st.info("PnL columns not available.")
             else:
@@ -102,14 +102,14 @@ def _render_positions_and_exposure() -> None:
                     st.dataframe(
                         pd.DataFrame(spot),
                         hide_index=True,
-                        use_container_width=True,
+                        width="stretch",
                     )
             if options:
                 with st.expander("Options", expanded=True):
                     st.dataframe(
                         pd.DataFrame(options),
                         hide_index=True,
-                        use_container_width=True,
+                        width="stretch",
                     )
 
     with col_expo:
@@ -122,12 +122,12 @@ def _render_positions_and_exposure() -> None:
                 if "market_value" in df_expo.columns:
                     st.bar_chart(
                         df_expo["market_value"],
-                        use_container_width=True,
+                        width="stretch",
                     )
                 st.dataframe(
                     df_expo.reset_index(),
                     hide_index=True,
-                    use_container_width=True,
+                    width="stretch",
                 )
             else:
                 st.info("Exposure data malformed.")
@@ -149,11 +149,11 @@ def _render_pnl_attribution_expander() -> None:
             st.info("PnL attribution is empty.")
             return
 
-        st.dataframe(df_attr, hide_index=True, use_container_width=True)
+        st.dataframe(df_attr, hide_index=True, width="stretch")
         if "symbol" in df_attr.columns and "unrealized_pnl" in df_attr.columns:
             st.bar_chart(
                 df_attr.set_index("symbol")["unrealized_pnl"],
-                use_container_width=True,
+                width="stretch",
             )
 
         total_unreal = float(pnl_attr.get("total_unrealized", 0.0) or 0.0)
@@ -190,7 +190,7 @@ def _render_trade_history_expander() -> None:
             st.dataframe(
                 pd.DataFrame(trades),
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.info("No trades for the selected period.")

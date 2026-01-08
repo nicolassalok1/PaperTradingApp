@@ -165,7 +165,7 @@ def _render_option_positions_section() -> None:
     cols = [c for c in df.columns if c in preferred_cols]
     if cols:
         df = df[cols]
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, width="stretch")
 
 
 def _render_option_orders_section() -> None:
@@ -194,7 +194,7 @@ def _render_option_orders_section() -> None:
     cols = [c for c in df.columns if c in preferred_cols]
     if cols:
         df = df[cols]
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, width="stretch")
 
 
 def _get_chain_from_state() -> pd.DataFrame | None:
@@ -356,12 +356,12 @@ def _render_option_market_order_form() -> None:
             default_ticker = default_ticker or "AAPL"
             ticker = st.text_input("Underlying ticker", default_ticker).upper().strip()
     with col_reload:
-        if st.button("Reload list", type="secondary", use_container_width=True):
+        if st.button("Reload list", type="secondary", width="stretch"):
             st.session_state.pop(_TICKERS_STATE_KEY, None)
             st.session_state.pop(_TICKERS_META_STATE_KEY, None)
             st.rerun()
     with col_button:
-        load_clicked = st.button("Load options chain", use_container_width=True)
+        load_clicked = st.button("Load options chain", width="stretch")
 
     with st.expander("Advanced: fetch settings", expanded=False):
         st.caption("Tip: Alpaca snapshots are paginated; this fetch pulls all pages by default.")
