@@ -15,7 +15,7 @@ import pandas as pd
 from types import SimpleNamespace
 
 from app.controller import options_controller as oc
-from app.vue.components.options.plot_limits import limit_figure_width
+from app.vue.components.options.plot_limits import MAX_CHART_WIDTH_PX, limit_figure_width
 from app.vue.components.options import ui_helpers as opt_ui
 from app.vue.state.options_context import get_option_context
 from app.controller.options_controller import floor_n
@@ -279,11 +279,11 @@ def render_static_line_chart(series, title: str | None = None, y_label: str | No
             y=alt.Y(f"{y_col}:Q", title=y_title),
             tooltip=[alt.Tooltip(f"{x_col}:T", title="Date"), alt.Tooltip(f"{y_col}:Q", title=y_title)],
         )
-        .properties(title=title or "", height=260, width=500)
+        .properties(title=title or "", height=260)
         .interactive(False)
         .configure_view(continuousHeight=260, strokeWidth=0)
     )
-    st.altair_chart(chart, use_container_width=False, theme=None)
+    st.altair_chart(chart, use_container_width=True, theme=None)
     return True
 
 
@@ -298,7 +298,7 @@ def render_figures_grid(figs):
         pair = [f for f in figs[i : i + 2] if f is not None]
         if not pair:
             continue
-        cols = st.columns(len(pair))
+        cols = st.columns(len(pair), gap="small")
         for col, fig in zip(cols, pair):
             safe_fig = limit_figure_width(fig)
             col.pyplot(safe_fig, clear_figure=True)

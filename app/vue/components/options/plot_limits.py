@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import matplotlib.figure as mpl_fig
 
+MAX_CHART_WIDTH_PX = 460.0
 
-def limit_figure_width(fig: mpl_fig.Figure, max_width_px: float = 500.0) -> mpl_fig.Figure:
+
+def limit_figure_width(fig: mpl_fig.Figure, max_width_px: float = MAX_CHART_WIDTH_PX) -> mpl_fig.Figure:
     """
     Scale down a matplotlib figure so its rendered width does not exceed max_width_px.
     Preserves aspect ratio by scaling height proportionally.
@@ -22,4 +24,13 @@ def limit_figure_width(fig: mpl_fig.Figure, max_width_px: float = 500.0) -> mpl_
     except Exception:
         # Best-effort resize; ignore if figure metadata is unavailable.
         return fig
+    return fig
+
+
+def limit_plotly_width(fig, max_width_px: float = MAX_CHART_WIDTH_PX):
+    """Apply a max width to Plotly figures in-place and return the figure."""
+    try:
+        fig.update_layout(width=float(max_width_px))
+    except Exception:
+        pass
     return fig
