@@ -160,40 +160,7 @@ def render_tab() -> None:
         st.error("Aucun modèle calibrable n'est disponible.")
         return
 
-    col_a, col_b = st.columns([2, 1])
-    with col_a:
-        model_key = st.selectbox(
-            "Modèle",
-            options=model_keys,
-            index=model_keys.index("heston_fft") if "heston_fft" in model_keys else 0,
-            format_func=lambda k: override_labels.get(k, key_to_spec.get(k, {}).get("label", k)),
-        )
-    with col_b:
-        spec = key_to_spec.get(model_key, {})
-        st.caption(f"pricing={spec.get('pricing')} | calibration={spec.get('calibration')}")
-        if spec.get("expensive"):
-            st.warning("Modèle coûteux: prévoir des runs plus longs.")
-
     constraints: Dict[str, Any] = {}
-    with st.expander("Contraintes (JSON)", expanded=False):
-        st.caption(
-            "Exemples:\n"
-            "- SABR: {\"beta\": 0.5}\n"
-            "- FFT: {\"fft_cfg\": {\"alpha\": 1.5, \"n\": 2048, \"eta\": 0.25}}\n"
-            "- rHeston: {\"fft_cfg\": {...}, \"markovian_cfg\": {\"n_factors\": 12, \"steps_per_year\": 120}}\n"
-            "- rBergomi: {\"mc_cfg\": {\"n_design\": 24, \"n_paths\": 4000, \"n_steps\": 60}}\n"
-            "- Volterra: {\"mc_cfg\": {\"kernel_type\": \"fractional\", \"H\": 0.1, \"n_design\": 24}}"
-        )
-        constraints_raw = st.text_area(
-            "Contraintes (JSON)",
-            value="{}",
-            height=140,
-            key="adv_calib_constraints_json",
-        )
-        parsed = _parse_json_dict(constraints_raw)
-        if constraints_raw and parsed is None:
-            st.warning("JSON invalide.")
-        constraints = parsed or {}
 
     st.markdown("### Surface IV marché")
     st.caption("Source: Ticker (Yahoo) uniquement (autres sources désactivées).")
@@ -380,8 +347,7 @@ def render_tab() -> None:
         if canon_df.empty:
             st.warning("Surface non reconnue (colonnes attendues: K, T, S0, iv).")
         else:
-            with st.expander("Filtrage surface", expanded=False):
-                calib_df = render_surface_filters(canon_df, key_prefix="adv_calib")
+            calib_df = canon_df
 
     chain_meta = _load_chain_meta(surface_ticker or ticker)
     spot_chain = chain_meta.get("spot")
@@ -486,6 +452,22 @@ def render_tab() -> None:
         if t_raw.strip() and t_grid is None:
             st.warning("t_grid invalide (liste de floats séparés par des virgules).")
 
+    st.markdown("### Modèle (sélection juste avant calibration)")
+    col_a, col_b = st.columns([2, 1])
+    with col_a:
+        model_key = st.selectbox(
+            "Modèle",
+            options=model_keys,
+            index=model_keys.index("heston_fft") if "heston_fft" in model_keys else 0,
+            format_func=lambda k: override_labels.get(k, key_to_spec.get(k, {}).get("label", k)),
+            key="adv_calib_model_select",
+        )
+    with col_b:
+        spec = key_to_spec.get(model_key, {})
+        st.caption(f"pricing={spec.get('pricing')} | calibration={spec.get('calibration')}")
+        if spec.get("expensive"):
+            st.warning("Modèle coûteux: prévoir des runs plus longs.")
+
     def _eta_human(seconds: float) -> str:
         seconds = max(0.0, float(seconds))
         if seconds < 60:
@@ -553,30 +535,10 @@ def render_tab() -> None:
     details = result.get("details") or {}
     runs = details.get("runs") if isinstance(details, dict) else None
     if isinstance(runs, list) and runs:
-        with st.expander("Détails optimisation (multi-start)", expanded=False):
-            best_run = details.get("best_run") if isinstance(details, dict) else None
-            if best_run is not None:
-                st.caption(f"Best run: {best_run}")
-            try:
-                rows = []
-                for r in runs:
-                    if not isinstance(r, dict):
-                        continue
-                    rows.append(
-                        {
-                            "idx": r.get("idx"),
-                            "ok": r.get("ok"),
-                            "converged": r.get("converged"),
-                            "cost": r.get("cost"),
-                            "nfev": r.get("nfev"),
-                            "optimality": r.get("optimality"),
-                            "message": r.get("message") or r.get("error"),
-                        }
-                    )
-                df_runs = pd.DataFrame(rows).sort_values("cost", ascending=True, na_position="last")
-                st.dataframe(df_runs, hide_index=True, width="stretch")
-            except Exception as exc:
-                st.warning(f"Impossible d'afficher les runs: {exc}")
+        best_run = details.get("best_run") if isinstance(details, dict) else None
+        if best_run is not None:
+            st.caption(f"Best run: {best_run}")
+        # Tableau des runs masqué pour alléger l'UI.
 
     metrics = result.get("metrics") or {}
     if isinstance(metrics, dict) and metrics:
@@ -658,8 +620,7 @@ def render_tab() -> None:
     else:
         st.info("Aucune surface à afficher.")
 
-    with st.expander("Détails", expanded=False):
-        st.json(details or {})
+    # Détails bruts supprimés (non affichés)
 
 
 render = render_tab
