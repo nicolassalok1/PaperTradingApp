@@ -468,6 +468,24 @@ def render_tab() -> None:
         if spec.get("expensive"):
             st.warning("Modèle coûteux: prévoir des runs plus longs.")
 
+    profile = st.radio(
+        "Profil de calibration",
+        options=["Rapide", "Normal", "Fine"],
+        index=1,
+        horizontal=True,
+        key="adv_calib_profile",
+        help="Rapide: itérations limitées. Normal: défaut équilibré. Fine: plus d'itérations et multi-start.",
+    )
+    profile_map = {
+        "Rapide": {"max_nfev": 30, "n_starts": 1},
+        "Normal": {"max_nfev": 60, "n_starts": 1},
+        "Fine": {"max_nfev": 120, "n_starts": 3},
+    }
+    cfg = profile_map.get(profile, profile_map["Normal"])
+    # Aligne les paramètres d'optimisation sur le profil choisi
+    max_nfev = int(cfg["max_nfev"])
+    n_starts = int(cfg["n_starts"])
+
     def _eta_human(seconds: float) -> str:
         seconds = max(0.0, float(seconds))
         if seconds < 60:
