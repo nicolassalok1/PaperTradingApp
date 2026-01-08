@@ -426,19 +426,22 @@ def _render_volatility() -> None:
                 st.dataframe(df_s.tail(40), width="stretch")
 
 
+def _render_placeholder(section_name: str) -> None:
+    st.info(f"{section_name} est en cours d'implementation. {IN_PROGRESS_NOTE}")
+
+
 def render_tab() -> None:
     render_page_header(
         "Bots & Assistant",
-        "Outils d'assistance, exécution (grid/DCA) et analytics de volatilité/régimes.",
+        IN_PROGRESS_NOTE,
         icon="🤖",
         badge="Tools",
     )
     render_quickstart(
-        "Guide rapide",
+        "Statut",
         [
-            "‘Assistant’ montre l’état du compte/positions et peut répondre à partir du snapshot.",
-            "‘Exécution’ est safe par défaut (`dry-run`). Active le live uniquement si tu sais ce que tu fais.",
-            "'Volatilité' contient des outils rapides (straddle, IV crush, régime, mean reversion, Markov).",
+            "Les sous-onglets sont en cours d'implementation et leur contenu est volontairement masque.",
+            "Nous afficherons les outils une fois les verifications terminees.",
         ],
         expanded=False,
     )
@@ -446,13 +449,16 @@ def render_tab() -> None:
     assistant_tab, execution_tab, vol_tab = st.tabs(["Assistant", "Exécution", "Volatilité"])
 
     with assistant_tab:
-        _render_assistant()
+        _render_placeholder("Assistant")
+        # _render_assistant()  # TODO: re-activer quand la section sera prete
 
     with execution_tab:
-        _render_execution()
+        _render_placeholder("Exécution")
+        # _render_execution()  # TODO: re-activer quand la section sera prete
 
     with vol_tab:
-        _render_volatility()
+        _render_placeholder("Volatilité")
+        # _render_volatility()  # TODO: re-activer quand la section sera prete
 
 
 def render() -> None:

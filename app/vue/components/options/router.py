@@ -219,7 +219,8 @@ def _render_iv_surface_section(ticker: str) -> None:
             ),
             height=520,
         )
-        st.plotly_chart(fig, width="stretch")
+        fig.update_layout(width=500)
+        st.plotly_chart(fig, width=500)
 
     if source_kind.lower().startswith("calib"):
         df_cal = st.session_state.get("calib_model_surface_df")
