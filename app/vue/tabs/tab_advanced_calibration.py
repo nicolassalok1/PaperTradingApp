@@ -133,12 +133,13 @@ def render_tab() -> None:
         return
 
     filtered_specs = [
-        s for s in specs if isinstance(s, dict) and s.get("key") and s.get("key") != "heston_v1"
+        s for s in specs if isinstance(s, dict) and s.get("key") and s.get("key") != "bates"
     ]
     key_to_spec = {s["key"]: s for s in filtered_specs}
 
     override_labels = {
         "heston_fft": "Heston",
+        "heston_v1": "Heston v1 (legacy)",
         "rheston": "rHeston",
         "rbergomi": "rBergomi",
         "volterra": "Volterra SDE",
@@ -147,6 +148,7 @@ def render_tab() -> None:
     }
     desired_order = [
         "heston_fft",
+        "heston_v1",
         "rheston",
         "rbergomi",
         "volterra",
