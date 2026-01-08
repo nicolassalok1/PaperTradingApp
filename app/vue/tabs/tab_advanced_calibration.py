@@ -181,9 +181,24 @@ def render_tab() -> None:
         "Cache (cache/*.csv, cache/YahooOptionChains/*.csv)",
         "Alpaca (live)",
     ]
+    disabled_sources = [s for s in surface_sources if s != "Ticker (Yahoo)"]
     if st.session_state.get("adv_calib_surface_source") not in surface_sources:
         st.session_state["adv_calib_surface_source"] = surface_sources[0]
-    source = st.radio("Source", options=surface_sources, horizontal=True, key="adv_calib_surface_source")
+
+    def _fmt_source(src: str) -> str:
+        return f"{src} (désactivé)" if src in disabled_sources else src
+
+    _selected_source = st.radio(
+        "Source",
+        options=surface_sources,
+        format_func=_fmt_source,
+        horizontal=True,
+        index=0,
+        key="adv_calib_surface_source",
+    )
+    if _selected_source != "Ticker (Yahoo)":
+        st.info("Seule la source Yahoo est active. Les autres options sont temporairement désactivées.")
+    source = "Ticker (Yahoo)"
 
     preview_df: pd.DataFrame | None = None
     surface_ticker: str | None = None
@@ -237,6 +252,9 @@ def render_tab() -> None:
                     st.session_state[_YAHOO_SURFACE_STATE_KEY] = surface_df
                     st.session_state[_YAHOO_SURFACE_TICKER_KEY] = ticker
                     st.session_state[_YAHOO_SURFACE_MAX_YEARS_KEY] = float(max_years)
+                    s0_guess = median_s0(surface_df)
+                    if s0_guess:
+                        st.session_state["common_spot_value"] = float(s0_guess)
                     st.success(f"Surface Yahoo chargée ({len(surface_df):,} lignes).")
             except Exception as exc:
                 st.error(f"Yahoo indisponible: {exc}")
@@ -344,6 +362,9 @@ def render_tab() -> None:
         if surface_df is not None:
             surface_ticker = surface_ticker or str(st.session_state.get(_CHAIN_TICKER_KEY) or "").strip().upper() or None
             preview_df = surface_df
+            s0_guess = median_s0(surface_df)
+            if s0_guess:
+                st.session_state["common_spot_value"] = float(s0_guess)
             render_surface_preview_dropdown(
                 surface_df,
                 label="Aperçu / diagnostics surface",
