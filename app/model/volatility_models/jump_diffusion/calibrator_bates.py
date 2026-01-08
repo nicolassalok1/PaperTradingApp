@@ -244,8 +244,7 @@ class BatesCalibrator(BaseSurfaceCalibrator):
             # soft Feller penalty
             kappa, theta, sigma, _, _, _, _, _ = [float(v) for v in x]
             feller_gap = float(max(0.0, sigma * sigma - 2.0 * kappa * theta))
-            if feller_gap > 0:
-                res = np.concatenate([res, np.array([feller_gap], dtype=float)])
+            res = np.concatenate([res, np.array([feller_gap], dtype=float)])
             return res.astype(float)
 
         runs: list[Dict[str, Any]] = []
