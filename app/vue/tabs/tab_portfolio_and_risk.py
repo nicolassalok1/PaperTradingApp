@@ -87,12 +87,9 @@ def _render_pnl_chart(pnl_series: pd.Series | None) -> None:
 
 def _alloc_method_mapping(label: str) -> str:
     mapping = {
-        "Markowitz - Minimum Variance": "markowitz_min_var",
-        "Markowitz - Maximum Sharpe": "markowitz_max_sharpe",
-        "Risk Parity (ERC)": "risk_parity",
         "EigenPortfolio (PCA-based)": "eigen",
     }
-    return mapping.get(label, "markowitz_min_var")
+    return mapping.get(label, "eigen")
 
 
 def _render_allocation_results(result: dict) -> None:
@@ -121,29 +118,12 @@ def _render_orders_table(orders: list[dict]) -> None:
 def _render_rebalancing_tools() -> None:
     st.markdown("### Allocation & Rebalancement")
 
-    method_options = [
-        {"label": "EigenPortfolio (PCA-based)", "enabled": True},
-        {"label": "Markowitz - Minimum Variance", "enabled": False},
-        {"label": "Markowitz - Maximum Sharpe", "enabled": False},
-        {"label": "Risk Parity (ERC)", "enabled": False},
-    ]
-    display_labels = [
-        f"{opt['label']} (disabled)" if not opt["enabled"] else opt["label"] for opt in method_options
-    ]
-    default_idx = next((i for i, opt in enumerate(method_options) if opt["enabled"]), 0)
-    selected_display = st.selectbox(
+    method_label = st.selectbox(
         "Optimization method",
-        options=display_labels,
-        index=default_idx,
+        options=["EigenPortfolio (PCA-based)"],
+        index=0,
         key="por_alloc_method",
     )
-    selected_idx = display_labels.index(selected_display)
-    selected_opt = method_options[selected_idx]
-    if not selected_opt["enabled"]:
-        st.info("Seul EigenPortfolio est disponible pour le moment.")
-        selected_opt = method_options[default_idx]
-        st.session_state["por_alloc_method"] = display_labels[default_idx]
-    method_label = selected_opt["label"]
     lookback_days = st.number_input(
         "Lookback days", min_value=20, max_value=365, value=60, step=5
     )
