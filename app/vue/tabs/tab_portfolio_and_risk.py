@@ -121,15 +121,29 @@ def _render_orders_table(orders: list[dict]) -> None:
 def _render_rebalancing_tools() -> None:
     st.markdown("### Allocation & Rebalancement")
 
-    method_label = st.selectbox(
+    method_options = [
+        {"label": "EigenPortfolio (PCA-based)", "enabled": True},
+        {"label": "Markowitz - Minimum Variance", "enabled": False},
+        {"label": "Markowitz - Maximum Sharpe", "enabled": False},
+        {"label": "Risk Parity (ERC)", "enabled": False},
+    ]
+    display_labels = [
+        f"{opt['label']} (disabled)" if not opt["enabled"] else opt["label"] for opt in method_options
+    ]
+    default_idx = next((i for i, opt in enumerate(method_options) if opt["enabled"]), 0)
+    selected_display = st.selectbox(
         "Optimization method",
-        [
-            "Markowitz - Minimum Variance",
-            "Markowitz - Maximum Sharpe",
-            "Risk Parity (ERC)",
-            "EigenPortfolio (PCA-based)",
-        ],
+        options=display_labels,
+        index=default_idx,
+        key="por_alloc_method",
     )
+    selected_idx = display_labels.index(selected_display)
+    selected_opt = method_options[selected_idx]
+    if not selected_opt["enabled"]:
+        st.info("Seul EigenPortfolio est disponible pour le moment.")
+        selected_opt = method_options[default_idx]
+        st.session_state["por_alloc_method"] = display_labels[default_idx]
+    method_label = selected_opt["label"]
     lookback_days = st.number_input(
         "Lookback days", min_value=20, max_value=365, value=60, step=5
     )
