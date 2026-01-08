@@ -92,8 +92,16 @@ class CalibrationController:
         return {"success": False, "message": "Calibration non implémentée.", "details": {}}
 
     def _to_ndarray(self, arr: Any) -> np.ndarray:
+        """
+        Convert to numpy array; return empty if input is None or scalar (avoids len() on 0-d arrays).
+        """
+        if arr is None:
+            return np.array([])
         try:
-            return np.asarray(arr, dtype=float)
+            out = np.asarray(arr, dtype=float)
+            if out.ndim == 0:  # scalar -> treat as empty so defaults kick in
+                return np.array([])
+            return out
         except Exception:
             return np.array([])
 

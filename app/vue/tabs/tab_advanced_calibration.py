@@ -111,8 +111,33 @@ def render_tab() -> None:
         st.error("Aucun modèle avancé disponible.")
         return
 
-    key_to_spec = {s.get("key"): s for s in specs if isinstance(s, dict) and s.get("key")}
-    model_keys = list(key_to_spec.keys())
+    filtered_specs = [
+        s for s in specs if isinstance(s, dict) and s.get("key") and s.get("key") != "heston_v1"
+    ]
+    key_to_spec = {s["key"]: s for s in filtered_specs}
+
+    override_labels = {
+        "heston_fft": "Heston",
+        "rheston": "rHeston",
+        "rbergomi": "rBergomi",
+        "volterra": "Volterra SDE",
+        "merton_jump_diffusion": "JumpDiffusion",
+        "sabr": "SABR",
+    }
+    desired_order = [
+        "heston_fft",
+        "rheston",
+        "rbergomi",
+        "volterra",
+        "merton_jump_diffusion",
+        "sabr",
+    ]
+    model_keys = [k for k in desired_order if k in key_to_spec]
+    if not model_keys:
+        model_keys = list(key_to_spec.keys())
+    if not model_keys:
+        st.error("Aucun modèle calibrable n'est disponible.")
+        return
 
     col_a, col_b = st.columns([2, 1])
     with col_a:
@@ -120,7 +145,7 @@ def render_tab() -> None:
             "Modèle",
             options=model_keys,
             index=model_keys.index("heston_fft") if "heston_fft" in model_keys else 0,
-            format_func=lambda k: key_to_spec.get(k, {}).get("label", k),
+            format_func=lambda k: override_labels.get(k, key_to_spec.get(k, {}).get("label", k)),
         )
     with col_b:
         spec = key_to_spec.get(model_key, {})
