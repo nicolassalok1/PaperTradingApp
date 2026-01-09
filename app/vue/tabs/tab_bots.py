@@ -7,7 +7,6 @@ import streamlit as st
 
 from app.controller import bots_controller
 from app.vue.components.page_utils import render_page_header
-from app.vue.components.ui_helpers import render_quickstart
 
 
 TAB_LABEL = "🤖 Bots"
@@ -436,14 +435,6 @@ def render_tab() -> None:
         IN_PROGRESS_NOTE,
         icon="🤖",
         badge="Tools",
-    )
-    render_quickstart(
-        "Statut",
-        [
-            "Les sous-onglets sont en cours d'implementation et leur contenu est volontairement masque.",
-            "Nous afficherons les outils une fois les verifications terminees.",
-        ],
-        expanded=False,
     )
 
     assistant_tab, execution_tab, vol_tab = st.tabs(["Assistant", "Exécution", "Volatilité"])

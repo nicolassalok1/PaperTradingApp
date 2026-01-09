@@ -3,7 +3,6 @@ import streamlit as st
 
 from app.controller import hedger_v2_controller as ctrl
 from app.vue.components.page_utils import render_page_header
-from app.vue.components.ui_helpers import render_quickstart
 
 TAB_LABEL = "🛡️ Hedging Systems"
 
@@ -143,15 +142,6 @@ def render_tab() -> None:
         "Couverture options: suggestions DQN (prototype) et exécution via Alpaca.",
         icon="🛡️",
         badge="Hedging",
-    )
-    render_quickstart(
-        "Guide rapide",
-        [
-            "Ce module est expérimental: considère les suggestions comme une aide, pas une vérité.",
-            "Vérifie toujours la position sélectionnée avant d’exécuter une couverture.",
-            "Exécuter enverra des ordres sur Alpaca: fais-le seulement en connaissance de cause.",
-        ],
-        expanded=False,
     )
 
     # Account snapshot

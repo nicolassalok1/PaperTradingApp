@@ -3,7 +3,6 @@ import streamlit as st
 
 from app.controller import trading_controller as ctrl
 from app.vue.components.page_utils import render_page_header
-from app.vue.components.ui_helpers import render_quickstart
 
 
 def _to_float(val) -> float:
@@ -215,14 +214,6 @@ def render_tab() -> None:
         "Limit/stop/take-profit/stop-limit/bracket — exécution via Alpaca.",
         icon="🧾",
         badge="Alpaca",
-    )
-    render_quickstart(
-        "Guide rapide",
-        [
-            "Les ordres avancés sont sensibles aux paramètres (prix, stop, take-profit).",
-            "En cas de doute: commence en petite taille et vérifie le récapitulatif.",
-        ],
-        expanded=False,
     )
     _render_account_section()
     st.divider()

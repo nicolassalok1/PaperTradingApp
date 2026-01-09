@@ -3,7 +3,6 @@ import streamlit as st
 
 from app.controller import trading_controller as ctrl
 from app.vue.components.page_utils import render_page_header
-from app.vue.components.ui_helpers import render_quickstart
 
 
 def _to_float(val) -> float:
@@ -162,14 +161,6 @@ def render_tab() -> None:
         "Vue compte + positions + ordres spot (actions/ETF) via Alpaca.",
         icon="⚡",
         badge="Alpaca",
-    )
-    render_quickstart(
-        "Guide rapide",
-        [
-            "‘Market order’ = exécution immédiate (peut glisser). Vérifie la quantité/sens.",
-            "Les tableaux sont read-only; les boutons d’ordres envoient réellement sur Alpaca.",
-        ],
-        expanded=False,
     )
     _render_account_section()
     st.divider()

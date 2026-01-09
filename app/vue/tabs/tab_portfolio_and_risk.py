@@ -4,7 +4,6 @@ import altair as alt
 
 from app.controller import portfolio_and_risk_controller as ctrl
 from app.vue.components.page_utils import render_page_header
-from app.vue.components.ui_helpers import render_quickstart
 
 TAB_LABEL = "🧭 Portefeuille & Risque"
 
@@ -159,15 +158,6 @@ def render_tab() -> None:
         "Allocation, exposition, PnL, VaR-lite et alertes — centralisé en un seul écran.",
         icon="🧭",
         badge="Risk",
-    )
-    render_quickstart(
-        "Guide rapide",
-        [
-            "Lis d’abord les alertes: elles résument les risques (exposition, concentration, etc.).",
-            "Utilise l’allocation/rebalancement pour simuler un plan avant d’exécuter quoi que ce soit.",
-            "Les boutons qui exécutent sur Alpaca sont à utiliser avec prudence (ordres réels).",
-        ],
-        expanded=False,
     )
 
     account = ctrl.get_account()

@@ -9,7 +9,6 @@ import streamlit as st
 from app.controller import trading_controller as ctrl
 from app.controller import options_controller as opt_ctrl
 from app.vue.components.page_utils import render_page_header
-from app.vue.components.ui_helpers import render_quickstart
 
 
 _CHAIN_STATE_KEY = "alpaca_options_chain_df"
@@ -565,14 +564,6 @@ def render_tab() -> None:
         "Chaîne d’options live Alpaca: sélection ticker/échéance/strike puis envoi d’ordres.",
         icon="💹",
         badge="Alpaca",
-    )
-    render_quickstart(
-        "Guide rapide",
-        [
-            "Charge la chaîne d’options, puis filtre par maturité/strike selon ton besoin.",
-            "Vérifie le sens (buy/sell) et la quantité avant d’envoyer un ordre.",
-        ],
-        expanded=False,
     )
     _render_account_section()
     st.divider()

@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 import numpy as np
 import pandas as pd
@@ -10,7 +10,6 @@ import streamlit as st
 from app.controller.calibration_controller import CalibrationController
 from app.controller import yieldcurve_controller as yc
 from app.vue.components.page_utils import render_page_header
-from app.vue.components.ui_helpers import render_quickstart
 from app.vue.components.surface_ui import (
     canonicalize_surface_df,
     discover_cached_surfaces,
@@ -46,19 +45,6 @@ def _parse_json_dict(raw: str) -> Dict[str, Any] | None:
     except Exception:
         return None
     return obj if isinstance(obj, dict) else None
-
-
-def _as_float_list(raw: str) -> Optional[List[float]]:
-    if not raw.strip():
-        return None
-    parts = [p.strip() for p in raw.split(",") if p.strip()]
-    out: List[float] = []
-    for p in parts:
-        try:
-            out.append(float(p))
-        except Exception:
-            return None
-    return out
 
 
 def _load_optionable_tickers() -> list[str]:
@@ -116,15 +102,6 @@ def render_tab() -> None:
         "SABR / Jump Diffusion / rHeston / Rough & Volterra (modulaire, MVC-safe)",
         icon="🧪",
         badge="Models",
-    )
-    render_quickstart(
-        "Guide rapide",
-        [
-            "Charge une surface IV (Yahoo / CSV / Cache / Alpaca), puis filtre-la si besoin.",
-            "Règle `S0`, `r`, `q` avant de calibrer (r peut venir de `🧮 Yield Curve`).",
-            "Après calibration, clique ‘Envoyer IV modèle vers Options’ pour la visualiser/pricer.",
-        ],
-        expanded=False,
     )
 
     specs = ctrl.get_advanced_models()
@@ -403,55 +380,6 @@ def render_tab() -> None:
     seed = None
     m_grid = None
     t_grid = None
-    with st.expander("Optimisation (avancé)", expanded=False):
-        fit_to_observed_only = st.checkbox(
-            "Fit uniquement sur points observés (mask)",
-            value=True,
-            key="adv_calib_fit_mask_only",
-        )
-        col_nfev, col_starts, col_seed = st.columns(3)
-        with col_nfev:
-            max_nfev = int(
-                st.number_input(
-                    "max_nfev",
-                    min_value=5,
-                    max_value=500,
-                    value=60,
-                    step=5,
-                    key="adv_calib_max_nfev",
-                )
-            )
-        with col_starts:
-            n_starts = int(
-                st.number_input(
-                    "Multi-start (n)",
-                    min_value=1,
-                    max_value=25,
-                    value=1,
-                    step=1,
-                    key="adv_calib_n_starts",
-                )
-            )
-        with col_seed:
-            seed_raw = st.text_input(
-                "Seed (random, optionnel)",
-                value="",
-                placeholder="ex: 42",
-                key="adv_calib_seed_raw",
-            )
-        seed = int(seed_raw) if seed_raw.strip().isdigit() else None
-
-        st.caption("Grille fixe optionnelle (valeurs séparées par des virgules). Laisser vide = défauts app.")
-        m_raw = st.text_input("m_grid (K/S0)", value="", placeholder="0.8,0.9,1.0,1.1", key="adv_calib_m_grid_raw")
-        t_raw = st.text_input(
-            "t_grid (années)", value="", placeholder="0.02,0.05,0.1,0.25,0.5,1.0", key="adv_calib_t_grid_raw"
-        )
-        m_grid = _as_float_list(m_raw)
-        t_grid = _as_float_list(t_raw)
-        if m_raw.strip() and m_grid is None:
-            st.warning("m_grid invalide (liste de floats séparés par des virgules).")
-        if t_raw.strip() and t_grid is None:
-            st.warning("t_grid invalide (liste de floats séparés par des virgules).")
 
     tab_labels = [override_labels.get(k, key_to_spec.get(k, {}).get("label", k)) for k in model_keys]
     tabs = st.tabs(tab_labels)

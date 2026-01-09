@@ -3,7 +3,6 @@ import streamlit as st
 
 from app.controller import dashboard_v2_controller as ctrl
 from app.vue.components.page_utils import render_page_header
-from app.vue.components.ui_helpers import render_quickstart
 
 TAB_LABEL = "📊 Dashboard"
 
@@ -202,16 +201,6 @@ def render_tab() -> None:
         "Vue d’ensemble du compte: cash, PnL, exposition, positions et historique.",
         icon="📊",
         badge="Overview",
-    )
-
-    render_quickstart(
-        "Guide rapide",
-        [
-            "Les chiffres viennent d’Alpaca: si tout est à zéro, vérifie la connexion / clés.",
-            "Ajuste la fenêtre ‘Lookback’ pour les courbes Equity/PnL.",
-            "Ouvre les sections ‘détails’ si tu veux diagnostiquer une anomalie (attribution, historique).",
-        ],
-        expanded=False,
     )
 
     summary = ctrl.get_account_summary()
