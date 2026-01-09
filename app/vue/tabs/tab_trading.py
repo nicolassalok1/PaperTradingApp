@@ -17,7 +17,7 @@ def render_tab() -> None:
     )
 
     spot_tab_obj, orders_tab_obj, options_tab_obj = st.tabs(
-        ["Spot (compte & ordres)", "Ordres avancés", "Options (Alpaca)"]
+        ["Spot", "Ordres avancés", "Options"]
     )
 
     with spot_tab_obj:

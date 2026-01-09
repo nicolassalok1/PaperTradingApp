@@ -392,11 +392,16 @@ def render_tab() -> None:
     tab_labels = [override_labels.get(k, key_to_spec.get(k, {}).get("label", k)) for k in model_keys]
     tabs = st.tabs(tab_labels)
 
+    in_progress_models = {"rheston", "rbergomi", "volterra", "merton_jump_diffusion", "sabr"}
+
     for model_key, tab_label, tab in zip(model_keys, tab_labels, tabs):
         def _k(base: str) -> str:
             return f"{base}_{model_key}"
 
         with tab:
+            if model_key in in_progress_models:
+                st.info("Cette fonctionnalité est en cours d'implémentation. Merci de revenir plus tard.")
+                continue
             spec = key_to_spec.get(model_key, {})
             st.markdown("### Modèle (sélection juste avant calibration)")
             col_a, col_b = st.columns([2, 1])

@@ -112,26 +112,47 @@ def _render_order_form() -> None:
 
 def _render_price_history() -> None:
     st.markdown("### Price history")
-    symbol = st.text_input("Symbol for history", placeholder="MSFT").upper()
-    timeframe = st.selectbox(
-        "Timeframe",
-        options=["1Day", "1Hour", "30Min", "15Min", "5Min", "1Min"],
-        index=0,
-    )
-    limit = st.slider("Number of bars", min_value=20, max_value=500, value=120, step=10)
+    col_sym, col_btn = st.columns([4, 1])
+    with col_sym:
+        symbol = st.text_input("Symbol for history", placeholder="MSFT").upper()
+    with col_btn:
+        st.write("")  # align vertically
+        fetch_clicked = st.button("Fetch", use_container_width=True, key="price_hist_fetch")
+    timeframe = "1Day"
+    limit = 130  # ~6 months of daily bars
 
     if not symbol:
         st.info("Enter a symbol to load price history.")
         return
+    if not fetch_clicked:
+        st.info("Enter a symbol then click Fetch.")
+        return
 
+    df_hist = None
+    alpaca_error = None
     try:
         df_hist = ctrl.get_price_history(symbol, timeframe=timeframe, limit=limit)
     except Exception as exc:
-        st.error(f"Unable to load history: {exc}")
-        return
+        alpaca_error = str(exc)
+
+    # Fallback to cached/stooq/yahoo history if Alpaca is unavailable or empty.
+    if df_hist is None or len(df_hist.index) < 5:
+        try:
+            from app.model.market_data.market_data import fetch_ohlc_history
+
+            df_fallback = fetch_ohlc_history(symbol, period="6mo", interval="1d")
+            if df_fallback is not None and not df_fallback.empty:
+                df_hist = df_fallback
+                st.caption("Fallback data (Stooq/Yahoo) – Alpaca data unavailable or insufficient from Alpaca.")
+        except Exception as exc:
+            if alpaca_error is None:
+                alpaca_error = str(exc)
 
     if df_hist is None or df_hist.empty:
-        st.info("No price history returned.")
+        if alpaca_error:
+            st.error(f"Unable to load history: {alpaca_error}")
+        else:
+            st.info("No price history returned.")
         return
 
     df_hist = df_hist.copy()
@@ -140,9 +161,14 @@ def _render_price_history() -> None:
         df_hist = df_hist.dropna(subset=["time"])
         df_hist = df_hist.sort_values("time")
         df_hist = df_hist.set_index("time")
+    elif "Date" in df_hist.columns:
+        df_hist["Date"] = pd.to_datetime(df_hist["Date"], errors="coerce")
+        df_hist = df_hist.dropna(subset=["Date"])
+        df_hist = df_hist.sort_values("Date")
+        df_hist = df_hist.set_index("Date")
 
     price_col = None
-    for candidate in ["close", "Close", "c"]:
+    for candidate in ["close", "Close", "c", "Close "]:
         if candidate in df_hist.columns:
             price_col = candidate
             break
@@ -152,7 +178,7 @@ def _render_price_history() -> None:
         return
 
     st.line_chart(df_hist[[price_col]], height=300, width="stretch")
-    st.caption(f"{len(df_hist)} bars loaded for {symbol} ({timeframe}).")
+    st.caption(f"{len(df_hist)} bars loaded for {symbol} (~6 months, daily).")
 
 
 def render_tab() -> None:
@@ -166,11 +192,11 @@ def render_tab() -> None:
     st.divider()
     _render_positions_section()
     st.divider()
+    _render_price_history()
+    st.divider()
     _render_orders_section()
     st.divider()
     _render_order_form()
-    st.divider()
-    _render_price_history()
 
 
 def render() -> None:
