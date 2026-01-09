@@ -138,6 +138,7 @@ def render_tab() -> None:
     key_to_spec = {s["key"]: s for s in filtered_specs}
 
     override_labels = {
+        "heston_v1": "Heston",
         "rheston": "rHeston",
         "rbergomi": "rBergomi",
         "volterra": "Volterra SDE",
@@ -145,6 +146,7 @@ def render_tab() -> None:
         "sabr": "SABR",
     }
     desired_order = [
+        "heston_v1",
         "rheston",
         "rbergomi",
         "volterra",
@@ -157,7 +159,7 @@ def render_tab() -> None:
     if not model_keys:
         st.error("Aucun modèle calibrable n'est disponible.")
         return
-    default_model_key = "sabr" if "sabr" in model_keys else model_keys[0]
+    default_model_key = "heston_v1" if "heston_v1" in model_keys else ("sabr" if "sabr" in model_keys else model_keys[0])
 
     constraints: Dict[str, Any] = {}
 
@@ -466,22 +468,37 @@ def render_tab() -> None:
                 st.markdown(f"**{tab_label}**")
             with col_b:
                 st.caption(f"pricing={spec.get('pricing')} | calibration={spec.get('calibration')}")
-                if spec.get("expensive"):
-                    st.warning("Modèle coûteux: prévoir des runs plus longs.")
 
-            profile = st.radio(
-                "Profil de calibration",
-                options=["Rapide", "Normal", "Fine"],
-                index=1,
-                horizontal=True,
-                key=_k("adv_calib_profile"),
-                help="Rapide: itérations limitées. Normal: défaut équilibré. Fine: plus d'itérations et multi-start.",
-            )
+            if spec.get("expensive"):
+                st.markdown(
+                    """
+                    <div style="width:100vw; margin-left:calc(-50vw + 50%);">
+                      <div style="background:#3f4310; color:#f5efc7; padding:12px 14px; border-radius:8px;">
+                        ⚠️ Modèle coûteux: prévoir des runs plus longs.
+                      </div>
+                    </div>
+                    """.strip(),
+                    unsafe_allow_html=True,
+                )
+
             profile_map = {
                 "Rapide": {"max_nfev": 30, "n_starts": 1},
                 "Normal": {"max_nfev": 60, "n_starts": 1},
                 "Fine": {"max_nfev": 120, "n_starts": 3},
             }
+            if model_key == "heston_v1":
+                profile = st.radio(
+                    "Profil de calibration",
+                    options=["Rapide", "Normal", "Fine"],
+                    index=1,
+                    horizontal=True,
+                    key=_k("adv_calib_profile"),
+                    help="Rapide: itérations limitées. Normal: défaut équilibré. Fine: plus d'itérations et multi-start.",
+                )
+            else:
+                profile = "Normal"
+                st.caption("Profil de calibration: Normal (fixé).")
+
             cfg = profile_map.get(profile, profile_map["Normal"])
             max_nfev = int(cfg["max_nfev"])
             n_starts = int(cfg["n_starts"])

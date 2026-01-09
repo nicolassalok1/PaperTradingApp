@@ -584,6 +584,7 @@ class CalibrationController:
         Kept separate from V1 to avoid changing existing behavior.
         """
         return [
+            {"key": "heston_v1", "label": "Heston (least squares)", "pricing": "cf", "calibration": "least_squares", "expensive": False},
             {"key": "sabr", "label": "SABR (Hagan analytic)", "pricing": "analytic_iv", "calibration": "least_squares", "expensive": False},
             {"key": "merton_jump_diffusion", "label": "Jump Diffusion (Merton) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
             {"key": "rheston", "label": "rHeston (Markovian approx) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": True},
@@ -617,12 +618,13 @@ class CalibrationController:
         from app.model.calibration.base_calibrator import CalibratorSettings, SurfaceGrid
         from app.model.volatility_models.sabr.calibrator import SABRAnalyticCalibrator
         from app.model.volatility_models.jump_diffusion.calibrator import MertonJumpDiffusionCalibrator
+        from app.model.volatility_models.heston.calibrator_legacy import HestonLegacyLeastSquaresCalibrator
         from app.model.volatility_models.rheston.calibrator_fft import RHestonFFTMarkovianCalibrator
         from app.model.volatility_models.rbergomi.calibrator_mc_surrogate import RBergomiMCSurrogateCalibrator
         from app.model.volatility_models.volterra.calibrator_mc import VolterraSDECalibrator
 
         data = payload or {}
-        model_key = str(data.get("model") or "").strip() or "sabr"
+        model_key = str(data.get("model") or "").strip() or "heston_v1"
         constraints = data.get("constraints") if isinstance(data.get("constraints"), dict) else None
 
         r_val = float(data.get("r") or 0.0)
@@ -680,6 +682,7 @@ class CalibrationController:
         )
 
         calibrator_map = {
+            "heston_v1": HestonLegacyLeastSquaresCalibrator(),
             "sabr": SABRAnalyticCalibrator(),
             "merton_jump_diffusion": MertonJumpDiffusionCalibrator(),
             "rheston": RHestonFFTMarkovianCalibrator(),
