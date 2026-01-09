@@ -65,7 +65,7 @@ class AlpacaOrdersService:
             self.keys.api_key,
             self.keys.api_secret,
             paper=is_paper,
-            raw_data=True,
+            raw_data=True,  # return raw dicts to support asset classes beyond pydantic enums (e.g., us_option)
         )
 
     # --- helpers ---------------------------------------------------------

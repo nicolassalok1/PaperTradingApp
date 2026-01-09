@@ -27,6 +27,11 @@ def _orders_service() -> AlpacaOrdersService:
     return _ORDERS_SERVICE
 
 
+def _is_option_asset(asset_class: Any) -> bool:
+    cls = str(asset_class or "").lower()
+    return "option" in cls
+
+
 # --- Spot account & market orders -----------------------------------------
 
 def get_spot_account() -> Dict[str, Any]:
@@ -106,7 +111,7 @@ def get_option_positions() -> List[Dict[str, Any]]:
     return [
         pos
         for pos in positions
-        if str(pos.get("asset_class") or "").lower() in {"option", "us_option"}
+        if _is_option_asset(pos.get("asset_class"))
     ]
 
 
@@ -117,7 +122,7 @@ def get_open_option_orders() -> List[Dict[str, Any]]:
     return [
         order
         for order in orders
-        if str(order.get("asset_class") or "").lower() in {"option", "us_option"}
+        if _is_option_asset(order.get("asset_class"))
     ]
 
 

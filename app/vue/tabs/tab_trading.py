@@ -1,7 +1,6 @@
 import streamlit as st
 
 from app.vue.components.page_utils import render_page_header
-from app.vue.components.ui_helpers import render_quickstart
 from app.vue.tabs import tab_alpaca_spot as spot_tab
 from app.vue.tabs import tab_alpaca_orders as orders_tab
 from app.vue.tabs import tab_alpaca_options as options_tab
@@ -16,18 +15,9 @@ def render_tab() -> None:
         icon="💹",
         badge="Trading",
     )
-    render_quickstart(
-        "Guide rapide",
-        [
-            "‘Spot’ = actions/ETF + ordres simples + état du compte.",
-            "‘Ordres avancés’ = stop/limit/bracket (attention aux envois live).",
-            "‘Options’ = chaîne d’options Alpaca + envoi d’ordres options.",
-        ],
-        expanded=False,
-    )
 
     spot_tab_obj, orders_tab_obj, options_tab_obj = st.tabs(
-        ["Spot (compte & ordres)", "Ordres avancés", "Options (Alpaca)"]
+        ["Spot", "Ordres avancés", "Options"]
     )
 
     with spot_tab_obj:

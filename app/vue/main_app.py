@@ -189,12 +189,12 @@ def _patch_streamlit_charts() -> None:
 
     _orig_plotly_chart = st.plotly_chart
 
-    def _plotly_chart(fig, use_container_width: bool = True, **kwargs):
+    def _plotly_chart(fig, width="stretch", **kwargs):
         cfg = kwargs.pop("config", {}) or {}
         base_cfg = {"scrollZoom": False, "displayModeBar": False}
         merged_cfg = {**base_cfg, **cfg}
         return _orig_plotly_chart(
-            fig, use_container_width=use_container_width, config=merged_cfg, **kwargs
+            fig, width=width, config=merged_cfg, **kwargs
         )
 
     st.plotly_chart = _plotly_chart  # type: ignore[assignment]

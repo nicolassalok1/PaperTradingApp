@@ -56,7 +56,7 @@ class AlpacaSpotService:
             self.keys.api_key,
             self.keys.api_secret,
             paper=is_paper,
-            raw_data=True,
+            raw_data=True,  # keep raw payloads to handle newer asset classes like us_option
         )
         self.data_client = StockHistoricalDataClient(
             api_key=self.keys.api_key,

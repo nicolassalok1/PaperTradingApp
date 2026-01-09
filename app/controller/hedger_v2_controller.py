@@ -19,6 +19,11 @@ def get_client() -> AlpacaHedgerClient:
     return _CLIENT
 
 
+def get_status() -> Dict[str, Any]:
+    client = get_client()
+    return {"ready": client.is_ready(), "offline": client.offline}
+
+
 def get_account_snapshot() -> Dict[str, Any]:
     client = get_client()
     return client.get_account()
@@ -32,8 +37,22 @@ def get_option_positions() -> List[Dict[str, Any]]:
     return get_client().get_option_positions()
 
 
+def get_option_underlyings() -> List[str]:
+    """Unique underlyings inferred from current option positions."""
+    underlyings: set[str] = set()
+    for opt in get_option_positions():
+        sym = (opt.get("symbol") or "").strip().upper()
+        if not sym:
+            continue
+        underlyings.add(_underlying_from_option_symbol(sym))
+    return sorted(u for u in underlyings if u)
+
+
 def manual_order(symbol: str, qty: float, side: str) -> Dict[str, Any]:
-    order = get_client().submit_market_order(symbol, qty, side)
+    client = get_client()
+    if not client.is_ready():
+        raise RuntimeError("Alpaca credentials missing or client offline; cannot send orders.")
+    order = client.submit_market_order(symbol, qty, side)
     return {
         "id": order.get("id"),
         "symbol": order.get("symbol", symbol),
@@ -44,10 +63,15 @@ def manual_order(symbol: str, qty: float, side: str) -> Dict[str, Any]:
 
 
 def get_dqn_hedge_suggestion(underlying_symbol: str) -> Dict[str, Any]:
+    sym = (underlying_symbol or "").strip().upper()
+    if not sym:
+        raise ValueError("Underlying symbol is required for hedge suggestion.")
     return suggest_hedge_action(get_client(), underlying_symbol)
 
 
 def execute_dqn_hedge(underlying_symbol: str) -> Dict[str, Any]:
+    if not get_client().is_ready():
+        raise RuntimeError("Alpaca credentials missing or client offline; cannot execute hedge.")
     suggestion = get_dqn_hedge_suggestion(underlying_symbol)
     side = suggestion.get("side")
     delta_qty = float(suggestion.get("delta_qty", 0.0) or 0.0)
@@ -88,6 +112,30 @@ def execute_dqn_hedge_for_option(option_symbol: str) -> Dict[str, Any]:
     return execute_dqn_hedge(underlying)
 
 
+def get_portfolio_option_hedges(execute: bool = False) -> List[Dict[str, Any]]:
+    """
+    Suggest (and optionally execute) hedges for all underlyings present in option positions.
+    """
+    underlyings = get_option_underlyings()
+    results: List[Dict[str, Any]] = []
+    for u in underlyings:
+        suggestion = get_dqn_hedge_suggestion(u)
+        order_resp = None
+        if execute and suggestion.get("side") in {"buy", "sell", "flatten"}:
+            delta_qty = float(suggestion.get("delta_qty", 0.0) or 0.0)
+            if abs(delta_qty) > 1e-6 and suggestion.get("side") != "none":
+                exec_side = suggestion["side"]
+                if exec_side == "flatten":
+                    exec_side = "buy" if delta_qty > 0 else "sell"
+                order_resp = manual_order(
+                    suggestion.get("underlying", u),
+                    abs(delta_qty),
+                    exec_side,
+                )
+        results.append({"underlying": u, "suggestion": suggestion, "order": order_resp})
+    return results
+
+
 def get_dqn_model_status() -> Dict[str, Any]:
     return get_dqn_model_info()
 
@@ -118,14 +166,17 @@ def train_dqn_model(
 
 __all__ = [
     "get_client",
+    "get_status",
     "get_account_snapshot",
     "get_equity_positions",
     "get_option_positions",
+    "get_option_underlyings",
     "manual_order",
     "get_dqn_hedge_suggestion",
     "execute_dqn_hedge",
     "get_dqn_hedge_suggestion_for_option",
     "execute_dqn_hedge_for_option",
+    "get_portfolio_option_hedges",
     "get_dqn_model_status",
     "train_dqn_model",
 ]

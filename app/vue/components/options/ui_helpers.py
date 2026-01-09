@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from app.controller.options_controller import _get_cached_iv_for as ui_get_cached_iv_for
+from app.vue.components.options.plot_limits import limit_figure_width
 
 
 def _choose_option_select(key_prefix: str, option_char: str | None = None):
@@ -83,7 +84,8 @@ def _render_heatmaps_for_current_option(
         ax.set_ylabel("Strike")
         ax.set_title(label)
         fig.colorbar(img, ax=ax, fraction=0.046, pad=0.04)
-        st.pyplot(fig)
+        safe_fig = limit_figure_width(fig)
+        st.pyplot(safe_fig)
         plt.close(fig)
     except Exception:
         st.info("Heatmap non disponible.")

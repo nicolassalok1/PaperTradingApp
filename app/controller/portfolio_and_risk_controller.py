@@ -54,6 +54,22 @@ def get_positions() -> List[Dict[str, Any]]:
     return risk_engine.get_positions_summary()
 
 
+def get_positions_breakdown() -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Raw positions split into equities vs options for display (does not affect equity-only metrics).
+    """
+    positions = risk_engine.get_positions_full()
+    equities: List[Dict[str, Any]] = []
+    options: List[Dict[str, Any]] = []
+    for p in positions:
+        cls = str(p.get("asset_class", "")).lower()
+        if "option" in cls:
+            options.append(p)
+        elif "equity" in cls:
+            equities.append(p)
+    return {"equities": equities, "options": options}
+
+
 def get_risk_summary(confidence: float = 0.95) -> Dict[str, Any]:
     """
     Build a compact risk summary dictionary for the view layer.
@@ -121,8 +137,22 @@ def compute_allocation(method: str, lookback_days: int = 60) -> Dict[str, Any]:
     """
     client = _client()
     symbols = get_available_symbols()
+    symbols = list(symbols or [])
+    if not symbols:
+        return {"method": method, "symbols": [], "target_weights": []}
+
     returns_data = compute_returns_matrix(client, symbols, lookback_days)
     returns = returns_data.get("returns", [])
+    symbols = list(returns_data.get("symbols", symbols) or symbols)
+
+    # If we have no return history, fall back to equal weights to avoid UI errors.
+    if not returns:
+        n = len(symbols)
+        return {
+            "method": method,
+            "symbols": symbols,
+            "target_weights": [1.0 / n] * n if n > 0 else [],
+        }
 
     if method == "markowitz_min_var":
         weights = markowitz_optimize(returns, mode="min_var")
@@ -135,9 +165,14 @@ def compute_allocation(method: str, lookback_days: int = 60) -> Dict[str, Any]:
     else:
         raise ValueError(f"Unknown method: {method}")
 
+    # Ensure alignment between symbols and weights
+    if len(weights) != len(symbols):
+        n = len(symbols)
+        weights = [1.0 / n] * n if n > 0 else []
+
     return {
         "method": method,
-        "symbols": returns_data.get("symbols", symbols),
+        "symbols": symbols,
         "target_weights": list(weights),
     }
 
@@ -177,6 +212,7 @@ __all__ = [
     # Risk metrics / exposure
     "get_account",
     "get_positions",
+    "get_positions_breakdown",
     "get_risk_summary",
     # Allocation tools
     "get_portfolio_snapshot",

@@ -45,7 +45,7 @@ class AlpacaPortfolioClient:
             self.api_key,
             self.api_secret,
             paper=is_paper,
-            raw_data=True,
+            raw_data=True,  # raw responses avoid enum mismatches on asset_class
         )
         self.data = StockHistoricalDataClient(
             api_key=self.api_key,
@@ -68,7 +68,12 @@ class AlpacaPortfolioClient:
             positions = self.trading.get_all_positions()
         except Exception:
             return []
-        return [_to_dict(p) for p in positions] if positions else []
+        results: List[Dict[str, Any]] = []
+        for p in positions or []:
+            pdict = _to_dict(p)
+            if "equity" in str(pdict.get("asset_class", "")).lower():
+                results.append(pdict)
+        return results
 
     def get_latest_price(self, symbol: str) -> float:
         if self.offline or self.data is None:
@@ -301,7 +306,7 @@ def execute_rebalance_orders(
             symbol=symbol,
             qty=qty,
             side=OrderSide.BUY if side == "buy" else OrderSide.SELL,
-            time_in_force=TimeInForce.GTC,
+            time_in_force=TimeInForce.DAY,  # fractional orders require DAY TIF
         )
         alpaca_order = client.trading.submit_order(req)
         alpaca_dict = _to_dict(alpaca_order)
