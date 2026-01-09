@@ -586,7 +586,6 @@ class CalibrationController:
         return [
             {"key": "sabr", "label": "SABR (Hagan analytic)", "pricing": "analytic_iv", "calibration": "least_squares", "expensive": False},
             {"key": "merton_jump_diffusion", "label": "Jump Diffusion (Merton) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
-            {"key": "heston_fft", "label": "Heston via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
             {"key": "rheston", "label": "rHeston (Markovian approx) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": True},
             {"key": "rbergomi", "label": "rBergomi (MC + surrogate)", "pricing": "mc", "calibration": "mc_surrogate", "expensive": True},
             {"key": "volterra", "label": "Volterra SDE (MC proxy)", "pricing": "mc", "calibration": "mc_proxy", "expensive": True},
@@ -618,13 +617,12 @@ class CalibrationController:
         from app.model.calibration.base_calibrator import CalibratorSettings, SurfaceGrid
         from app.model.volatility_models.sabr.calibrator import SABRAnalyticCalibrator
         from app.model.volatility_models.jump_diffusion.calibrator import MertonJumpDiffusionCalibrator
-        from app.model.volatility_models.heston.calibrator_fft import HestonFFTCalibrator
         from app.model.volatility_models.rheston.calibrator_fft import RHestonFFTMarkovianCalibrator
         from app.model.volatility_models.rbergomi.calibrator_mc_surrogate import RBergomiMCSurrogateCalibrator
         from app.model.volatility_models.volterra.calibrator_mc import VolterraSDECalibrator
 
         data = payload or {}
-        model_key = str(data.get("model") or "").strip() or "heston_fft"
+        model_key = str(data.get("model") or "").strip() or "sabr"
         constraints = data.get("constraints") if isinstance(data.get("constraints"), dict) else None
 
         r_val = float(data.get("r") or 0.0)
@@ -684,7 +682,6 @@ class CalibrationController:
         calibrator_map = {
             "sabr": SABRAnalyticCalibrator(),
             "merton_jump_diffusion": MertonJumpDiffusionCalibrator(),
-            "heston_fft": HestonFFTCalibrator(),
             "rheston": RHestonFFTMarkovianCalibrator(),
             "rbergomi": RBergomiMCSurrogateCalibrator(),
             "volterra": VolterraSDECalibrator(),

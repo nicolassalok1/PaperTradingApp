@@ -113,7 +113,7 @@ def render_tab() -> None:
 
     render_page_header(
         "Calibration avancée",
-        "SABR / Jump Diffusion / Heston / Rough & Volterra (modulaire, MVC-safe)",
+        "SABR / Jump Diffusion / rHeston / Rough & Volterra (modulaire, MVC-safe)",
         icon="🧪",
         badge="Models",
     )
@@ -138,7 +138,6 @@ def render_tab() -> None:
     key_to_spec = {s["key"]: s for s in filtered_specs}
 
     override_labels = {
-        "heston_fft": "Heston",
         "rheston": "rHeston",
         "rbergomi": "rBergomi",
         "volterra": "Volterra SDE",
@@ -146,7 +145,6 @@ def render_tab() -> None:
         "sabr": "SABR",
     }
     desired_order = [
-        "heston_fft",
         "rheston",
         "rbergomi",
         "volterra",
@@ -159,6 +157,7 @@ def render_tab() -> None:
     if not model_keys:
         st.error("Aucun modèle calibrable n'est disponible.")
         return
+    default_model_key = "sabr" if "sabr" in model_keys else model_keys[0]
 
     constraints: Dict[str, Any] = {}
 
@@ -458,7 +457,7 @@ def render_tab() -> None:
         model_key = st.selectbox(
             "Modèle",
             options=model_keys,
-            index=model_keys.index("heston_fft") if "heston_fft" in model_keys else 0,
+            index=model_keys.index(default_model_key) if default_model_key in model_keys else 0,
             format_func=lambda k: override_labels.get(k, key_to_spec.get(k, {}).get("label", k)),
             key="adv_calib_model_select",
         )
