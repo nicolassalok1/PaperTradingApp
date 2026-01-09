@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -378,6 +379,113 @@ def surface_diagnostics(df: pd.DataFrame, *, scatter_key: str) -> None:
             st.warning(f"Plot impossible: {exc}")
 
 
+def render_market_surface_3d(
+    df_canon: pd.DataFrame,
+    *,
+    key: str,
+) -> None:
+    """
+    Render a 3D market IV surface (K, TTM, IV) directly from the dataset, with light smoothing.
+    """
+    if df_canon is None or df_canon.empty:
+        st.info("Charge d'abord une surface pour afficher la nappe 3D.")
+        return
+
+    dfw = df_canon.copy()
+    dfw = dfw.dropna(subset=["K", "T", "iv"])
+    dfw = dfw[(dfw["K"] > 0) & (dfw["T"] > 0) & (dfw["iv"] > 0)]
+    if dfw.empty:
+        st.info("Aucune donnée exploitable pour tracer la nappe 3D.")
+        return
+
+    k_min = float(dfw["K"].min())
+    k_max = float(dfw["K"].max())
+    t_min = float(dfw["T"].min())
+    t_max = float(dfw["T"].max())
+    if k_max <= k_min:
+        k_max = k_min + 1e-6
+    if t_max <= t_min:
+        t_max = t_min + 1e-6
+
+    # Build a coarse grid (median IV per bin) to draw a smooth surface and overlay raw points.
+    grid = None
+    try:
+        k_edges = np.linspace(k_min, k_max, 26)
+        t_edges = np.linspace(t_min, t_max, 26)
+        dfw["k_bin"] = pd.cut(dfw["K"], bins=k_edges, labels=False, include_lowest=True)
+        dfw["t_bin"] = pd.cut(dfw["T"], bins=t_edges, labels=False, include_lowest=True)
+        dfw = dfw.dropna(subset=["k_bin", "t_bin"])
+        if not dfw.empty:
+            dfw["k_center"] = dfw["k_bin"].astype(int).map(
+                lambda idx: float(0.5 * (k_edges[idx] + k_edges[idx + 1]))
+            )
+            dfw["t_center"] = dfw["t_bin"].astype(int).map(
+                lambda idx: float(0.5 * (t_edges[idx] + t_edges[idx + 1]))
+            )
+            grid = (
+                dfw.groupby(["t_center", "k_center"])["iv"]
+                .median()
+                .reset_index()
+                .pivot(index="t_center", columns="k_center", values="iv")
+                .sort_index()
+                .sort_index(axis=1)
+            )
+    except Exception:
+        grid = None
+
+    def _smooth(z: np.ndarray, passes: int = 2) -> np.ndarray:
+        arr = np.array(z, dtype=float)
+        for _ in range(max(1, passes)):
+            padded = np.pad(arr, ((1, 1), (1, 1)), mode="constant", constant_values=np.nan)
+            windows = sliding_window_view(padded, (3, 3))
+            arr = np.nanmean(windows, axis=(2, 3))
+        return arr
+
+    fig = go.Figure()
+    if grid is not None and grid.shape[0] >= 2 and grid.shape[1] >= 2:
+        z_raw = grid.to_numpy()
+        z_smooth = _smooth(z_raw, passes=2)
+        if not np.isfinite(z_smooth).any():
+            z_smooth = z_raw
+        fig.add_trace(
+            go.Surface(
+                x=np.array(grid.columns, dtype=float),
+                y=np.array(grid.index, dtype=float),
+                z=z_smooth,
+                colorscale="Viridis",
+                colorbar=dict(title="IV"),
+                showscale=True,
+                opacity=0.9,
+                name="Surface",
+            )
+        )
+
+    df_scatter = dfw if len(dfw) <= 2000 else dfw.sample(2000, random_state=42)
+    fig.add_trace(
+        go.Scatter3d(
+            x=df_scatter["K"],
+            y=df_scatter["T"],
+            z=df_scatter["iv"],
+            mode="markers",
+            marker=dict(size=2, color="black", opacity=0.35),
+            name="Points marché",
+        )
+    )
+
+    fig.update_layout(
+        title="Nappe IV marché (3D)",
+        scene=dict(
+            xaxis_title="Strike K",
+            yaxis_title="TTM (années)",
+            zaxis_title="IV",
+            xaxis=dict(range=[k_min, k_max]),
+        ),
+        height=520,
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False, "scrollZoom": True}, key=key)
+
+
 def render_surface_preview_dropdown(
     df: pd.DataFrame,
     *,
@@ -427,5 +535,6 @@ __all__ = [
     "plot_iv_heatmap",
     "render_surface_filters",
     "render_surface_preview_dropdown",
+    "render_market_surface_3d",
     "surface_diagnostics",
 ]

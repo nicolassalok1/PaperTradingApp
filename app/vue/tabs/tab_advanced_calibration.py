@@ -16,6 +16,7 @@ from app.vue.components.surface_ui import (
     grid_to_surface_df,
     median_s0,
     plot_iv_heatmap,
+    render_market_surface_3d,
     render_surface_filters,
     render_surface_preview_dropdown,
 )
@@ -327,6 +328,11 @@ def render_tab() -> None:
         else:
             calib_df = canon_df
 
+    if isinstance(canon_df, pd.DataFrame) and not canon_df.empty:
+        st.markdown("### Nappe IV marché (3D)")
+        st.caption("Axes: K, TTM (années), IV (données brutes, surface lissée).")
+        render_market_surface_3d(canon_df, key="adv_calib_market_surface")
+
     chain_meta = _load_chain_meta(surface_ticker or ticker)
     spot_chain = chain_meta.get("spot")
     div_chain = chain_meta.get("div")
@@ -502,8 +508,16 @@ def render_tab() -> None:
 
                         res_nn = ctrl.train_heston_nn_weights(
                             {
+                                "mode": "triplet",
+                                "n_samples": 5000,
+                                "batch_size": 256,
                                 "epochs": int(nn_epochs or 0),
                                 "lr": float(nn_lr or 0.0),
+                                "S0": float(S0),
+                                "r": float(r_val),
+                                "q": float(q_val),
+                                "u_max": 50.0,
+                                "n_integration": 512,
                             },
                             progress_callback=_on_epoch,
                         )

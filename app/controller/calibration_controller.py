@@ -31,8 +31,10 @@ from app.model.calibration.heston_nn import (
     TORCH_AVAILABLE,
     TORCH_IMPORT_ERROR,
     WEIGHTS_PATH,
+    TRIPLET_WEIGHTS_PATH,
     predict_params,
     train_heston_surface_net,
+    train_heston_param_net_from_prices,
 )
 from app.model.calibration.storage import (
     list_results as list_calibration_results,
@@ -135,9 +137,64 @@ class CalibrationController:
             return {"success": False, "message": msg, "details": {}}
 
         data = payload or {}
-        n_samples = int(data.get("n_samples") or 2000)
-        epochs = int(data.get("epochs") or 25)
-        batch_size = int(data.get("batch_size") or 64)
+        mode = str(data.get("mode") or "surface").lower().strip()
+
+        # Surface-based CNN (legacy)
+        if mode == "surface":
+            n_samples = int(data.get("n_samples") or 2000)
+            epochs = int(data.get("epochs") or 25)
+            batch_size = int(data.get("batch_size") or 64)
+            lr = float(data.get("lr") or 1e-3)
+            device = str(data.get("device") or "cpu")
+            seed = data.get("seed")
+            try:
+                seed_i = int(seed) if seed is not None else 42
+            except Exception:
+                seed_i = None
+            u_max = float(data.get("u_max") or 50.0)
+            n_integration = int(data.get("n_integration") or 800)
+            S0 = float(data.get("S0") or 100.0)
+            r = float(data.get("r") or 0.02)
+            q = float(data.get("q") or 0.0)
+
+            try:
+                res = train_heston_surface_net(
+                    n_samples=n_samples,
+                    epochs=epochs,
+                    batch_size=batch_size,
+                    lr=lr,
+                    device=device,
+                    seed=seed_i,
+                    u_max=u_max,
+                    n_integration=n_integration,
+                    S0=S0,
+                    r=r,
+                    q=q,
+                    weights_path=WEIGHTS_PATH,
+                    progress_epoch=progress_callback,
+                )
+            except Exception as exc:
+                return {"success": False, "message": str(exc), "details": {}}
+
+            if isinstance(res, dict) and not bool(res.get("success", True)):
+                return {
+                    "success": False,
+                    "message": str(res.get("message") or "Entraînement NN échoué."),
+                    "details": res,
+                    "nn_info": self.get_heston_nn_info(),
+                }
+
+            return {
+                "success": True,
+                "message": "Poids NN entraînés.",
+                "details": res,
+                "nn_info": self.get_heston_nn_info(),
+            }
+
+        # Triplet (S0,K,T) → params, price RMSE loss
+        n_samples = int(data.get("n_samples") or 5000)
+        epochs = int(data.get("epochs") or 50)
+        batch_size = int(data.get("batch_size") or 256)
         lr = float(data.get("lr") or 1e-3)
         device = str(data.get("device") or "cpu")
         seed = data.get("seed")
@@ -146,43 +203,50 @@ class CalibrationController:
         except Exception:
             seed_i = None
         u_max = float(data.get("u_max") or 50.0)
-        n_integration = int(data.get("n_integration") or 800)
+        n_integration = int(data.get("n_integration") or 512)
         S0 = float(data.get("S0") or 100.0)
         r = float(data.get("r") or 0.02)
         q = float(data.get("q") or 0.0)
+        K_min = float(data.get("K_min") or 0.5)
+        K_max = float(data.get("K_max") or 1.5)
+        T_min = float(data.get("T_min") or 0.05)
+        T_max = float(data.get("T_max") or 2.0)
+        hidden_units = int(data.get("hidden_units") or 128)
+        hidden_layers = int(data.get("hidden_layers") or 3)
+        dropout = float(data.get("dropout") or 0.0)
 
         try:
-            res = train_heston_surface_net(
+            res = train_heston_param_net_from_prices(
                 n_samples=n_samples,
                 epochs=epochs,
                 batch_size=batch_size,
                 lr=lr,
                 device=device,
                 seed=seed_i,
-                u_max=u_max,
-                n_integration=n_integration,
                 S0=S0,
                 r=r,
                 q=q,
-                weights_path=WEIGHTS_PATH,
+                K_min=K_min,
+                K_max=K_max,
+                T_min=T_min,
+                T_max=T_max,
+                u_max=u_max,
+                n_integration=n_integration,
+                dropout=dropout,
+                hidden_units=hidden_units,
+                hidden_layers=hidden_layers,
+                weights_path=TRIPLET_WEIGHTS_PATH,
                 progress_epoch=progress_callback,
             )
         except Exception as exc:
             return {"success": False, "message": str(exc), "details": {}}
 
-        if isinstance(res, dict) and not bool(res.get("success", True)):
-            return {
-                "success": False,
-                "message": str(res.get("message") or "Entraînement NN échoué."),
-                "details": res,
-                "nn_info": self.get_heston_nn_info(),
-            }
-
         return {
             "success": True,
-            "message": "Poids NN entraînés.",
+            "message": "Poids NN entraînés (triplet prix).",
             "details": res,
-            "nn_info": self.get_heston_nn_info(),
+            "weights_path": res.get("weights_path"),
+            "nn_info": {"weights_path": res.get("weights_path"), "mode": "triplet"},
         }
 
     def get_heston_default_bounds(self) -> Dict[str, Any]:
