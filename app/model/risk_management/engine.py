@@ -358,6 +358,7 @@ def compute_portfolio_pnl_series(limit: int = 90) -> pd.Series:
 __all__ = [
     "get_account_snapshot",
     "get_positions_summary",
+    "get_positions_full",
     "compute_exposure",
     "compute_net_exposure",
     "compute_unrealized_pnl_total",
