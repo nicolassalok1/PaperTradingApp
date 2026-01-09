@@ -481,6 +481,10 @@ def render_tab() -> None:
                     unsafe_allow_html=True,
                 )
 
+            # Profil unique (Heston) pour NN + calibration
+            nn_lr = None
+            nn_epochs = None
+            nn_eta_label = None
             profile_map = {
                 "Rapide": {"max_nfev": 30, "n_starts": 1},
                 "Normal": {"max_nfev": 60, "n_starts": 1},
@@ -488,13 +492,34 @@ def render_tab() -> None:
             }
             if model_key == "heston_v1":
                 profile = st.radio(
-                    "Profil de calibration",
-                    options=["Rapide", "Normal", "Fine"],
+                    "Profil Heston (NN + calibration)",
+                    options=["Rapide", "Normal", "Fin"],
                     index=1,
                     horizontal=True,
                     key=_k("adv_calib_profile"),
-                    help="Rapide: itérations limitées. Normal: défaut équilibré. Fine: plus d'itérations et multi-start.",
+                    help="Applique le même profil au NN et à la calibration.",
                 )
+                nn_profile_map = {
+                    "Rapide": {"lr": 5e-3, "epochs": 1_000},
+                    "Normal": {"lr": 1e-3, "epochs": 10_000},
+                    "Fin": {"lr": 5e-4, "epochs": 100_000},
+                }
+                nn_cfg = nn_profile_map.get(profile or "Normal", nn_profile_map["Normal"])
+                nn_lr = float(nn_cfg["lr"])
+                nn_epochs = int(nn_cfg["epochs"])
+                # ETA heuristique (≈0.01s/epoch, dépend machine)
+                nn_eta_seconds = float(nn_epochs) * 0.01
+                def _eta_human(seconds: float) -> str:
+                    seconds = max(0.0, float(seconds))
+                    if seconds < 60:
+                        return f"{seconds:.0f} s"
+                    mins = seconds / 60.0
+                    if mins < 60:
+                        return f"{mins:.1f} min"
+                    hours = mins / 60.0
+                    return f"{hours:.1f} h"
+                nn_eta_label = _eta_human(nn_eta_seconds)
+                st.caption(f"Learning rate: {nn_lr:.1e} | Epochs: {nn_epochs} | ETA entraînement ~{nn_eta_label}")
             else:
                 profile = "Normal"
                 st.caption("Profil de calibration: Normal (fixé).")
@@ -523,6 +548,51 @@ def render_tab() -> None:
             can_run = isinstance(calib_df, pd.DataFrame) and not calib_df.empty
             run_key = _k("adv_calib_run_btn")
             last_key = _k(_LAST_RESULT_KEY)
+            # Entraînement NN Heston (seulement pour Heston)
+            if model_key == "heston_v1":
+                if st.button(
+                    "Entraîner le NN Heston",
+                    type="secondary",
+                    disabled=not can_run,
+                    key=_k("train_heston_nn_btn"),
+                    help="Lance l'entraînement du NN Heston avec le profil choisi.",
+                ):
+                    with st.spinner("Entraînement NN Heston..."):
+                        res_nn = ctrl.train_heston_nn_weights(
+                            {
+                                "epochs": int(nn_epochs or 0),
+                                "lr": float(nn_lr or 0.0),
+                            }
+                        )
+                    if isinstance(res_nn, dict) and res_nn.get("success"):
+                        details_nn = res_nn.get("details") or {}
+                        final_loss = None
+                        elapsed_s = None
+                        try:
+                            final_loss = float(details_nn.get("final_loss")) if isinstance(details_nn, dict) else None
+                        except Exception:
+                            pass
+                        try:
+                            elapsed_s = float(details_nn.get("elapsed_s")) if isinstance(details_nn, dict) else None
+                        except Exception:
+                            pass
+                        msg = "NN entraîné."
+                        if final_loss is not None or elapsed_s is not None:
+                            msg = f"NN entraîné. Final loss={final_loss}, elapsed={elapsed_s:.2f}s"
+                        st.success(msg)
+                        history = details_nn.get("loss_history") if isinstance(details_nn, dict) else None
+                        if isinstance(history, list) and history:
+                            df_hist = pd.DataFrame({"epoch": list(range(1, len(history) + 1)), "loss": history})
+                            df_hist = df_hist.set_index("epoch")
+                            st.caption("Évolution de la loss (par epoch)")
+                            st.line_chart(df_hist, height=200, key=_k("nn_loss_chart"))
+                            with st.expander("Tableau loss par epoch", expanded=False):
+                                st.dataframe(df_hist.rename(columns={"loss": "loss"}))
+                        st.caption(f"epochs={details_nn.get('epochs')} | lr={details_nn.get('lr', nn_lr)} | device={details_nn.get('device', 'cpu')}")
+                        st.caption(f"weights: {details_nn.get('weights_path', '')}")
+                    else:
+                        st.error(str(res_nn.get("message") if isinstance(res_nn, dict) else "Entraînement NN échoué."))
+
             if st.button("Calibrer", type="primary", disabled=not can_run, width="stretch", key=run_key):
                 progress = st.progress(0, text="Préparation.")
                 payload: Dict[str, Any] = {
@@ -537,6 +607,9 @@ def render_tab() -> None:
                     "seed": seed,
                     "constraints": constraints,
                 }
+                if model_key == "heston_v1":
+                    payload["nn_lr"] = nn_lr
+                    payload["nn_epochs"] = nn_epochs
                 if m_grid is not None:
                     payload["m_grid"] = m_grid
                 if t_grid is not None:
