@@ -7,6 +7,32 @@ from app.vue.components.page_utils import render_page_header
 TAB_LABEL = "🛡️ Hedging Systems"
 
 
+def _render_pill(title: str, body: str, tone: str = "info") -> None:
+    gradients = {
+        "info": ("#5ac8fa", "#7c83ff"),
+        "success": ("#34d399", "#22d3ee"),
+        "warn": ("#fbbf24", "#f97316"),
+    }
+    c1, c2 = gradients.get(tone, gradients["info"])
+    html = f"""
+    <div style="
+        background: linear-gradient(135deg, {c1}, {c2});
+        color: #f8fafc;
+        padding: 12px 14px;
+        border-radius: 14px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        border: 1px solid rgba(255,255,255,0.12);
+        margin: 8px 0;
+    ">
+        <div style="font-weight: 700; font-size: 0.95rem; letter-spacing: 0.01em; margin-bottom: 4px;">
+            {title}
+        </div>
+        <div style="font-size: 0.85rem; opacity: 0.95;">{body}</div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def _render_account() -> None:
     st.markdown("### Aperçu du compte (Alpaca)")
     account = ctrl.get_account_snapshot()
@@ -110,10 +136,10 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
                     suggestion = ctrl.get_dqn_hedge_suggestion(underlying_symbol)
                     ref = underlying_symbol
 
-                st.info(
-                    f"Suggestion for {ref}: side={suggestion.get('side')} | "
-                    f"delta_qty={suggestion.get('delta_qty')} | "
-                    f"comment={suggestion.get('comment')}"
+                _render_pill(
+                    f"Suggestion for {ref}",
+                    f"side={suggestion.get('side')} | delta_qty={suggestion.get('delta_qty')} | comment={suggestion.get('comment')}",
+                    tone="info",
                 )
                 with st.expander("Détails (Q-values / state)", expanded=False):
                     st.write({"q_values": suggestion.get("q_values"), "state": suggestion.get("state")})
@@ -129,7 +155,11 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
                 else:
                     result = ctrl.execute_dqn_hedge(underlying_symbol)
                     ref = underlying_symbol
-                st.success(f"Executed hedge for {ref}: {result}")
+                _render_pill(
+                    f"Executed hedge for {ref}",
+                    str(result),
+                    tone="success",
+                )
             except Exception as exc:
                 st.error(f"Hedge execution failed: {exc}")
 
