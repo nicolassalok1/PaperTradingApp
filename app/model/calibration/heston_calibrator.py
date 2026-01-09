@@ -183,6 +183,7 @@ def calibrate_heston_least_squares(
     max_nfev: int = 50,
     n_starts: int = 1,
     seed: int | None = 42,
+    x0: Any | None = None,
 ) -> Dict[str, Any]:
     if least_squares is None:
         return {"success": False, "message": "SciPy indisponible: least_squares manquant.", "params": {}}
@@ -222,6 +223,22 @@ def calibrate_heston_least_squares(
         if feller_gap > 0:
             res = np.concatenate([res, np.array([feller_gap], dtype=float)])
         return res
+
+    def _coerce_x0(x0_val: Any) -> np.ndarray | None:
+        if x0_val is None:
+            return None
+        if isinstance(x0_val, dict):
+            arr = np.array([_coerce_float(x0_val.get(name)) for name in PARAM_ORDER], dtype=float)
+        else:
+            try:
+                arr = np.asarray(x0_val, dtype=float).reshape(-1)
+            except Exception:
+                return None
+        if arr.size != len(PARAM_ORDER):
+            return None
+        if not np.isfinite(arr).all():
+            return None
+        return np.minimum(np.maximum(arr, lb), ub)
 
     def _run_one(x0: np.ndarray) -> Dict[str, Any]:
         try:
@@ -278,6 +295,9 @@ def calibrate_heston_least_squares(
     rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
 
     candidates: list[np.ndarray] = []
+    x0_pref = _coerce_x0(x0)
+    if x0_pref is not None:
+        candidates.append(x0_pref)
     # 1) heuristic guess from surface
     candidates.append(initial_guess_from_surface(iv_market, m_grid, t_grid, lb=lb, ub=ub))
     # 2) mid-point of bounds

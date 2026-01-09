@@ -120,7 +120,7 @@ class _LiveDashboardBackend:
         results: List[Dict[str, Any]] = []
         for p in positions:
             pdict = _to_dict(p)
-            if str(pdict.get("asset_class", "")).lower() == "option":
+            if "option" in str(pdict.get("asset_class", "")).lower():
                 results.append(pdict)
         return results
 
@@ -150,6 +150,7 @@ class DashboardV2Client:
             api_key,
             api_secret,
             paper=is_paper,
+            raw_data=True,  # avoid pydantic enum issues when Alpaca returns us_option
         )
         self.data = StockHistoricalDataClient(api_key=api_key, secret_key=api_secret)
         self.backend = _LiveDashboardBackend(self.trading)

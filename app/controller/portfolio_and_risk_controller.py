@@ -121,8 +121,22 @@ def compute_allocation(method: str, lookback_days: int = 60) -> Dict[str, Any]:
     """
     client = _client()
     symbols = get_available_symbols()
+    symbols = list(symbols or [])
+    if not symbols:
+        return {"method": method, "symbols": [], "target_weights": []}
+
     returns_data = compute_returns_matrix(client, symbols, lookback_days)
     returns = returns_data.get("returns", [])
+    symbols = list(returns_data.get("symbols", symbols) or symbols)
+
+    # If we have no return history, fall back to equal weights to avoid UI errors.
+    if not returns:
+        n = len(symbols)
+        return {
+            "method": method,
+            "symbols": symbols,
+            "target_weights": [1.0 / n] * n if n > 0 else [],
+        }
 
     if method == "markowitz_min_var":
         weights = markowitz_optimize(returns, mode="min_var")
@@ -135,9 +149,14 @@ def compute_allocation(method: str, lookback_days: int = 60) -> Dict[str, Any]:
     else:
         raise ValueError(f"Unknown method: {method}")
 
+    # Ensure alignment between symbols and weights
+    if len(weights) != len(symbols):
+        n = len(symbols)
+        weights = [1.0 / n] * n if n > 0 else []
+
     return {
         "method": method,
-        "symbols": returns_data.get("symbols", symbols),
+        "symbols": symbols,
         "target_weights": list(weights),
     }
 

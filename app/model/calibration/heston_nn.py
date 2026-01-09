@@ -598,18 +598,13 @@ def train_heston_surface_net(
 
 __all__ = [
     "HestonSurfaceNet",
-    "HestonParamMLP",
     "WEIGHTS_PATH",
-    "TRIPLET_WEIGHTS_PATH",
     "TORCH_AVAILABLE",
     "TORCH_IMPORT_ERROR",
     "load_model",
     "postprocess_tensor",
     "predict_params",
     "train_heston_surface_net",
-    "train_heston_param_net_from_prices",
-    "predict_params_from_triplet",
-    "predict_params_from_triplet_weights",
 ]
 
 
@@ -684,6 +679,11 @@ def train_heston_param_net_from_prices(
     """
     Entraîne un MLP simple qui mappe (S0, K, T) -> params Heston en minimisant la RMSE prix.
     """
+    return {
+        "success": False,
+        "message": "Désactivé: paramètres Heston globaux uniquement (pas de modèle par point).",
+        "details": {},
+    }
     if not TORCH_AVAILABLE:
         return {"success": False, "message": "PyTorch requis pour l'entraînement.", "details": {}}
 
@@ -772,6 +772,7 @@ def predict_params_from_triplet(model_state: Dict[str, Any], S0: float, K: float
     """
     Inférence pour le MLP (S0, K, T) -> params Heston.
     """
+    return {"success": False, "message": "Prédicteur par point désactivé (paramètres globaux uniquement).", "params": {}}
     if not TORCH_AVAILABLE:
         return {"success": False, "message": "PyTorch non installé.", "params": {}}
     device_str = str(device or "cpu").lower().strip()
@@ -787,6 +788,7 @@ def predict_params_from_triplet(model_state: Dict[str, Any], S0: float, K: float
 
 
 def predict_params_from_triplet_weights(weights_path: str | Path, S0: float, K: float, T: float, device: str = "cpu") -> Dict[str, float]:
+    return {"success": False, "message": "Prédicteur par point désactivé (paramètres globaux uniquement).", "params": {}}
     if not TORCH_AVAILABLE:
         return {"success": False, "message": "PyTorch non installé.", "params": {}}
     path = Path(weights_path)

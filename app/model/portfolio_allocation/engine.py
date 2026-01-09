@@ -45,6 +45,7 @@ class AlpacaPortfolioClient:
             self.api_key,
             self.api_secret,
             paper=is_paper,
+            raw_data=True,  # raw responses avoid enum mismatches on asset_class
         )
         self.data = StockHistoricalDataClient(
             api_key=self.api_key,
@@ -300,7 +301,7 @@ def execute_rebalance_orders(
             symbol=symbol,
             qty=qty,
             side=OrderSide.BUY if side == "buy" else OrderSide.SELL,
-            time_in_force=TimeInForce.GTC,
+            time_in_force=TimeInForce.DAY,  # fractional orders require DAY TIF
         )
         alpaca_order = client.trading.submit_order(req)
         alpaca_dict = _to_dict(alpaca_order)

@@ -57,6 +57,7 @@ class AlpacaHedgerClient:
                 api_key,
                 api_secret,
                 paper=is_paper,
+                raw_data=True,  # keep raw data to handle option asset_class values
             )
             self.data = StockHistoricalDataClient(api_key=api_key, secret_key=api_secret)
 
@@ -82,7 +83,7 @@ class AlpacaHedgerClient:
             pdict = _to_dict(p)
             if str(pdict.get("asset_class", "")).lower() == "us_equity":
                 equities.append(pdict)
-            elif str(pdict.get("asset_class", "")).lower() == "option":
+            elif "option" in str(pdict.get("asset_class", "")).lower():
                 options.append(pdict)
         return {"equities": equities, "options": options}
 

@@ -24,13 +24,30 @@ _SURF_TYPE_ALIASES = {"type", "option_type", "cp", "right"}
 
 
 def plot_iv_heatmap(z: np.ndarray, x: np.ndarray, y: np.ndarray, title: str) -> None:
+    z_arr = np.asarray(z, dtype=float)
+    title_lower = str(title or "").lower()
+    is_error = "erreur" in title_lower or "error" in title_lower
+
+    colorscale = "Viridis"
+    heatmap_kwargs = {}
+    if is_error:
+        finite = np.abs(z_arr[np.isfinite(z_arr)])
+        vmax = float(finite.max()) if finite.size else 1.0
+        colorscale = [
+            [0.0, "#f7d4d4"],  # negative large -> light red
+            [0.5, "#0b0b0b"],  # zero -> dark center
+            [1.0, "#d2e8ff"],  # positive large -> light blue
+        ]
+        heatmap_kwargs.update({"zmin": -vmax, "zmax": vmax, "zmid": 0.0})
+
     fig = go.Figure(
         data=go.Heatmap(
-            z=z,
+            z=z_arr,
             x=x,
             y=y,
-            colorscale="Viridis",
-            colorbar=dict(title="IV"),
+            colorscale=colorscale,
+            colorbar=dict(title="IV" if not is_error else "Erreur IV"),
+            **heatmap_kwargs,
         )
     )
     fig.update_layout(title=title, xaxis_title="Moneyness", yaxis_title="Time to maturity (y)")
