@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+import altair as alt
 
 from app.controller import dashboard_v2_controller as ctrl
 from app.vue.components.page_utils import render_page_header
@@ -20,28 +21,39 @@ def _render_account_overview(summary: dict, drawdown: dict, risk: dict) -> None:
     net = float(risk.get("net_exposure", 0.0) or 0.0)
     largest = float(risk.get("largest_position_pct", 0.0) or 0.0)
 
-    top_left, top_right = st.columns(2)
-    with top_left:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Equity", f"${equity:,.2f}")
-        c2.metric("Cash", f"${cash:,.2f}")
-        c3.metric("Portfolio Value", f"${pv:,.2f}")
-
-        c4, c5, c6 = st.columns(3)
-        c4.metric("Buying Power", f"${bp:,.2f}")
-        c5.metric("Unrealized PnL", f"${unreal:,.2f}", delta=f"{unreal:,.2f}")
-        c6.metric("Realized PnL", f"${realized:,.2f}", delta=f"{realized:,.2f}")
-
-    with top_right:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Gross Exposure", f"${gross:,.2f}")
-        c2.metric("Net Exposure", f"${net:,.2f}")
-        c3.metric("Max Drawdown", f"{max_dd*100:.2f}%")
-
-        st.caption(
-            f"Largest position weight: {largest*100:.1f}% "
-            "(based on gross exposure)."
+    # Compact bar view to compare key dollar metrics at a glance
+    chart_rows = [
+        ("Equity", equity),
+        ("Cash", cash),
+        ("Portfolio Value", pv),
+        ("Buying Power", bp),
+        ("Gross Exposure", gross),
+        ("Net Exposure", net),
+    ]
+    df_chart = pd.DataFrame(chart_rows, columns=["Metric", "Value"])
+    if not df_chart.empty:
+        st.markdown("#### Vue synthétique (barres)")
+        base = (
+            alt.Chart(df_chart)
+            .encode(
+                y=alt.Y("Metric:N", sort="-x", title=None),
+                x=alt.X("Value:Q", title="USD"),
+                color=alt.condition(
+                    alt.datum.Value >= 0,
+                    alt.value("#34d399"),  # green for positive
+                    alt.value("#f87171"),  # red for negative
+                ),
+                tooltip=[
+                    alt.Tooltip("Metric:N", title="Stat"),
+                    alt.Tooltip("Value:Q", title="Valeur", format=",.2f"),
+                ],
+            )
         )
+        bars = base.mark_bar(cornerRadius=6)
+        labels = base.mark_text(
+            align="left", baseline="middle", dx=6, color="#e5e7eb"
+        ).encode(text=alt.Text("Value:Q", format=",.2f"))
+        st.altair_chart((bars + labels).properties(height=240), use_container_width=True)
 
 
 def _render_performance_section(lookback_days: int) -> None:
@@ -208,18 +220,6 @@ def render_tab() -> None:
     risk = ctrl.get_live_risk_snapshot()
 
     _render_account_overview(summary, drawdown, risk)
-    st.divider()
-
-    st.markdown("### Performance")
-    lookback_days = st.slider(
-        "Lookback (jours)",
-        min_value=30,
-        max_value=365,
-        value=90,
-        step=15,
-        help="Fenêtre utilisée pour les courbes d'equity et de PnL.",
-    )
-    _render_performance_section(lookback_days)
     st.divider()
 
     st.markdown("### Positions & exposition")
