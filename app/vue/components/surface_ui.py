@@ -112,16 +112,35 @@ def render_price_surface_grid(
         st.info("Grille vide.")
         return
 
+    cs = colorscale
+    zmin = None
+    zmax = None
+    zmid = None
+    if "erreur" in str(title).lower() or "error" in str(title).lower():
+        finite = px[np.isfinite(px)]
+        vmax = float(np.nanmax(np.abs(finite))) if finite.size else 1.0
+        cs = [
+            [0.0, "#d4d7f7"],  # negative large -> light
+            [0.5, "#0b0b0b"],  # zero -> dark
+            [1.0, "#f7e3d4"],  # positive large -> light
+        ]
+        zmin = -vmax
+        zmax = vmax
+        zmid = 0.0
+
     fig = go.Figure(
         data=[
             go.Surface(
                 x=K,
                 y=t,
                 z=px,
-                colorscale=colorscale,
+                colorscale=cs,
                 colorbar=dict(title="Prix"),
                 showscale=True,
                 opacity=0.9,
+                zmin=zmin,
+                zmax=zmax,
+                zmid=zmid,
             )
         ]
     )

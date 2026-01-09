@@ -147,6 +147,12 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
         underlying_symbol = st.text_input("Underlying symbol", placeholder="AAPL").upper()
         mode = "underlying"
 
+    status = ctrl.get_status()
+    ready = bool(status.get("ready"))
+    offline = bool(status.get("offline"))
+    if not ready:
+        st.warning("Alpaca client offline ou credentials manquantes : les ordres seront bloqués.")
+
     b1, b2 = st.columns(2)
 
     with b1:
@@ -170,7 +176,7 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
                 st.error(f"Failed to get suggestion: {exc}")
 
     with b2:
-        if st.button("Execute DQN hedge on Alpaca"):
+        if st.button("Execute DQN hedge on Alpaca", disabled=not ready):
             try:
                 if mode == "option":
                     result = ctrl.execute_dqn_hedge_for_option(option_symbol)
@@ -187,6 +193,41 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
                 st.error(f"Hedge execution failed: {exc}")
 
     st.caption("DQN v1 (numpy): replay buffer + target network, entraîné sur un environnement synthétique.")
+
+    # Automatic pass: hedge all underlyings present in the option portfolio
+    st.markdown("### Couverture automatique (options en portefeuille)")
+    underlyings = ctrl.get_option_underlyings()
+    if not underlyings:
+        st.info("Aucune option détectée dans le portefeuille.")
+    else:
+        col_auto_sugg, col_auto_exec = st.columns(2)
+        auto_results = []
+        if col_auto_sugg.button("Suggestions pour toutes les options"):
+            try:
+                auto_results = ctrl.get_portfolio_option_hedges(execute=False)
+            except Exception as exc:
+                st.error(f"Impossible d'obtenir les suggestions: {exc}")
+        if col_auto_exec.button("Exécuter les hedges (toutes)", disabled=not ready):
+            try:
+                auto_results = ctrl.get_portfolio_option_hedges(execute=True)
+            except Exception as exc:
+                st.error(f"Exécution des hedges impossible: {exc}")
+
+        for res in auto_results or []:
+            u = res.get("underlying", "")
+            suggestion = res.get("suggestion", {})
+            order = res.get("order")
+            _render_pill(
+                f"Hedge pour {u or 'n/a'}",
+                _format_suggestion_text(u, suggestion),
+                tone="info",
+            )
+            if order:
+                _render_pill(
+                    f"Ordre exécuté pour {u or 'n/a'}",
+                    _format_execution_text(u, order),
+                    tone="success",
+                )
 
 
 def render_tab() -> None:

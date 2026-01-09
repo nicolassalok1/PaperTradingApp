@@ -61,6 +61,10 @@ class AlpacaHedgerClient:
             )
             self.data = StockHistoricalDataClient(api_key=api_key, secret_key=api_secret)
 
+    def is_ready(self) -> bool:
+        """Whether live Alpaca calls can be made."""
+        return not self.offline and self.trading is not None
+
     def get_account(self) -> Dict[str, Any]:
         if self.offline or self.trading is None:
             return {}
@@ -118,6 +122,8 @@ class AlpacaHedgerClient:
         return float(df.iloc[-1][price_col])
 
     def submit_market_order(self, symbol: str, qty: float, side: str) -> Dict[str, Any]:
+        if not self.is_ready():
+            raise RuntimeError("Alpaca trading client not configured (offline).")
         sym = (symbol or "").strip().upper()
         qty_val = float(qty or 0.0)
         side_enum = OrderSide.BUY if (side or "").lower() == "buy" else OrderSide.SELL
