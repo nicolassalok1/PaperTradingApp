@@ -57,17 +57,7 @@ def _format_execution_text(ref: str, result: dict | str) -> str:
 
 
 def _render_account() -> None:
-    st.markdown("### Aperçu du compte (Alpaca)")
-    account = ctrl.get_account_snapshot()
-    equity = float(account.get("equity", 0.0) or 0.0)
-    cash = float(account.get("cash", 0.0) or 0.0)
-    pv = float(account.get("portfolio_value", equity) or equity)
-    bp = float(account.get("buying_power", 0.0) or 0.0)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Equity", f"${equity:,.2f}")
-    c2.metric("Cash", f"${cash:,.2f}")
-    c3.metric("Portfolio Value", f"${pv:,.2f}")
-    c4.metric("Buying Power", f"${bp:,.2f}")
+    return
 
 
 def _render_positions() -> list[dict]:
@@ -237,10 +227,6 @@ def render_tab() -> None:
         icon="🛡️",
         badge="Hedging",
     )
-
-    # Account snapshot
-    _render_account()
-    st.divider()
 
     # Positions shown read-only
     option_positions = _render_positions()

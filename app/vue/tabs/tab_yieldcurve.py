@@ -18,100 +18,91 @@ def _to_pct(series: pd.Series) -> pd.Series:
 
 def render_tab() -> None:
     currencies = yc.available_currencies()
-    default_currency = "USD" if "USD" in currencies else (currencies[0] if currencies else "USD")
-    currency_options = currencies or [default_currency]
-    default_index = currency_options.index(default_currency) if default_currency in currency_options else 0
+    preferred = ["USD", "EUR"]
+    target_currencies = [ccy for ccy in preferred if ccy in currencies] or currencies or ["USD"]
+    risk_free_maturity = 1.0  # fixed ref to declutter UI
 
-    col_sel_ccy, col_sel_ref = st.columns([1, 1])
-    with col_sel_ccy:
-        currency = st.selectbox("Currency", currency_options, index=default_index, key="yc_currency")
-    t_ref_options = [0.25, 0.5, 1.0, 2.0, 5.0, 10.0]
-    with col_sel_ref:
-        risk_free_maturity = st.selectbox(
-            "Référence r(T)",
-            t_ref_options,
-            index=t_ref_options.index(1.0),
-            format_func=lambda x: f"{x:.2f}y",
+    snapshots: list[dict] = []
+    for ccy in target_currencies:
+        snapshots.append(
+            yc.get_curve_snapshot(
+                currency=ccy, risk_free_maturity=risk_free_maturity, ensure_cache=True
+            )
         )
 
-    snapshot = yc.get_curve_snapshot(
-        currency=currency, risk_free_maturity=risk_free_maturity, ensure_cache=True
-    )
-
-    nodes = snapshot.get("nodes") or []
-    grid = snapshot.get("grid") or []
-    forwards = snapshot.get("forward_rates") or []
-    inst_curve = snapshot.get("inst_curve") or []
-    ns_params = snapshot.get("ns_params") or {}
-    ns_curve = snapshot.get("ns_curve") or []
-    risk_free_rate = snapshot.get("risk_free_rate")
-    source_path = snapshot.get("source_path")
-    source_kind = snapshot.get("source_kind") or "cache"
-    last_updated = snapshot.get("last_updated")
-    currency = snapshot.get("currency") or currency
+    active_snapshot = snapshots[0]
+    nodes = active_snapshot.get("nodes") or []
+    grid = active_snapshot.get("grid") or []
+    forwards = active_snapshot.get("forward_rates") or []
+    inst_curve = active_snapshot.get("inst_curve") or []
+    ns_params = active_snapshot.get("ns_params") or {}
+    ns_curve = active_snapshot.get("ns_curve") or []
+    currency = active_snapshot.get("currency") or target_currencies[0]
+    source_path = active_snapshot.get("source_path")
+    source_kind = active_snapshot.get("source_kind") or "cache"
+    last_updated = active_snapshot.get("last_updated")
 
     render_page_header(
         "Yield Curve (courbe des taux)",
-        "Vue rapide des courbes ZC/DF et gestion des nodes / cache.",
+        "Vue rapide multi-devises (USD/EUR) des courbes ZC/DF et gestion des nodes / cache.",
         icon="🧮",
         badge="Rates",
     )
 
     source_label = source_path if source_path else "data/yield_curves/*_nodes.(csv|json)"
-    meta = f"Devise: {currency} • Source: {source_kind} -> {source_label}"
-    if last_updated:
-        meta += f" • Dernière MAJ: {last_updated}"
     if source_kind == "flat_fallback":
         st.warning("Données indisponibles: courbe plate (DEFAULT_RF_RATE) utilisée en secours.")
-    st.caption(meta)
 
-    df_nodes = pd.DataFrame(nodes)
-    df_grid = pd.DataFrame(grid)
-    df_ns = pd.DataFrame(ns_curve)
+    # Build combined datasets to plot multiple currencies on one chart.
+    nodes_frames = []
+    ns_frames = []
+    for snap in snapshots:
+        ccy = snap.get("currency") or "N/A"
+        df_n = pd.DataFrame(snap.get("nodes") or [])
+        if not df_n.empty and {"t_years", "zero_rate"}.issubset(df_n.columns):
+            df_n = df_n.copy()
+            df_n["rate_pct"] = pd.to_numeric(df_n["zero_rate"], errors="coerce") * 100.0
+            df_n["currency"] = ccy
+            nodes_frames.append(df_n[["tenor", "t_years", "rate_pct", "currency"]])
 
-    col_rf, col_ref = st.columns([2, 1])
-    with col_rf:
-        if risk_free_rate is not None:
-            st.metric(
-                f"Risk-free rate r(T) ({currency})",
-                f"{float(risk_free_rate) * 100:.2f} %",
-                f"T = {float(risk_free_maturity):.2f}y",
-            )
-        else:
-            st.warning("Risk-free rate indisponible.")
-    with col_ref:
-        st.write("")
-        st.caption("Courbe utilisée par les pricers (zc).")
+        df_ns_local = pd.DataFrame(snap.get("ns_curve") or [])
+        if not df_ns_local.empty and {"t_years", "zero_rate"}.issubset(df_ns_local.columns):
+            df_ns_local = df_ns_local.copy()
+            df_ns_local["rate_pct"] = pd.to_numeric(df_ns_local["zero_rate"], errors="coerce") * 100.0
+            df_ns_local["currency"] = ccy
+            ns_frames.append(df_ns_local[["t_years", "rate_pct", "currency"]])
+
+    df_nodes = pd.concat(nodes_frames, ignore_index=True) if nodes_frames else pd.DataFrame()
+    df_ns = pd.concat(ns_frames, ignore_index=True) if ns_frames else pd.DataFrame()
 
     st.markdown("### Courbe de taux (vue rapide)")
     if not df_nodes.empty or not df_ns.empty:
-        df_nodes_plot = df_nodes.copy()
-        if "t_years" in df_nodes_plot.columns and "zero_rate" in df_nodes_plot.columns:
-            df_nodes_plot["rate_pct"] = df_nodes_plot["zero_rate"].astype(float) * 100.0
-        else:
-            df_nodes_plot = pd.DataFrame()
-
-        df_ns_plot = df_ns.copy()
-        if "t_years" in df_ns_plot.columns and "zero_rate" in df_ns_plot.columns:
-            df_ns_plot["rate_pct"] = df_ns_plot["zero_rate"].astype(float) * 100.0
-        else:
-            df_ns_plot = pd.DataFrame()
-
         x_enc = alt.X("t_years:Q", title="Maturité (années)")
         y_enc = alt.Y("rate_pct:Q", title="Taux zéro-coupon (%)")
+        color_enc = alt.Color("currency:N", title="Devise")
 
         charts = []
-        if not df_nodes_plot.empty:
+        if not df_nodes.empty:
             charts.append(
-                alt.Chart(df_nodes_plot)
-                .mark_circle(size=70, color="#ffcc66")
-                .encode(x=x_enc, y=y_enc, tooltip=["tenor:N", "t_years:Q", "rate_pct:Q"])
+                alt.Chart(df_nodes)
+                .mark_circle(size=70)
+                .encode(
+                    x=x_enc,
+                    y=y_enc,
+                    color=color_enc,
+                    tooltip=["currency:N", "tenor:N", "t_years:Q", "rate_pct:Q"],
+                )
             )
-        if not df_ns_plot.empty:
+        if not df_ns.empty:
             charts.append(
-                alt.Chart(df_ns_plot)
-                .mark_line(color="#00e5ff")
-                .encode(x=x_enc, y=y_enc)
+                alt.Chart(df_ns)
+                .mark_line()
+                .encode(
+                    x=x_enc,
+                    y=y_enc,
+                    color=color_enc,
+                    tooltip=["currency:N", "t_years:Q", "rate_pct:Q"],
+                )
             )
         if charts:
             chart = charts[0]
@@ -121,83 +112,6 @@ def render_tab() -> None:
             st.altair_chart(chart, width="stretch")
     else:
         st.info("Aucune courbe à afficher. Ajoute des fichiers *_nodes.csv sous data/yield_curves/.")
-
-    tab_df, tab_fwds = st.tabs(["Discount factors", "Forwards & instantaneous"])
-    with tab_df:
-        if not df_grid.empty:
-            df_df = df_grid.copy()
-            if "t_years" not in df_df.columns or "discount_factor" not in df_df.columns:
-                st.info("Pas de discount factors calculables sans courbe.")
-            else:
-                df_df = df_df.sort_values("t_years").copy()
-                df_df["discount_factor"] = pd.to_numeric(df_df["discount_factor"], errors="coerce")
-                df_df = df_df.dropna(subset=["t_years", "discount_factor"])
-
-                x_axis = alt.Axis(
-                    tickCount=12,
-                    labelOverlap="greedy",
-                    labelExpr=(
-                        "datum.value >= 1 ? "
-                        "(abs(datum.value - round(datum.value)) < 1e-6 ? round(datum.value) + 'a' : format(datum.value, '.1f') + 'a') : "
-                        "datum.value >= (1/12) ? "
-                        "(abs(datum.value*12 - round(datum.value*12)) < 1e-6 ? round(datum.value*12) + 'm' : format(datum.value*12, '.1f') + 'm') : "
-                        "(abs(datum.value*365 - round(datum.value*365)) < 1e-6 ? round(datum.value*365) + 'j' : format(datum.value*365, '.1f') + 'j')"
-                    ),
-                )
-
-                chart = (
-                    alt.Chart(df_df)
-                    .mark_area(color="#88ccff", opacity=0.65, line={"color": "#88ccff"})
-                    .encode(
-                        x=alt.X("t_years:Q", title="Maturité", axis=x_axis),
-                        y=alt.Y("discount_factor:Q", title="DF", scale=alt.Scale(domain=[0, 1])),
-                        tooltip=[
-                            alt.Tooltip("t_years:Q", title="T (années)", format=".4f"),
-                            alt.Tooltip("discount_factor:Q", title="Discount factor", format=".6f"),
-                        ],
-                    )
-                    .properties(height=220)
-                )
-                st.altair_chart(chart, width="stretch")
-        else:
-            st.info("Pas de discount factors calculables sans courbe.")
-
-    with tab_fwds:
-        df_fwds = pd.DataFrame(forwards)
-        df_inst = pd.DataFrame(inst_curve)
-
-        if not df_fwds.empty and "forward_rate" in df_fwds.columns:
-            df_fwds = df_fwds.copy()
-            df_fwds["forward_pct"] = _to_pct(df_fwds["forward_rate"])
-            st.dataframe(
-                df_fwds.rename(
-                    columns={
-                        "start_years": "Start (y)",
-                        "end_years": "End (y)",
-                        "forward_pct": "Forward rate (%)",
-                    }
-                )[["Start (y)", "End (y)", "Forward rate (%)"]],
-                hide_index=True,
-                width="stretch",
-            )
-        else:
-            st.info("Forward rates indisponibles.")
-
-        if not df_inst.empty and "inst_forward_rate" in df_inst.columns:
-            df_inst = df_inst.copy()
-            df_inst["fwd_pct"] = _to_pct(df_inst["inst_forward_rate"])
-            st.altair_chart(
-                alt.Chart(df_inst)
-                .mark_line(color="#ff66cc")
-                .encode(
-                    x=alt.X("t_years:Q", title="Maturité (années)"),
-                    y=alt.Y("fwd_pct:Q", title="Instantaneous forward (%)"),
-                )
-                .properties(height=220),
-                width="stretch",
-            )
-        else:
-            st.info("Instantaneous forward curve indisponible.")
 
     with st.expander("Gestion de la courbe (import / édition)", expanded=False):
         col_a, col_b, col_c = st.columns([1, 1, 2])

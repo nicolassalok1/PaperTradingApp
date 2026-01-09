@@ -9,14 +9,7 @@ TAB_LABEL = "🧭 Portefeuille & Risque"
 
 
 def _render_account_snapshot(account: dict) -> None:
-    st.markdown("### Aperçu du compte")
-    equity = account.get("equity", 0.0)
-    cash = account.get("cash", 0.0)
-    pv = account.get("portfolio_value", equity)
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Equity", f"${equity:,.2f}")
-    col2.metric("Cash", f"${cash:,.2f}")
-    col3.metric("Portfolio Value", f"${pv:,.2f}")
+    return
 
 
 def _render_exposure(
