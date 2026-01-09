@@ -319,7 +319,12 @@ class DashboardV2Client:
         exposures: List[Dict[str, Any]] = []
         for p in spots + opts:
             mv = float(p.get("market_value", 0.0) or 0.0)
+            # Skip zero-value/zero-weight entries (e.g., failed/placeholder fills)
+            if mv == 0:
+                continue
             weight = (mv / pv) if pv else 0.0
+            if weight == 0:
+                continue
             exposures.append(
                 {
                     "symbol": p.get("symbol"),
