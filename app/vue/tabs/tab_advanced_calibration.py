@@ -290,7 +290,11 @@ def render_tab() -> None:
                     key="adv_calib_alpaca_ticker",
                 )
             else:
-                ticker = st.text_input("Underlying ticker", value=str(default_ticker)).upper().strip()
+                ticker = st.text_input(
+                    "Underlying ticker",
+                    value=str(default_ticker),
+                    key="adv_calib_alpaca_ticker_manual",
+                ).upper().strip()
         with col_load:
             load_clicked = st.button("Load chain", width="stretch", key="adv_calib_alpaca_load_btn")
 

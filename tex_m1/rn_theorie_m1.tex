@@ -1,0 +1,100 @@
+% =========================================================
+% Compléments M1 — Risk-neutral pricing (B. Théorie)
+% =========================================================
+
+\subsection*{(1) Numéraire : pourquoi «prix = espérance» n'est pas une magie}
+Le point conceptuel est le suivant :
+\begin{quote}
+\emph{Un prix n'est une espérance que relativement à un choix de numéraire.}
+\end{quote}
+Soit $B_t$ un actif strictement positif (le numéraire). Typiquement $B_t=e^{rt}$ (compte monétaire).
+On définit le prix \emph{actualisé} (ou numéraire-quotient) :
+\[
+\widetilde S_t \triangleq \frac{S_t}{B_t}.
+\]
+Le théorème fondamental de l'évaluation des actifs dit (version intuitive) :
+\[
+\text{NA} \Longrightarrow \exists\,\Qmeas\sim\Pmeas \text{ telle que } (\widetilde S_t) \text{ est une martingale sous }\Qmeas.
+\]
+Alors pour tout payoff intégrable $X_T$ payable à $T$, son prix à $t$ (dans un marché complet) est
+\[
+\boxed{
+V_t = B_t\,\E^{\Qmeas}\!\left[\left.\frac{X_T}{B_T}\right|\F_t\right].
+}
+\]
+\paragraph{Lecture.}
+L'espérance porte sur un payoff \emph{en unité de numéraire}. On re-multiplie ensuite par $B_t$ pour revenir en monnaie.
+
+\subsection*{(2) Mesure équivalente et dérivée de Radon--Nikodym : densité de changement de mesure}
+Dire $\Qmeas\sim\Pmeas$ signifie : mêmes événements nuls (pas d'événement «impossible» sous l'une et possible sous l'autre).
+On introduit la densité
+\[
+Z_T=\frac{\dd \Qmeas}{\dd \Pmeas}\Big|_{\F_T},
+\qquad Z_T>0,\ \E^{\Pmeas}[Z_T]=1,
+\]
+et la formule de Bayes (conditionnelle) :
+\[
+\E^{\Qmeas}[Y\mid \F_t]
+=\frac{\E^{\Pmeas}[Z_T Y\mid \F_t]}{\E^{\Pmeas}[Z_T\mid \F_t]}.
+\]
+\paragraph{Interprétation finance.}
+$Z_T$ est proche d'une \emph{densité d'état} (state-price density) : elle repondère les scénarios pour refléter aversion au risque / prix du risque.
+En modèle BS, $Z_T$ est une exponentielle de Brownien (cf. martingale exponentielle).
+
+\subsection*{(3) Prix du risque de marché : séparer drift réel et drift de pricing}
+Sous $\Pmeas$, on écrit
+\[
+\frac{\dd S_t}{S_t}=\mu\,\dd t+\sigma\,\dd W_t^{\Pmeas}.
+\]
+Sous $\Qmeas$ (numéraire $B_t=e^{rt}$), on veut
+\[
+\frac{\dd S_t}{S_t}=(r-q)\,\dd t+\sigma\,\dd W_t^{\Qmeas}.
+\]
+La différence $\mu-(r-q)$ est la \emph{prime de risque}. On définit
+\[
+\lambda \triangleq \frac{\mu-(r-q)}{\sigma},
+\]
+appelé \emph{market price of risk}.
+Girsanov dit précisément comment fabriquer $\Qmeas$ telle que
+\[
+W_t^{\Qmeas}=W_t^{\Pmeas}+\int_0^t \lambda\,\dd s
+\]
+soit un brownien sous $\Qmeas$.
+Message clé : $\mu$ est un paramètre «historique», alors que $(r-q)$ et $\sigma$ sont les paramètres de pricing en BS.
+
+\subsection*{(4) Complétude et unicité de $\Qmeas$ : que signifie «réplication»}
+Dans un marché frictionless :
+\begin{itemize}[leftmargin=*]
+\item \textbf{NA} (no arbitrage) $\Rightarrow$ existence d'au moins une mesure martingale équivalente (EMM).
+\item \textbf{Complétude} $\Rightarrow$ unicité de l'EMM et réplication de tout payoff intégrable.
+\end{itemize}
+En Black--Scholes (un brownien, un actif risqué), le marché est complet : il y a exactement «autant de sources de risque que d'actifs risqués indépendants», ce qui permet de couvrir.
+\paragraph{Message M1.}
+La complétude est intimement liée au \emph{théorème de représentation des martingales} : toute martingale continue (adaptée à la filtration brownienne) peut s'écrire comme une intégrale d'Itô. C'est la forme mathématique de «toute incertitude peut être répliquée par trading continu».
+
+\subsection*{(5) Marché incomplet : non-unicité et choix de prix}
+Dès qu'on ajoute :
+\begin{itemize}[leftmargin=*]
+\item sauts (Merton/Bates),
+\item volatilité stochastique non entièrement tradable (Heston),
+\item frictions (coûts, contraintes, hedging discret),
+\end{itemize}
+le marché devient (souvent) incomplet : plusieurs mesures $\Qmeas$ sont possibles.
+On doit alors choisir un critère (exemples) :
+\begin{itemize}[leftmargin=*]
+\item \emph{prix par utilité} (maximisation d'espérance d'utilité),
+\item \emph{minimal martingale measure} (minimiser un risque résiduel),
+\item \emph{calibration} : choisir une $\Qmeas$ (ou des paramètres) qui colle à la surface d'options observée.
+\end{itemize}
+Cela explique pourquoi, en pratique, «le modèle» est souvent \emph{identifié} par calibration plutôt que par estimation historique.
+
+\subsection*{(6) Changement de numéraire : forward measure (utile en taux, et même en equity)}
+Le choix du numéraire n'est pas unique.
+Par exemple, en taux, on choisit souvent comme numéraire un zéro-coupon $P(t,T)$, ce qui définit la \emph{mesure $T$-forward}.
+En equity avec dividendes, il est parfois naturel de travailler avec le numéraire «forward» $B_t e^{-qt}$.
+La règle générale est :
+\[
+V_t = N_t\,\E^{\Qmeas^{N}}\!\left[\left.\frac{X_T}{N_T}\right|\F_t\right],
+\]
+où $\Qmeas^{N}$ est la mesure associée au numéraire $N$ (sous laquelle les prix divisés par $N$ sont des martingales).
+Ce point clarifie beaucoup de dérivations (et évite des erreurs de drift).

@@ -1,0 +1,345 @@
+% =========================================================
+% Compléments M1 — Risk-neutral pricing (C. Dérivations)
+% =========================================================
+
+\subsection*{(1) Portefeuille auto-financé avec dividendes : dérivation propre de la PDE}
+On détaille ici la dérivation «delta-hedging $\Rightarrow$ PDE» en prenant au sérieux le dividende continu $q$.
+
+\paragraph{Hypothèses (cadre Black--Scholes).}
+\begin{itemize}[leftmargin=*]
+\item Un actif risqué (action) de prix ex-dividende $S_t$.
+\item Dividende continu au taux $q$ : détenir une action rapporte un flux $qS_t\,\dd t$.
+\item Un actif sans risque $B_t=e^{rt}$.
+\item Sous $\Pmeas$ (mesure historique), on suppose $\dd S_t=\mu S_t\,\dd t+\sigma S_t\,\dd W_t$.
+\end{itemize}
+
+\paragraph{Étape 1 : dynamique de l'option par Itô.}
+Soit $V(t,S)$ le prix d'une option européenne (payoff $\Phi(S_T)$).
+Par Itô :
+\[
+\dd V
+=\Big(V_t+\mu S V_S+\tfrac12\sigma^2S^2V_{SS}\Big)\dd t
+ +\sigma S V_S\,\dd W_t.
+\]
+
+\paragraph{Étape 2 : construire un portefeuille couvert.}
+Considérons le portefeuille
+\[
+\Pi_t = V(t,S_t)-\Delta_t S_t.
+\]
+Interprétation : long l'option, short $\Delta$ actions.
+\emph{Attention dividendes :} en étant short $\Delta$ actions, on \emph{paie} le dividende au prêteur du titre.
+Ainsi, le gain sur la position short est $-\Delta\,\dd S_t - \Delta\,qS_t\,\dd t$.
+On obtient :
+\[
+\dd \Pi_t=\dd V - \Delta_t\,\dd S_t - \Delta_t q S_t\,\dd t.
+\]
+
+\paragraph{Étape 3 : annuler le risque brownien.}
+Substituons $\dd V$ et $\dd S$ :
+\[
+\begin{aligned}
+\dd \Pi_t
+&=\Big(V_t+\mu S V_S+\tfrac12\sigma^2S^2V_{SS}\Big)\dd t +\sigma S V_S\,\dd W\\
+&\quad-\Delta\big(\mu S\,\dd t+\sigma S\,\dd W\big)-\Delta qS\,\dd t.
+\end{aligned}
+\]
+Choisissons
+\[
+\boxed{\Delta_t=V_S(t,S_t).}
+\]
+Alors les termes en $\dd W$ se compensent :
+\[
+\sigma S V_S\,\dd W - \Delta\sigma S\,\dd W = 0.
+\]
+Il reste un portefeuille \textbf{localement sans risque} :
+\[
+\dd \Pi_t=\Big(V_t+\tfrac12\sigma^2S^2V_{SS}-qSV_S\Big)\dd t.
+\]
+
+\paragraph{Étape 4 : absence d'arbitrage $\Rightarrow$ rendement au taux $r$.}
+Un portefeuille sans risque doit rémunérer au taux sans risque :
+\[
+\dd \Pi_t = r\,\Pi_t\,\dd t = r\big(V-\Delta S\big)\dd t=r\big(V-SV_S\big)\dd t.
+\]
+En identifiant :
+\[
+V_t+\tfrac12\sigma^2S^2V_{SS}-qSV_S = rV-rSV_S.
+\]
+On regroupe :
+\[
+\boxed{
+V_t+\tfrac12\sigma^2S^2V_{SS}+(r-q)SV_S-rV=0,
+}
+\qquad V(T,S)=\Phi(S).
+\]
+\paragraph{Message.}
+Le drift $\mu$ a disparu : l'équation de pricing est indépendante de la prime de risque.
+
+\subsection*{(2) De la PDE à l'espérance : preuve guidée de Feynman--Kac (cas BS)}
+Supposons maintenant que $S$ suit sous $\Qmeas$ :
+\[
+\dd S_t=(r-q)S_t\,\dd t+\sigma S_t\,\dd W_t^{\Qmeas}.
+\]
+Soit $V$ solution régulière de la PDE BS ci-dessus.
+Considérons le processus actualisé :
+\[
+M_t=e^{-rt}V(t,S_t).
+\]
+Par Itô (produit d'une fonction de $t,S_t$ par $e^{-rt}$) :
+\[
+\dd M_t = e^{-rt}\Big(\dd V-rV\,\dd t\Big).
+\]
+Or (sous $\Qmeas$) :
+\[
+\dd V=\Big(V_t+(r-q)SV_S+\tfrac12\sigma^2S^2V_{SS}\Big)\dd t+\sigma SV_S\,\dd W^{\Qmeas}.
+\]
+Donc
+\[
+\dd M_t=e^{-rt}\Big(\underbrace{V_t+(r-q)SV_S+\tfrac12\sigma^2S^2V_{SS}-rV}_{=0\ \text{par PDE}}\Big)\dd t
+e^{-rt}\sigma SV_S\,\dd W^{\Qmeas}.
+\]
+Le terme de drift est nul. Il reste :
+\[
+\dd M_t=e^{-rt}\sigma S_tV_S(t,S_t)\,\dd W_t^{\Qmeas},
+\]
+donc $M$ est une martingale.
+On en déduit, pour $t\le T$,
+\[
+M_t=\E^{\Qmeas}[M_T\mid \F_t]
+=\E^{\Qmeas}\big[e^{-rT}V(T,S_T)\mid \F_t\big]
+=\E^{\Qmeas}\big[e^{-rT}\Phi(S_T)\mid \F_t\big].
+\]
+En multipliant par $e^{rt}$ :
+\[
+\boxed{
+V(t,S_t)=\E^{\Qmeas}\big[e^{-r(T-t)}\Phi(S_T)\mid \F_t\big].
+}
+\]
+\paragraph{Point pédagogique.}
+La PDE et la formule d'espérance sont \emph{la même information} écrite dans deux langages :
+\begin{itemize}[leftmargin=*]
+\item PDE : langage «local» (infinitésimal) ;
+\item Feynman--Kac : langage «global» (espérance terminale).
+\end{itemize}
+
+\subsection*{(3) Girsanov en pratique : construire $\Qmeas$ et changer le drift}
+On montre ici le mécanisme, dans le cas simple où $\lambda$ est constant.
+
+\paragraph{Sous $\Pmeas$.}
+\[
+\frac{\dd S_t}{S_t}=\mu\,\dd t+\sigma\,\dd W_t^{\Pmeas}.
+\]
+On définit
+\[
+\lambda=\frac{\mu-(r-q)}{\sigma}.
+\]
+
+\paragraph{Étape 1 : densité exponentielle.}
+On pose
+\[
+Z_t=\exp\Big(-\lambda W_t^{\Pmeas}-\tfrac12\lambda^2 t\Big).
+\]
+Du chapitre Brownien, on sait que $Z_t$ est une martingale (exponentielle de Brownien).
+La condition de Novikov est vérifiée ici automatiquement (constante), donc on peut définir une mesure $\Qmeas$ par :
+\[
+\frac{\dd \Qmeas}{\dd \Pmeas}\Big|_{\F_T}=Z_T.
+\]
+
+\paragraph{Étape 2 : nouveau Brownien.}
+Définissons
+\[
+W_t^{\Qmeas}=W_t^{\Pmeas}+\lambda t.
+\]
+Le théorème de Girsanov garantit que $(W_t^{\Qmeas})$ est un brownien sous $\Qmeas$.
+
+\paragraph{Étape 3 : dynamique de $S$ sous $\Qmeas$.}
+Comme $\dd W_t^{\Pmeas}=\dd W_t^{\Qmeas}-\lambda\,\dd t$, on substitue :
+\[
+\frac{\dd S_t}{S_t}
+=\mu\,\dd t+\sigma(\dd W_t^{\Qmeas}-\lambda\,\dd t)
+=(\mu-\sigma\lambda)\dd t+\sigma\,\dd W_t^{\Qmeas}
+=(r-q)\dd t+\sigma\,\dd W_t^{\Qmeas}.
+\]
+On a bien remplacé le drift historique $\mu$ par le drift de pricing $(r-q)$.
+
+\subsection*{(4) Exercices corrigés (pricing risque-neutre)}
+\paragraph{Exercice 1 --- forward et drift risque-neutre.}
+Sous $\Qmeas$, $\dd S_t=(r-q)S_t\,\dd t+\sigma S_t\,\dd W_t$.
+Montrer que $\E^{\Qmeas}[S_T\mid \F_t]=S_t e^{(r-q)(T-t)}$.
+
+\emph{Solution.}
+On sait que $S_T=S_t\exp((r-q-\frac12\sigma^2)(T-t)+\sigma (W_T-W_t))$.
+Conditionnellement à $\F_t$, $W_T-W_t\sim\Normal(0,T-t)$.
+Donc
+\[
+\E^{\Qmeas}[S_T\mid \F_t]=S_t e^{(r-q-\frac12\sigma^2)(T-t)}\E[e^{\sigma (W_T-W_t)}]
+=S_t e^{(r-q-\frac12\sigma^2)(T-t)}e^{\frac12\sigma^2(T-t)}
+=S_t e^{(r-q)(T-t)}.
+\]
+
+\paragraph{Exercice 2 --- retrouver la PDE par un raisonnement «martingale».}
+Partir de $M_t=e^{-rt}V(t,S_t)$ et imposer que $M$ soit une martingale sous $\Qmeas$.
+Retrouver la PDE de Black--Scholes.
+
+\emph{Solution.}
+On calcule $\dd M_t$ par Itô. L'absence de drift impose que le coefficient de $\dd t$ soit nul, ce qui donne exactement
+$V_t+(r-q)SV_S+\tfrac12\sigma^2S^2V_{SS}-rV=0$.
+
+\paragraph{Exercice 3 --- digital call et dérivée en strike.}
+Considérons le payoff digital $\Phi(S_T)=\1_{\{S_T>K\}}$.
+\begin{enumerate}[leftmargin=*]
+\item Montrer que son prix est $D_0=e^{-rT}\Qmeas(S_T>K)$.
+\item Montrer que $-\partial_K C(K,T)=e^{-rT}\Qmeas(S_T>K)$ (formule de Breeden--Litzenberger au 1er ordre).
+\end{enumerate}
+
+\emph{Solution.}
+Le prix risque-neutre donne immédiatement
+\[
+D_0=e^{-rT}\E^{\Qmeas}[\1_{\{S_T>K\}}]=e^{-rT}\Qmeas(S_T>K).
+\]
+Pour le call $C(K,T)=e^{-rT}\E^{\Qmeas}[(S_T-K)^+]$, on utilise que la dérivée de $(s-K)^+$ en $K$ vaut $-\1_{\{s>K\}}$ (pour $s\neq K$).
+Sous des hypothèses standard permettant d'échanger dérivée et espérance :
+\[
+\partial_K C(K,T)=e^{-rT}\E^{\Qmeas}[\partial_K(S_T-K)^+]
+=-e^{-rT}\E^{\Qmeas}[\1_{\{S_T>K\}}],
+\]
+d'où la relation demandée.
+
+\paragraph{Exercice 4 --- digital en Black--Scholes : formule fermée.}
+Sous BS (taux constants), montrer que
+\[
+\Qmeas(S_T>K)=N(d_2)
+\quad\Rightarrow\quad
+D_0=e^{-rT}N(d_2).
+\]
+
+\emph{Solution.}
+Sous BS, $\ln S_T\sim \Normal(m,\sigma^2T)$ avec
+$m=\ln S_0+(r-q-\tfrac12\sigma^2)T$.
+Alors
+\[
+\Qmeas(S_T>K)=\Qmeas(\ln S_T>\ln K)
+=\Qmeas\!\left(\frac{\ln S_T-m}{\sigma\sqrt{T}}>\frac{\ln K-m}{\sigma\sqrt{T}}\right).
+\]
+Le terme à gauche est une $\Normal(0,1)$, donc la probabilité vaut $1-N(\cdot)$.
+Or
+\[
+d_2=\frac{\ln(S_0/K)+(r-q-\tfrac12\sigma^2)T}{\sigma\sqrt{T}}=\frac{m-\ln K}{\sigma\sqrt{T}},
+\]
+donc $\frac{\ln K-m}{\sigma\sqrt{T}}=-d_2$ et
+\[
+\Qmeas(S_T>K)=1-N(-d_2)=N(d_2).
+\]
+Le prix suit : $D_0=e^{-rT}N(d_2)$.
+
+\paragraph{Exercice 5 --- Novikov (cas constant) et validité de Girsanov.}
+On suppose $\lambda$ constant et on définit
+\[
+Z_T=\exp\Big(-\lambda W_T^{\Pmeas}-\tfrac12\lambda^2T\Big).
+\]
+Montrer que $\E^{\Pmeas}[Z_T]=1$ et que la condition de Novikov est satisfaite.
+
+\emph{Solution.}
+Comme $W_T^{\Pmeas}\sim\Normal(0,T)$, on sait que
+\[
+\E[e^{-\lambda W_T^{\Pmeas}}]=\exp\Big(\tfrac12\lambda^2T\Big).
+\]
+Donc
+\[
+\E[Z_T]=e^{-\frac12\lambda^2T}\E[e^{-\lambda W_T}]
+=e^{-\frac12\lambda^2T}e^{\frac12\lambda^2T}=1.
+\]
+La condition de Novikov (pour assurer que $Z_t$ est une martingale) est
+\[
+\E\!\left[\exp\Big(\tfrac12\int_0^T \lambda^2\,\dd t\Big)\right]
+=\exp\Big(\tfrac12\lambda^2T\Big)<\infty,
+\]
+qui est vraie. Girsanov s'applique donc sur $[0,T]$.
+
+\subsection*{(6) Bonus : résoudre la PDE Black--Scholes via l'équation de la chaleur (détaillé)}
+La formule BS peut se dériver en résolvant la PDE, ce qui complète la dérivation probabiliste.
+On part de la PDE (call/put européen) :
+\[
+V_t+(r-q)SV_S+\tfrac12\sigma^2S^2V_{SS}-rV=0,\qquad V(T,S)=\Phi(S).
+\]
+On va la transformer en équation de la chaleur.
+
+\paragraph{Étape 1 : renverser le temps.}
+Posons $\tau=T-t$ (donc $\tau=0$ à maturité). Alors $V_t=-V_\tau$ et la PDE devient :
+\[
+V_\tau=(r-q)SV_S+\tfrac12\sigma^2S^2V_{SS}-rV.
+\]
+
+\paragraph{Étape 2 : passer en log-spot.}
+Posons $x=\ln(S/K)$ (on centre sur le strike) et écrivons $V(\tau,S)=K\,u(\tau,x)$ avec $S=Ke^x$.
+On calcule les dérivées (règle de chaîne) :
+\[
+V_S=\frac{\partial (K u)}{\partial S}=K u_x\frac{\partial x}{\partial S}=K u_x\frac{1}{S},
+\qquad
+V_{SS}=K\frac{\partial}{\partial S}\!\left(u_x\frac{1}{S}\right)
+=K\left(u_{xx}\frac{1}{S^2}-u_x\frac{1}{S^2}\right).
+\]
+Donc
+\[
+SV_S=K u_x,\qquad S^2V_{SS}=K(u_{xx}-u_x).
+\]
+En injectant dans la PDE :
+\[
+K u_\tau=(r-q)K u_x+\tfrac12\sigma^2K(u_{xx}-u_x)-rKu,
+\]
+et en divisant par $K$ :
+\[
+u_\tau=\tfrac12\sigma^2u_{xx}+\Big(r-q-\tfrac12\sigma^2\Big)u_x-r u.
+\]
+
+\paragraph{Étape 3 : supprimer le terme $-ru$ (actualisation).}
+Posons $u(\tau,x)=e^{-r\tau}\,w(\tau,x)$. Alors
+$u_\tau=e^{-r\tau}(w_\tau-rw)$, donc
+\[
+e^{-r\tau}(w_\tau-rw)=\tfrac12\sigma^2 e^{-r\tau}w_{xx}+\Big(r-q-\tfrac12\sigma^2\Big)e^{-r\tau}w_x-r e^{-r\tau}w.
+\]
+Les termes $-rw$ s'annulent, et il reste :
+\[
+w_\tau=\tfrac12\sigma^2 w_{xx}+\Big(r-q-\tfrac12\sigma^2\Big)w_x.
+\]
+
+\paragraph{Étape 4 : supprimer le terme en $w_x$ (translation).}
+Posons
+\[
+y=x+\Big(r-q-\tfrac12\sigma^2\Big)\tau,
+\qquad
+w(\tau,x)=\widetilde w(\tau,y).
+\]
+Alors $w_x=\widetilde w_y$ et $w_{xx}=\widetilde w_{yy}$, tandis que
+$w_\tau=\widetilde w_\tau+\Big(r-q-\tfrac12\sigma^2\Big)\widetilde w_y$.
+En injectant :
+\[
+\widetilde w_\tau+\Big(r-q-\tfrac12\sigma^2\Big)\widetilde w_y
+=\tfrac12\sigma^2\widetilde w_{yy}+\Big(r-q-\tfrac12\sigma^2\Big)\widetilde w_y,
+\]
+donc finalement :
+\[
+\boxed{\widetilde w_\tau=\tfrac12\sigma^2\widetilde w_{yy}.}
+\]
+C'est l'équation de la chaleur.
+
+\paragraph{Condition initiale (à $\tau=0$).}
+Pour un call, $\Phi(S)=(S-K)^+$, donc en $x=\ln(S/K)$ :
+\[
+V(0,S)=\Phi(S)\quad\Rightarrow\quad u(0,x)=\frac{\Phi(Ke^x)}{K}=(e^x-1)^+.
+\]
+Comme $u(0,x)=w(0,x)=\widetilde w(0,y)$, on a :
+\[
+\widetilde w(0,y)=(e^y-1)^+.
+\]
+
+\paragraph{Conclusion (intuition, sans refaire toute l'intégrale).}
+La solution de l'équation de la chaleur est une convolution par une gaussienne :
+\[
+\widetilde w(\tau,y)=\int_{-\infty}^{\infty} (e^z-1)^+\,
+\frac{1}{\sqrt{2\pi\sigma^2\tau}}\exp\!\left(-\frac{(y-z)^2}{2\sigma^2\tau}\right)\dd z.
+\]
+En revenant aux variables $(t,S)$, cette intégrale se calcule explicitement et redonne
+$C=S_0e^{-qT}N(d_1)-Ke^{-rT}N(d_2)$.
+Le point important est conceptuel : la normalité intervient car l'équation de la chaleur a pour noyau fondamental une gaussienne.

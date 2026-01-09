@@ -1,0 +1,74 @@
+% =========================================================
+% Compléments M1 — Surface d'IV (B. Théorie)
+% =========================================================
+
+\subsection*{(1) Trois niveaux de représentation : prix, IV, variance totale}
+Une surface peut être représentée sous trois formes principales :
+\begin{itemize}[leftmargin=*]
+\item \textbf{Prix} $C(K,T)$ (ou $P(K,T)$) : c'est l'objet «économique» directement arbitrageable.
+\item \textbf{Vol implicite} $\sigma_{\mathrm{impl}}(K,T)$ : convention de marché (échelle comparable).
+\item \textbf{Variance totale} $w(k,T)=\sigma_{\mathrm{impl}}(k,T)^2T$ avec $k=\ln(K/F_{0,T})$ : souvent plus régulière.
+\end{itemize}
+\paragraph{Message.}
+L'arbitrage statique s'exprime naturellement en \emph{prix}, mais les modèles paramétriques et les interpolations sont souvent plus «lisses» en variance totale.
+Un bon pipeline de surface sait passer de l'une à l'autre sans perdre la cohérence.
+
+\subsection*{(2) Arbitrage statique en strike : monotonicité, convexité, densité}
+Pour un call européen $C(K,T)$ (taux constants) :
+\begin{itemize}[leftmargin=*]
+\item \textbf{Bornes} : $0\le C(K,T)\le S_0e^{-qT}$ et $C(K,T)\ge \max(S_0e^{-qT}-Ke^{-rT},0)$.
+\item \textbf{Monotonicité} : $K_1<K_2 \Rightarrow C(K_1,T)\ge C(K_2,T)$.
+\item \textbf{Convexité} : $C(\cdot,T)$ est convexe en $K$.
+\end{itemize}
+\paragraph{Interprétation.}
+La convexité est l'expression «visible» du fait qu'une densité risque-neutre ne peut pas être négative.
+Elle garantit qu'une stratégie de type butterfly ne crée pas un payoff positif pour un coût négatif.
+
+\subsection*{(3) Arbitrage calendaire : cohérence en maturité}
+Fixons $K$.
+Sans arbitrage calendaire, un call de maturité plus longue ne doit pas être moins cher :
+\[
+T_1<T_2 \Rightarrow C(K,T_1)\le C(K,T_2).
+\]
+\paragraph{Pourquoi c'est non trivial ?}
+Parce qu'une interpolation séparée en $T$ et en $K$ peut facilement violer cette propriété : on peut obtenir des surfaces «douces» mais économiquement impossibles.
+\paragraph{Lien pratique avec $w(k,T)$.}
+Dans beaucoup de paramétrisations, imposer que $T\mapsto w(k,T)$ soit croissante pour tout $k$ est une contrainte suffisante (pas toujours nécessaire) pour éviter le calendar arbitrage.
+Cela motive la représentation en variance totale.
+
+\subsection*{(4) Butterfly arbitrage : de la convexité aux contraintes sur la variance totale}
+Le butterfly arbitrage se lit sur la convexité en $K$.
+Mais si l'on travaille en $w(k,T)$, la condition devient une contrainte \emph{non linéaire} sur $w$ et ses dérivées en $k$.
+Message M1 :
+\begin{itemize}[leftmargin=*]
+\item travailler en IV rend l'interpolation facile mais risque d'arbitrage ;
+\item travailler en prix garantit l'interprétation économique mais est moins «lisse» ;
+\item travailler en $w$ est un compromis utile, surtout avec des familles comme SVI.
+\end{itemize}
+
+\subsection*{(5) SVI (aperçu) : une paramétrisation standard de $w(k)$}
+En equity, une paramétrisation très utilisée pour une maturité fixée est \textbf{SVI} :
+\[
+w(k)=a+b\Big(\rho(k-m)+\sqrt{(k-m)^2+\eta^2}\Big),
+\]
+avec paramètres $(a,b,\rho,m,\eta)$ et contraintes $b>0$, $|\rho|<1$, $\eta>0$.
+\paragraph{Lecture qualitative.}
+\begin{itemize}[leftmargin=*]
+\item $a$ : niveau de variance (ATM) ;
+\item $b$ : pente globale (amplitude du smile) ;
+\item $\rho$ : asymétrie (skew) ;
+\item $m$ : déplacement du centre ;
+\item $\eta$ : courbure (arrondi du smile).
+\end{itemize}
+SVI est populaire car il est flexible, relativement stable en calibration, et on sait formuler des contraintes d'absence de butterfly arbitrage (au moins sous forme suffisante).
+
+\subsection*{(6) Delta-surface (FX) : attention au caractère «modèle-dépendant»}
+En FX, on cote souvent la surface en delta plutôt qu'en strike.
+Mais \emph{la conversion delta $\leftrightarrow$ strike dépend du modèle} (souvent BS).
+Cela crée un point subtil :
+\begin{itemize}[leftmargin=*]
+\item la surface en delta est pratique pour l'usage trader ;
+\item la surface en strike est plus naturelle pour l'arbitrage statique (convexité en $K$) ;
+\item passer de l'une à l'autre demande de choisir une convention (BS forward delta, premium-adjusted delta, etc.).
+\end{itemize}
+En M1, il faut surtout retenir que le choix des axes n'est pas innocent : il change la «géométrie» du problème d'interpolation et de calibration.

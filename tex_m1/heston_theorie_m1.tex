@@ -1,0 +1,46 @@
+% =========================================================
+% Compléments M1 — Heston (B. Théorie)
+% =========================================================
+
+\subsection*{(1) Pourquoi Heston est le «premier modèle sérieux» pour le skew equity}
+Le smile/skew equity n'est pas seulement une irrégularité : il reflète des asymétries de distribution (crash risk, leverage effect).
+Heston est un modèle minimal qui capture trois ingrédients :
+\begin{itemize}[leftmargin=*]
+\item \textbf{Volatilité stochastique} : la variance $V_t$ varie dans le temps, donc la distribution de $S_T$ est un mélange de log-normales.
+\item \textbf{Leverage effect} : $\rho<0$ fait que les baisses de $S$ s'accompagnent de hausses de $V$.
+\item \textbf{Mean-reversion} : $V_t$ revient vers $\theta$ à vitesse $\kappa$.
+\end{itemize}
+
+\subsection*{(2) Lecture des paramètres : «si je bouge tel paramètre, la surface fait quoi ?»}
+En première approximation (à surface de marché fixée) :
+\begin{itemize}[leftmargin=*]
+\item $\kappa$ (vitesse) : grand $\Rightarrow$ la variance revient vite vers $\theta$ ; effet sur la structure en maturité (terme court vs long).
+\item $\theta$ (niveau LT) : détermine la variance moyenne à long terme ; contrôle l'ATM long.
+\item $\sigma$ (vol-of-vol) : plus $\sigma$ est grand, plus le smile est marqué (plus de dispersion de $V$).
+\item $\rho$ : contrôle l'asymétrie (skew) ; $\rho<0$ accentue la pente côté puts.
+\item $v_0$ : contrôle le niveau court terme (ATM court).
+\end{itemize}
+Cette lecture qualitative est cruciale en calibration : elle aide à choisir des bornes, des initialisations et à diagnostiquer une solution «non plausible».
+
+\subsection*{(3) Condition de Feller : utilité pratique et limites}
+La condition $2\kappa\theta\ge\sigma^2$ est suffisante pour garantir que $V_t$ reste strictement positive.
+\paragraph{Pourquoi c'est utile ?}
+Parce que les pricers basés sur CF/FFT peuvent devenir plus instables quand $V$ touche 0 (oscillations, pertes de précision).
+\paragraph{Pourquoi ce n'est pas une loi ?}
+Le marché peut pousser vers des paramètres qui violent légèrement Feller tout en gardant une dynamique «raisonnable» en pratique.
+On l'utilise souvent comme pénalité douce plutôt que comme contrainte dure.
+
+\subsection*{(4) Pourquoi une CF (fonction caractéristique) suffit pour pricer une vanilla}
+Pour un payoff européen, le prix est une espérance sous $\Qmeas$.
+Si l'on connaît la fonction caractéristique du log-prix $X_T=\ln S_T$ :
+\[
+\phi(u)=\E^{\Qmeas}[e^{iuX_T}],
+\]
+alors on peut reconstruire la loi (densité) et donc le prix par inversion de Fourier.
+Deux approches classiques :
+\begin{itemize}[leftmargin=*]
+\item formulation $P_1/P_2$ : deux intégrales 1D donnant $C=S_0e^{-qT}P_1-Ke^{-rT}P_2$ ;
+\item Carr--Madan : transformer le call en une fonction intégrable et FFT sur une grille de strikes.
+\end{itemize}
+\paragraph{Message M1.}
+La CF est un «résumé» plus stable que la densité : elle évite de dériver numériquement et se combine bien avec des méthodes rapides (FFT).

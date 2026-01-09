@@ -353,7 +353,11 @@ def _render_option_market_order_form() -> None:
             )
         else:
             default_ticker = default_ticker or "AAPL"
-            ticker = st.text_input("Underlying ticker", default_ticker).upper().strip()
+            ticker = st.text_input(
+                "Underlying ticker",
+                default_ticker,
+                key="alpaca_options_underlying_ticker_manual",
+            ).upper().strip()
     with col_reload:
         if st.button("Reload list", type="secondary", width="stretch"):
             st.session_state.pop(_TICKERS_STATE_KEY, None)
