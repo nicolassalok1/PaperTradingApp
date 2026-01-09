@@ -16,6 +16,8 @@ from app.vue.components.surface_ui import (
     grid_to_surface_df,
     median_s0,
     plot_iv_heatmap,
+    price_grid_from_iv_grid,
+    render_price_surface_grid,
     render_market_surface_3d,
     render_surface_filters,
     render_surface_preview_dropdown,
@@ -582,15 +584,57 @@ def render_tab() -> None:
             iv_model = np.asarray(result.get("iv_model") or [], dtype=float)
             iv_err = np.asarray(result.get("iv_error") or [], dtype=float)
 
-            if iv_mkt.size and iv_model.size and iv_err.size:
-                st.markdown("### Surfaces IV")
-                c_mkt, c_mod, c_err = st.columns(3)
-                with c_mkt:
-                    plot_iv_heatmap(iv_mkt, m_grid_arr, t_grid_arr, "IV marché")
-                with c_mod:
-                    plot_iv_heatmap(iv_model, m_grid_arr, t_grid_arr, "IV modèle")
-                with c_err:
-                    plot_iv_heatmap(iv_err, m_grid_arr, t_grid_arr, "Erreur (modèle - marché)")
+            if iv_mkt.size and iv_model.size:
+                st.markdown("### Surfaces de prix (3D)")
+                try:
+                    px_mkt = price_grid_from_iv_grid(
+                        S0=float(result.get("S0") or S0),
+                        m_grid=m_grid_arr,
+                        t_grid=t_grid_arr,
+                        iv_grid=iv_mkt,
+                        r=float(result.get("r") or r_val),
+                        q=float(result.get("q") or q_val),
+                    )
+                    px_mod = price_grid_from_iv_grid(
+                        S0=float(result.get("S0") or S0),
+                        m_grid=m_grid_arr,
+                        t_grid=t_grid_arr,
+                        iv_grid=iv_model,
+                        r=float(result.get("r") or r_val),
+                        q=float(result.get("q") or q_val),
+                    )
+                    px_err = np.where(np.isfinite(px_mod) & np.isfinite(px_mkt), px_mod - px_mkt, np.nan)
+                    c_mkt, c_mod, c_err = st.columns(3)
+                    with c_mkt:
+                        render_price_surface_grid(
+                            S0=float(result.get("S0") or S0),
+                            m_grid=m_grid_arr,
+                            t_grid=t_grid_arr,
+                            price_grid=px_mkt,
+                            title="Prix marché",
+                            key=_k("price_surface_mkt"),
+                        )
+                    with c_mod:
+                        render_price_surface_grid(
+                            S0=float(result.get("S0") or S0),
+                            m_grid=m_grid_arr,
+                            t_grid=t_grid_arr,
+                            price_grid=px_mod,
+                            title="Prix modèle",
+                            key=_k("price_surface_model"),
+                        )
+                    with c_err:
+                        render_price_surface_grid(
+                            S0=float(result.get("S0") or S0),
+                            m_grid=m_grid_arr,
+                            t_grid=t_grid_arr,
+                            price_grid=px_err,
+                            title="Erreur de prix (modèle - marché)",
+                            key=_k("price_surface_err"),
+                            colorscale="RdBu",
+                        )
+                except Exception as exc:
+                    st.warning(f"Affichage 3D des prix indisponible: {exc}")
             else:
                 st.info("Aucune surface à afficher.")
 

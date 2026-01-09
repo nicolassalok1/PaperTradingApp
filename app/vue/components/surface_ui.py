@@ -15,6 +15,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from app.model.calibration.implied_vol import bs_call_price
+
 
 _SURF_K_ALIASES = {"k", "strike", "strike_price", "strikeprice"}
 _SURF_T_ALIASES = {"t", "ttm", "tau", "time_to_maturity", "maturity"}
@@ -52,6 +54,89 @@ def plot_iv_heatmap(z: np.ndarray, x: np.ndarray, y: np.ndarray, title: str) -> 
     )
     fig.update_layout(title=title, xaxis_title="Moneyness", yaxis_title="Time to maturity (y)")
     st.plotly_chart(fig, width="stretch", config={"staticPlot": True, "scrollZoom": False})
+
+
+def price_grid_from_iv_grid(
+    *,
+    S0: float,
+    m_grid: np.ndarray,
+    t_grid: np.ndarray,
+    iv_grid: np.ndarray,
+    r: float = 0.0,
+    q: float = 0.0,
+) -> np.ndarray:
+    """
+    Convert an IV grid on (t_grid, m_grid) to call prices via Black-Scholes.
+    """
+    S0_f = float(S0)
+    r_f = float(r)
+    q_f = float(q)
+    iv = np.asarray(iv_grid, dtype=float)
+    m = np.asarray(m_grid, dtype=float)
+    t = np.asarray(t_grid, dtype=float)
+    out = np.full((len(t), len(m)), np.nan, dtype=float)
+    for i_t, tau in enumerate(t):
+        t_val = float(tau)
+        for j_m, mm in enumerate(m):
+            vol = float(iv[i_t, j_m]) if i_t < iv.shape[0] and j_m < iv.shape[1] else np.nan
+            if not np.isfinite(vol) or vol <= 0 or t_val <= 0 or S0_f <= 0:
+                continue
+            K = float(mm * S0_f)
+            out[i_t, j_m] = bs_call_price(S0_f, K, t_val, r_f, q_f, vol)
+    return out
+
+
+def render_price_surface_grid(
+    *,
+    S0: float,
+    m_grid: np.ndarray,
+    t_grid: np.ndarray,
+    price_grid: np.ndarray,
+    title: str,
+    key: str,
+    colorscale: str = "Viridis",
+) -> None:
+    """
+    3D surface for prices on a fixed (t_grid, m_grid) grid.
+    Axes: Strike K (x), TTM (years) (y), Price (z).
+    """
+    m = np.asarray(m_grid, dtype=float)
+    t = np.asarray(t_grid, dtype=float)
+    px = np.asarray(price_grid, dtype=float)
+    if px.shape != (len(t), len(m)):
+        st.info("Grille de prix invalide pour l'affichage 3D.")
+        return
+
+    K = m * float(S0)
+    if len(K) == 0 or len(t) == 0:
+        st.info("Grille vide.")
+        return
+
+    fig = go.Figure(
+        data=[
+            go.Surface(
+                x=K,
+                y=t,
+                z=px,
+                colorscale=colorscale,
+                colorbar=dict(title="Prix"),
+                showscale=True,
+                opacity=0.9,
+            )
+        ]
+    )
+    fig.update_layout(
+        title=title,
+        scene=dict(
+            xaxis_title="Strike K",
+            yaxis_title="TTM (années)",
+            zaxis_title="Prix",
+            xaxis=dict(range=[float(K.min()), float(K.max())]),
+        ),
+        height=520,
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False, "scrollZoom": True}, key=key)
 
 
 def grid_to_surface_df(
@@ -541,6 +626,8 @@ __all__ = [
     "grid_to_surface_df",
     "median_s0",
     "plot_iv_heatmap",
+    "price_grid_from_iv_grid",
+    "render_price_surface_grid",
     "render_surface_filters",
     "render_surface_preview_dropdown",
     "render_market_surface_3d",
