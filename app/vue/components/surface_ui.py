@@ -459,18 +459,9 @@ def render_market_surface_3d(
                 name="Surface",
             )
         )
-
-    df_scatter = dfw if len(dfw) <= 2000 else dfw.sample(2000, random_state=42)
-    fig.add_trace(
-        go.Scatter3d(
-            x=df_scatter["K"],
-            y=df_scatter["T"],
-            z=df_scatter["iv"],
-            mode="markers",
-            marker=dict(size=2, color="black", opacity=0.35),
-            name="Points marché",
-        )
-    )
+    else:
+        st.info("Pas assez de données pour construire une nappe lissée.")
+        return
 
     fig.update_layout(
         title="Nappe IV marché (3D)",
