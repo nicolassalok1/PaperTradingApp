@@ -52,6 +52,7 @@ class RiskEngine:
             self.keys.api_key,
             self.keys.api_secret,
             paper=is_paper,
+            raw_data=True,
         )
         self.data_client = StockHistoricalDataClient(
             api_key=self.keys.api_key,

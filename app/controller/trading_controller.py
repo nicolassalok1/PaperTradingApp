@@ -106,7 +106,7 @@ def get_option_positions() -> List[Dict[str, Any]]:
     return [
         pos
         for pos in positions
-        if str(pos.get("asset_class") or "").lower() == "option"
+        if str(pos.get("asset_class") or "").lower() in {"option", "us_option"}
     ]
 
 
@@ -117,7 +117,7 @@ def get_open_option_orders() -> List[Dict[str, Any]]:
     return [
         order
         for order in orders
-        if str(order.get("asset_class") or "").lower() == "option"
+        if str(order.get("asset_class") or "").lower() in {"option", "us_option"}
     ]
 
 

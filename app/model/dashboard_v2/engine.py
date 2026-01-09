@@ -120,7 +120,8 @@ class _LiveDashboardBackend:
         results: List[Dict[str, Any]] = []
         for p in positions:
             pdict = _to_dict(p)
-            if str(pdict.get("asset_class", "")).lower() == "option":
+            asset_class = str(pdict.get("asset_class", "")).lower()
+            if asset_class in {"option", "us_option"}:
                 results.append(pdict)
         return results
 
@@ -150,6 +151,7 @@ class DashboardV2Client:
             api_key,
             api_secret,
             paper=is_paper,
+            raw_data=True,
         )
         self.data = StockHistoricalDataClient(api_key=api_key, secret_key=api_secret)
         self.backend = _LiveDashboardBackend(self.trading)

@@ -45,6 +45,7 @@ class AlpacaPortfolioClient:
             self.api_key,
             self.api_secret,
             paper=is_paper,
+            raw_data=True,
         )
         self.data = StockHistoricalDataClient(
             api_key=self.api_key,
