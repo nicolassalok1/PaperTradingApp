@@ -32,24 +32,45 @@ if TORCH_AVAILABLE:
 
     class HestonSurfaceNet(nn.Module):
         """
-        Simple CNN regressor mapping IV surface -> Heston params.
+        CNN encoder + MLP head mapping IV surface -> Heston params.
         """
 
-        def __init__(self, m_size: int, t_size: int):
+        def __init__(
+            self,
+            m_size: int,
+            t_size: int,
+            hidden_units: int = 128,
+            hidden_layers: int = 3,
+            dropout: float = 0.1,
+        ):
             super().__init__()
-            self.net = nn.Sequential(
-                nn.Conv2d(1, 8, kernel_size=3, padding=1),
+            channels = 16
+            self.features = nn.Sequential(
+                nn.Conv2d(1, channels, kernel_size=3, padding=1),
                 nn.ReLU(),
-                nn.Conv2d(8, 16, kernel_size=3, padding=1),
+                nn.Conv2d(channels, channels * 2, kernel_size=3, padding=1),
                 nn.ReLU(),
-                nn.Flatten(),
-                nn.Linear(16 * m_size * t_size, 64),
-                nn.ReLU(),
-                nn.Linear(64, 5),
             )
 
+            feat_dim = (channels * 2) * m_size * t_size
+            mlp: list[nn.Module] = []
+            n_hidden = max(1, int(hidden_layers))
+            for layer_idx in range(n_hidden):
+                in_dim = feat_dim if layer_idx == 0 else hidden_units
+                mlp.append(nn.Linear(in_dim, hidden_units))
+                mlp.append(nn.ReLU())
+                if dropout > 0:
+                    rate = float(dropout if layer_idx == 0 else max(0.0, dropout * 0.5))
+                    mlp.append(nn.Dropout(rate))
+
+            self.mlp = nn.Sequential(*mlp)
+            self.out = nn.Linear(hidden_units, 5)
+
         def forward(self, x):
-            return self.net(x)
+            x = self.features(x)
+            x = torch.flatten(x, 1)
+            x = self.mlp(x)
+            return self.out(x)
 
 else:  # pragma: no cover
 
@@ -115,15 +136,18 @@ def _fill_nan_surface(iv_grid: np.ndarray) -> np.ndarray:
 
 def load_model(weights_path: str | Path, m_size: int, t_size: int, device: str = "cpu"):
     if not TORCH_AVAILABLE:
-        return None
+        return None, "PyTorch non installé"
     path = Path(weights_path)
     if not path.exists():
-        return None
+        return None, "Poids absents"
     model = HestonSurfaceNet(m_size=m_size, t_size=t_size).to(device)
-    state = torch.load(path, map_location=device)
-    model.load_state_dict(state)
+    try:
+        state = torch.load(path, map_location=device)
+        model.load_state_dict(state)
+    except Exception as exc:  # pragma: no cover - defensive
+        return None, f"Chargement impossible ({exc})"
     model.eval()
-    return model
+    return model, None
 
 
 def predict_params(
@@ -146,11 +170,11 @@ def predict_params(
             "params": {},
         }
 
-    model = load_model(weights_path, m_size=len(m_grid), t_size=len(t_grid), device=device)
+    model, load_err = load_model(weights_path, m_size=len(m_grid), t_size=len(t_grid), device=device)
     if model is None:
         return {
             "success": False,
-            "message": f"Poids manquants. Placez un fichier à {WEIGHTS_PATH}",
+            "message": f"Poids manquants ou incompatibles. Recréez {WEIGHTS_PATH}. ({load_err})",
             "params": {},
         }
     with torch.no_grad():
@@ -257,6 +281,10 @@ def train_heston_surface_net(
     q: float = 0.0,
     weights_path: str | Path = WEIGHTS_PATH,
     progress: Callable[[float], None] | None = None,
+    progress_epoch: Callable[[int, float, int], None] | None = None,
+    val_split: float = 0.1,
+    patience: int = 5,
+    min_delta: float = 1e-4,
 ) -> Dict[str, Any]:
     if not TORCH_AVAILABLE:
         return {
@@ -294,22 +322,48 @@ def train_heston_surface_net(
     x = torch.tensor(x_np, dtype=torch.float32, device=device_str).unsqueeze(1)
     y = torch.tensor(y_np, dtype=torch.float32, device=device_str)
 
+    perm = torch.randperm(x.shape[0], device=device_str)
+    x = x[perm]
+    y = y[perm]
+
+    val_split = float(max(0.0, min(0.5, val_split)))
+    patience = int(max(0, patience))
+    num_epochs = int(max(1, epochs))
+
+    n_val = int(x.shape[0] * val_split)
+    if n_val >= x.shape[0] and x.shape[0] > 1:
+        n_val = x.shape[0] - 1
+
+    has_val = n_val > 0
+    x_val, y_val = (x[:n_val], y[:n_val]) if has_val else (None, None)
+    x_train, y_train = (x[n_val:], y[n_val:]) if has_val else (x, y)
+
     model = HestonSurfaceNet(m_size=len(m_grid), t_size=len(t_grid)).to(device_str)
     opt = torch.optim.Adam(model.parameters(), lr=float(lr))
     loss_fn = nn.MSELoss()
-    loader = DataLoader(
-        TensorDataset(x, y),
+    train_loader = DataLoader(
+        TensorDataset(x_train, y_train),
         batch_size=int(max(1, batch_size)),
         shuffle=True,
         drop_last=False,
     )
+    val_loader = (
+        DataLoader(TensorDataset(x_val, y_val), batch_size=int(max(1, batch_size)), shuffle=False, drop_last=False)
+        if has_val
+        else None
+    )
 
-    history: list[float] = []
+    history: list[Dict[str, float]] = []
+    best_state: dict[str, torch.Tensor] | None = None
+    best_loss = float("inf")
+    best_epoch = 0
+    epochs_no_improve = 0
+
     model.train()
-    for epoch in range(int(max(1, epochs))):
+    for epoch in range(num_epochs):
         running = 0.0
         seen = 0
-        for xb, yb in loader:
+        for xb, yb in train_loader:
             opt.zero_grad(set_to_none=True)
             preds = postprocess_tensor(model(xb))
             loss = loss_fn(preds, yb)
@@ -318,28 +372,77 @@ def train_heston_surface_net(
             running += float(loss.item()) * int(xb.shape[0])
             seen += int(xb.shape[0])
 
-        avg = float(running / max(1, seen))
-        history.append(avg)
+        train_loss = float(running / max(1, seen))
+
+        val_loss = train_loss
+        if val_loader is not None:
+            model.eval()
+            with torch.no_grad():
+                v_running = 0.0
+                v_seen = 0
+                for xb, yb in val_loader:
+                    preds = postprocess_tensor(model(xb))
+                    v_loss = loss_fn(preds, yb)
+                    v_running += float(v_loss.item()) * int(xb.shape[0])
+                    v_seen += int(xb.shape[0])
+            val_loss = float(v_running / max(1, v_seen))
+            model.train()
+
+        history.append({"epoch": int(epoch + 1), "train_loss": train_loss, "val_loss": val_loss})
+
         if progress is not None:
             try:
-                progress(0.95 + 0.05 * float(epoch + 1) / float(max(1, int(epochs))))
+                progress(min(0.95 + 0.05 * float(epoch + 1) / float(max(1, num_epochs)), 1.0))
+            except Exception:
+                pass
+        if progress_epoch is not None:
+            try:
+                progress_epoch(int(epoch + 1), float(train_loss), int(num_epochs))
             except Exception:
                 pass
 
+        improved = (val_loss + float(min_delta)) < best_loss
+        if improved or best_state is None:
+            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            best_loss = val_loss
+            best_epoch = int(epoch + 1)
+            epochs_no_improve = 0
+        else:
+            epochs_no_improve += 1
+
+        if patience > 0 and epochs_no_improve >= patience:
+            break
+
     out_path = Path(weights_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    if best_state is not None:
+        model.load_state_dict(best_state)
+    model.eval()
     torch.save(model.state_dict(), out_path)
 
     elapsed = float(time.time() - started)
+    final_loss = float(best_loss if best_state is not None else history[-1]["val_loss"]) if history else None
+    if progress is not None:
+        try:
+            progress(1.0)
+        except Exception:
+            pass
     return {
         "success": True,
         "message": "OK",
         "weights_path": str(out_path),
         "device": device_str,
         "n_samples": int(x.shape[0]),
-        "epochs": int(epochs),
-        "final_loss": float(history[-1]) if history else None,
-        "loss_history": history,
+        "epochs": int(len(history)),
+        "epochs_requested": int(num_epochs),
+        "final_loss": final_loss,
+        "best_val_loss": final_loss,
+        "loss_history": [float(h["val_loss"]) for h in history],
+        "train_loss_history": [float(h["train_loss"]) for h in history],
+        "best_epoch": int(best_epoch or len(history)),
+        "patience": int(patience),
+        "val_split": float(val_split if has_val else 0.0),
+        "lr": float(lr),
         "elapsed_s": elapsed,
         "grid": {"m_size": int(len(m_grid)), "t_size": int(len(t_grid))},
     }

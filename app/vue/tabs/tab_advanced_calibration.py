@@ -553,45 +553,67 @@ def render_tab() -> None:
                 if st.button(
                     "Entraîner le NN Heston",
                     type="secondary",
-                    disabled=not can_run,
+                    disabled=False,
                     key=_k("train_heston_nn_btn"),
                     help="Lance l'entraînement du NN Heston avec le profil choisi.",
                 ):
-                    with st.spinner("Entraînement NN Heston..."):
+                    pbar = st.progress(0, text="Entraînement NN Heston...")
+                    try:
+                        pbar.progress(5, text="Initialisation...")
+                        # Pas de streaming par epoch côté backend; on affiche une ETA indicative.
+                        eta_txt = f"Entraînement en cours (~{nn_eta_label})"
+                        # Collecte live des pertes
+                        epoch_losses: list[tuple[int, float]] = []
+                        def _on_epoch(e_idx: int, loss: float, total: int) -> None:
+                            epoch_losses.append((int(e_idx), float(loss)))
+                            pct = min(
+                                100,
+                                max(10, int(10 + 90 * float(e_idx) / max(1, total))),
+                            )
+                            pbar.progress(pct, text=f"Epoch {e_idx}/{total} | loss={loss:.6f}")
+
                         res_nn = ctrl.train_heston_nn_weights(
                             {
                                 "epochs": int(nn_epochs or 0),
                                 "lr": float(nn_lr or 0.0),
-                            }
+                            },
+                            progress_callback=_on_epoch,
                         )
-                    if isinstance(res_nn, dict) and res_nn.get("success"):
-                        details_nn = res_nn.get("details") or {}
-                        final_loss = None
-                        elapsed_s = None
-                        try:
-                            final_loss = float(details_nn.get("final_loss")) if isinstance(details_nn, dict) else None
-                        except Exception:
-                            pass
-                        try:
-                            elapsed_s = float(details_nn.get("elapsed_s")) if isinstance(details_nn, dict) else None
-                        except Exception:
-                            pass
-                        msg = "NN entraîné."
-                        if final_loss is not None or elapsed_s is not None:
-                            msg = f"NN entraîné. Final loss={final_loss}, elapsed={elapsed_s:.2f}s"
-                        st.success(msg)
-                        history = details_nn.get("loss_history") if isinstance(details_nn, dict) else None
-                        if isinstance(history, list) and history:
-                            df_hist = pd.DataFrame({"epoch": list(range(1, len(history) + 1)), "loss": history})
-                            df_hist = df_hist.set_index("epoch")
-                            st.caption("Évolution de la loss (par epoch)")
-                            st.line_chart(df_hist, height=200, key=_k("nn_loss_chart"))
-                            with st.expander("Tableau loss par epoch", expanded=False):
-                                st.dataframe(df_hist.rename(columns={"loss": "loss"}))
-                        st.caption(f"epochs={details_nn.get('epochs')} | lr={details_nn.get('lr', nn_lr)} | device={details_nn.get('device', 'cpu')}")
-                        st.caption(f"weights: {details_nn.get('weights_path', '')}")
-                    else:
-                        st.error(str(res_nn.get("message") if isinstance(res_nn, dict) else "Entraînement NN échoué."))
+                    except Exception as exc:  # pragma: no cover - UI path
+                        st.error(f"Erreur entraînement NN: {exc}")
+                        res_nn = None
+                    pbar.progress(100, text="Terminé")
+                    pbar.empty()
+
+                    st.session_state[_k("last_nn_training_res")] = res_nn
+
+            # Affichage du dernier entraînement NN (Heston uniquement)
+            last_nn_res = st.session_state.get(_k("last_nn_training_res")) if model_key == "heston_v1" else None
+            if model_key == "heston_v1" and isinstance(last_nn_res, dict):
+                if last_nn_res.get("success"):
+                    details_nn = last_nn_res.get("details") or {}
+                    final_loss = details_nn.get("final_loss")
+                    elapsed_s = details_nn.get("elapsed_s")
+                    st.success(
+                        f"Dernier entraînement NN OK. Final loss={final_loss}, elapsed={elapsed_s:.2f}s"
+                        if final_loss is not None and elapsed_s is not None
+                        else "Dernier entraînement NN OK."
+                    )
+                    history = details_nn.get("loss_history") if isinstance(details_nn, dict) else None
+                    if isinstance(history, list) and history:
+                        df_hist = pd.DataFrame({"epoch": list(range(1, len(history) + 1)), "loss": history})
+                        df_hist = df_hist.set_index("epoch")
+                        st.caption("Évolution de la loss (par epoch)")
+                        st.line_chart(df_hist, height=200, key=_k("nn_loss_chart"))
+                        with st.expander("Tableau loss par epoch", expanded=False):
+                            st.dataframe(df_hist.rename(columns={"loss": "loss"}))
+                    st.caption(
+                        f"epochs={details_nn.get('epochs')} | lr={details_nn.get('lr', nn_lr)} | device={details_nn.get('device', 'cpu')}"
+                    )
+                    st.caption(f"weights: {details_nn.get('weights_path', '')}")
+                else:
+                    msg = last_nn_res.get("message") or "Entraînement NN échoué."
+                    st.error(str(msg))
 
             if st.button("Calibrer", type="primary", disabled=not can_run, width="stretch", key=run_key):
                 progress = st.progress(0, text="Préparation.")

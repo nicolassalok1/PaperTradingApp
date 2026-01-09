@@ -127,7 +127,7 @@ class CalibrationController:
                 pass
         return info
 
-    def train_heston_nn_weights(self, payload: Dict | None) -> Dict[str, Any]:
+    def train_heston_nn_weights(self, payload: Dict | None, progress_callback=None) -> Dict[str, Any]:
         if not TORCH_AVAILABLE:
             msg = "PyTorch non installé → entraînement NN indisponible."
             if TORCH_IMPORT_ERROR:
@@ -165,6 +165,7 @@ class CalibrationController:
                 r=r,
                 q=q,
                 weights_path=WEIGHTS_PATH,
+                progress_epoch=progress_callback,
             )
         except Exception as exc:
             return {"success": False, "message": str(exc), "details": {}}
