@@ -451,193 +451,193 @@ def render_tab() -> None:
         if t_raw.strip() and t_grid is None:
             st.warning("t_grid invalide (liste de floats séparés par des virgules).")
 
-    st.markdown("### Modèle (sélection juste avant calibration)")
-    col_a, col_b = st.columns([2, 1])
-    with col_a:
-        model_key = st.selectbox(
-            "Modèle",
-            options=model_keys,
-            index=model_keys.index(default_model_key) if default_model_key in model_keys else 0,
-            format_func=lambda k: override_labels.get(k, key_to_spec.get(k, {}).get("label", k)),
-            key="adv_calib_model_select",
-        )
-    with col_b:
-        spec = key_to_spec.get(model_key, {})
-        st.caption(f"pricing={spec.get('pricing')} | calibration={spec.get('calibration')}")
-        if spec.get("expensive"):
-            st.warning("Modèle coûteux: prévoir des runs plus longs.")
+    tab_labels = [override_labels.get(k, key_to_spec.get(k, {}).get("label", k)) for k in model_keys]
+    tabs = st.tabs(tab_labels)
 
-    profile = st.radio(
-        "Profil de calibration",
-        options=["Rapide", "Normal", "Fine"],
-        index=1,
-        horizontal=True,
-        key="adv_calib_profile",
-        help="Rapide: itérations limitées. Normal: défaut équilibré. Fine: plus d'itérations et multi-start.",
-    )
-    profile_map = {
-        "Rapide": {"max_nfev": 30, "n_starts": 1},
-        "Normal": {"max_nfev": 60, "n_starts": 1},
-        "Fine": {"max_nfev": 120, "n_starts": 3},
-    }
-    cfg = profile_map.get(profile, profile_map["Normal"])
-    # Aligne les paramètres d'optimisation sur le profil choisi
-    max_nfev = int(cfg["max_nfev"])
-    n_starts = int(cfg["n_starts"])
+    for model_key, tab_label, tab in zip(model_keys, tab_labels, tabs):
+        def _k(base: str) -> str:
+            return f"{base}_{model_key}"
 
-    def _eta_human(seconds: float) -> str:
-        seconds = max(0.0, float(seconds))
-        if seconds < 60:
-            return f"{seconds:.0f} s"
-        mins = seconds / 60.0
-        if mins < 60:
-            return f"{mins:.1f} min"
-        hours = mins / 60.0
-        return f"{hours:.1f} h"
+        with tab:
+            spec = key_to_spec.get(model_key, {})
+            st.markdown("### Modèle (sélection juste avant calibration)")
+            col_a, col_b = st.columns([2, 1])
+            with col_a:
+                st.markdown(f"**{tab_label}**")
+            with col_b:
+                st.caption(f"pricing={spec.get('pricing')} | calibration={spec.get('calibration')}")
+                if spec.get("expensive"):
+                    st.warning("Modèle coûteux: prévoir des runs plus longs.")
 
-    per_eval = 0.05
-    if model_key in {"rheston", "rbergomi", "volterra"}:
-        per_eval *= 5.0
-    eta_seconds = per_eval * float(max_nfev) * float(max(1, n_starts))
-    eta_label = _eta_human(eta_seconds)
-    st.caption(f"ETA estimée: ~{eta_label} (heuristique; dépend du modèle et des données).")
-
-    can_run = isinstance(calib_df, pd.DataFrame) and not calib_df.empty
-    if st.button("Calibrer", type="primary", disabled=not can_run, width="stretch", key="adv_calib_run_btn"):
-        progress = st.progress(0, text="Préparation…")
-        payload: Dict[str, Any] = {
-            "model": model_key,
-            "df": calib_df,
-            "r": float(r_val),
-            "q": float(q_val),
-            "S0": float(S0),
-            "fit_to_observed_only": bool(fit_to_observed_only),
-            "max_nfev": int(max_nfev),
-            "n_starts": int(n_starts),
-            "seed": seed,
-            "constraints": constraints,
-        }
-        if m_grid is not None:
-            payload["m_grid"] = m_grid
-        if t_grid is not None:
-            payload["t_grid"] = t_grid
-
-        progress.progress(30, text="Calibration en cours…")
-        with st.spinner("Calibration..."):
-            result = ctrl.run_advanced_surface_calibration(payload)
-        progress.progress(100, text="Terminé")
-        progress.empty()
-
-        if surface_ticker:
-            try:
-                result = dict(result or {})
-                result["ticker"] = surface_ticker
-            except Exception:
-                pass
-        st.session_state[_LAST_RESULT_KEY] = result
-
-    result = st.session_state.get(_LAST_RESULT_KEY)
-    if not isinstance(result, dict) or not result:
-        return
-
-    if not result.get("success"):
-        st.warning(str(result.get("message") or "Calibration échouée."))
-        if result.get("details"):
-            with st.expander("Détails", expanded=False):
-                st.json(result.get("details"))
-        return
-
-    st.success(str(result.get("message") or "OK"))
-
-    details = result.get("details") or {}
-    runs = details.get("runs") if isinstance(details, dict) else None
-    if isinstance(runs, list) and runs:
-        best_run = details.get("best_run") if isinstance(details, dict) else None
-        if best_run is not None:
-            st.caption(f"Best run: {best_run}")
-        # Tableau des runs masqué pour alléger l'UI.
-
-    metrics = result.get("metrics") or {}
-    if isinstance(metrics, dict) and metrics:
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("MAE (IV)", f"{float(metrics.get('mae', 0.0)):.4f}")
-        col_b.metric("RMSE (IV)", f"{float(metrics.get('rmse', 0.0)):.4f}")
-        col_c.metric("Max |err| (IV)", f"{float(metrics.get('max_abs', 0.0)):.4f}")
-
-    st.markdown("### Paramètres calibrés")
-    st.json(result.get("params") or {})
-
-    if st.button("Envoyer IV modèle vers Options", width="stretch", type="secondary", key="adv_calib_send_to_opt"):
-        try:
-            S0_res = float(result.get("S0") or S0)
-            m_grid_res = np.array(result.get("m_grid") or [])
-            t_grid_res = np.array(result.get("t_grid") or [])
-            iv_model_res = np.array(result.get("iv_model") or [])
-            df_model_surface = grid_to_surface_df(
-                S0=S0_res, m_grid=m_grid_res, t_grid=t_grid_res, iv_grid=iv_model_res, opt_type="call"
+            profile = st.radio(
+                "Profil de calibration",
+                options=["Rapide", "Normal", "Fine"],
+                index=1,
+                horizontal=True,
+                key=_k("adv_calib_profile"),
+                help="Rapide: itérations limitées. Normal: défaut équilibré. Fine: plus d'itérations et multi-start.",
             )
-            st.session_state["calib_model_surface_df"] = df_model_surface
-            st.session_state["calib_model_surface_meta"] = {
-                "ticker": result.get("ticker"),
-                "method": result.get("method") or "advanced",
-                "model": result.get("model") or model_key,
-                "S0": S0_res,
-                "r": float(result.get("r") or r_val),
-                "q": float(result.get("q") or q_val),
+            profile_map = {
+                "Rapide": {"max_nfev": 30, "n_starts": 1},
+                "Normal": {"max_nfev": 60, "n_starts": 1},
+                "Fine": {"max_nfev": 120, "n_starts": 3},
             }
-            st.session_state["opt_iv_surface_source"] = "Calibration"
+            cfg = profile_map.get(profile, profile_map["Normal"])
+            max_nfev = int(cfg["max_nfev"])
+            n_starts = int(cfg["n_starts"])
 
-            tkr = str(result.get("ticker") or "").strip().upper()
-            if tkr:
-                st.session_state["tkr_common"] = tkr
-                st.session_state["common_underlying"] = tkr
+            def _eta_human(seconds: float) -> str:
+                seconds = max(0.0, float(seconds))
+                if seconds < 60:
+                    return f"{seconds:.0f} s"
+                mins = seconds / 60.0
+                if mins < 60:
+                    return f"{mins:.1f} min"
+                hours = mins / 60.0
+                return f"{hours:.1f} h"
 
-            try:
-                st.session_state["common_rate_value"] = float(result.get("r") or r_val)
-                st.session_state["d_common"] = float(result.get("q") or q_val)
-                st.session_state["opt_use_yield_curve_rate"] = True
-            except Exception:
-                pass
+            per_eval = 0.05
+            if model_key in {"rheston", "rbergomi", "volterra"}:
+                per_eval *= 5.0
+            eta_seconds = per_eval * float(max_nfev) * float(max(1, n_starts))
+            eta_label = _eta_human(eta_seconds)
+            st.caption(f"ETA estimée: ~{eta_label} (heuristique; dépend du modèle et des données).")
 
-            try:
-                if m_grid_res.size and t_grid_res.size and iv_model_res.size:
-                    j_atm = int(np.abs(m_grid_res - 1.0).argmin())
-                    i_t = int(np.abs(t_grid_res - 1.0).argmin())
-                    atm_iv = float(iv_model_res[i_t, j_atm])
-                    if np.isfinite(atm_iv) and atm_iv > 0:
-                        st.session_state["common_sigma_value"] = atm_iv
+            can_run = isinstance(calib_df, pd.DataFrame) and not calib_df.empty
+            run_key = _k("adv_calib_run_btn")
+            last_key = _k(_LAST_RESULT_KEY)
+            if st.button("Calibrer", type="primary", disabled=not can_run, width="stretch", key=run_key):
+                progress = st.progress(0, text="Préparation.")
+                payload: Dict[str, Any] = {
+                    "model": model_key,
+                    "df": calib_df,
+                    "r": float(r_val),
+                    "q": float(q_val),
+                    "S0": float(S0),
+                    "fit_to_observed_only": bool(fit_to_observed_only),
+                    "max_nfev": int(max_nfev),
+                    "n_starts": int(n_starts),
+                    "seed": seed,
+                    "constraints": constraints,
+                }
+                if m_grid is not None:
+                    payload["m_grid"] = m_grid
+                if t_grid is not None:
+                    payload["t_grid"] = t_grid
+
+                progress.progress(30, text="Calibration en cours.")
+                with st.spinner("Calibration..."):
+                    result = ctrl.run_advanced_surface_calibration(payload)
+                progress.progress(100, text="Terminé")
+                progress.empty()
+
+                if surface_ticker:
                     try:
-                        st.session_state["opt_iv_surface_max_years"] = float(
-                            min(2.0, max(0.25, float(np.max(t_grid_res))))
-                        )
+                        result = dict(result or {})
+                        result["ticker"] = surface_ticker
                     except Exception:
                         pass
-            except Exception:
-                pass
+                st.session_state[last_key] = result
 
-            st.success("Surface IV modèle envoyée. Ouvrez l'onglet Options → IV surface → Source=Calibration.")
-        except Exception as exc:
-            st.error(f"Impossible d'envoyer vers Options: {exc}")
+            result = st.session_state.get(last_key)
+            if not isinstance(result, dict) or not result:
+                continue
 
-    m_grid_arr = np.asarray(result.get("m_grid") or [], dtype=float)
-    t_grid_arr = np.asarray(result.get("t_grid") or [], dtype=float)
-    iv_mkt = np.asarray(result.get("iv_market") or [], dtype=float)
-    iv_model = np.asarray(result.get("iv_model") or [], dtype=float)
-    iv_err = np.asarray(result.get("iv_error") or [], dtype=float)
+            if not result.get("success"):
+                st.warning(str(result.get("message") or "Calibration échouée."))
+                if result.get("details"):
+                    with st.expander("Détails", expanded=False):
+                        st.json(result.get("details"))
+                continue
 
-    if iv_mkt.size and iv_model.size and iv_err.size:
-        st.markdown("### Surfaces IV")
-        c_mkt, c_mod, c_err = st.columns(3)
-        with c_mkt:
-            plot_iv_heatmap(iv_mkt, m_grid_arr, t_grid_arr, "IV marché")
-        with c_mod:
-            plot_iv_heatmap(iv_model, m_grid_arr, t_grid_arr, "IV modèle")
-        with c_err:
-            plot_iv_heatmap(iv_err, m_grid_arr, t_grid_arr, "Erreur (modèle - marché)")
-    else:
-        st.info("Aucune surface à afficher.")
+            st.success(str(result.get("message") or "OK"))
 
-    # Détails bruts supprimés (non affichés)
+            details = result.get("details") or {}
+            runs = details.get("runs") if isinstance(details, dict) else None
+            if isinstance(runs, list) and runs:
+                best_run = details.get("best_run") if isinstance(details, dict) else None
+                if best_run is not None:
+                    st.caption(f"Best run: {best_run}")
 
+            metrics = result.get("metrics") or {}
+            if isinstance(metrics, dict) and metrics:
+                col_a, col_b, col_c = st.columns(3)
+                col_a.metric("MAE (IV)", f"{float(metrics.get('mae', 0.0)):.4f}")
+                col_b.metric("RMSE (IV)", f"{float(metrics.get('rmse', 0.0)):.4f}")
+                col_c.metric("Max |err| (IV)", f"{float(metrics.get('max_abs', 0.0)):.4f}")
 
+            st.markdown("### Paramètres calibrés")
+            st.json(result.get("params") or {})
+
+            if st.button("Envoyer IV modèle vers Options", width="stretch", type="secondary", key=_k("adv_calib_send_to_opt")):
+                try:
+                    S0_res = float(result.get("S0") or S0)
+                    m_grid_res = np.array(result.get("m_grid") or [])
+                    t_grid_res = np.array(result.get("t_grid") or [])
+                    iv_model_res = np.array(result.get("iv_model") or [])
+                    df_model_surface = grid_to_surface_df(
+                        S0=S0_res, m_grid=m_grid_res, t_grid=t_grid_res, iv_grid=iv_model_res, opt_type="call"
+                    )
+                    st.session_state["calib_model_surface_df"] = df_model_surface
+                    st.session_state["calib_model_surface_meta"] = {
+                        "ticker": result.get("ticker"),
+                        "method": result.get("method") or "advanced",
+                        "model": result.get("model") or model_key,
+                        "S0": S0_res,
+                        "r": float(result.get("r") or r_val),
+                        "q": float(result.get("q") or q_val),
+                    }
+                    st.session_state["opt_iv_surface_source"] = "Calibration"
+
+                    tkr = str(result.get("ticker") or "").strip().upper()
+                    if tkr:
+                        st.session_state["tkr_common"] = tkr
+                        st.session_state["common_underlying"] = tkr
+
+                    try:
+                        st.session_state["common_rate_value"] = float(result.get("r") or r_val)
+                        st.session_state["d_common"] = float(result.get("q") or q_val)
+                        st.session_state["opt_use_yield_curve_rate"] = True
+                    except Exception:
+                        pass
+
+                    try:
+                        if m_grid_res.size and t_grid_res.size and iv_model_res.size:
+                            j_atm = int(np.abs(m_grid_res - 1.0).argmin())
+                            i_t = int(np.abs(t_grid_res - 1.0).argmin())
+                            atm_iv = float(iv_model_res[i_t, j_atm])
+                            if np.isfinite(atm_iv) and atm_iv > 0:
+                                st.session_state["common_sigma_value"] = atm_iv
+                            try:
+                                st.session_state["opt_iv_surface_max_years"] = float(
+                                    min(2.0, max(0.25, float(np.max(t_grid_res))))
+                                )
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                    st.success("Surface IV modèle envoyée. Ouvrez l'onglet Options → IV surface → Source=Calibration.")
+                except Exception as exc:
+                    st.error(f"Impossible d'envoyer vers Options: {exc}")
+
+            m_grid_arr = np.asarray(result.get("m_grid") or [], dtype=float)
+            t_grid_arr = np.asarray(result.get("t_grid") or [], dtype=float)
+            iv_mkt = np.asarray(result.get("iv_market") or [], dtype=float)
+            iv_model = np.asarray(result.get("iv_model") or [], dtype=float)
+            iv_err = np.asarray(result.get("iv_error") or [], dtype=float)
+
+            if iv_mkt.size and iv_model.size and iv_err.size:
+                st.markdown("### Surfaces IV")
+                c_mkt, c_mod, c_err = st.columns(3)
+                with c_mkt:
+                    plot_iv_heatmap(iv_mkt, m_grid_arr, t_grid_arr, "IV marché")
+                with c_mod:
+                    plot_iv_heatmap(iv_model, m_grid_arr, t_grid_arr, "IV modèle")
+                with c_err:
+                    plot_iv_heatmap(iv_err, m_grid_arr, t_grid_arr, "Erreur (modèle - marché)")
+            else:
+                st.info("Aucune surface à afficher.")
+
+            # Détails bruts supprimés (non affichés)
 render = render_tab
