@@ -87,6 +87,24 @@ class RiskEngine:
             positions = self.trading_client.get_all_positions()
         except Exception:
             return []
+        results: list[dict[str, Any]] = []
+        for p in positions or []:
+            pdict = self._to_dict(p)
+            if "equity" in str(pdict.get("asset_class", "")).lower():
+                results.append(pdict)
+        return results
+
+    def positions_full(self) -> list[dict[str, Any]]:
+        """
+        Raw positions (equities + options) for display purposes.
+        Does not impact risk calculations that remain equity-only.
+        """
+        if self.offline or self.trading_client is None:
+            return []
+        try:
+            positions = self.trading_client.get_all_positions()
+        except Exception:
+            return []
         return [self._to_dict(p) for p in positions] if positions else []
 
     # --- Public API -----------------------------------------------------
@@ -303,6 +321,10 @@ def get_account_snapshot() -> dict[str, Any]:
 
 def get_positions_summary() -> list[dict[str, Any]]:
     return _ENGINE.get_positions_summary()
+
+
+def get_positions_full() -> list[dict[str, Any]]:
+    return _ENGINE.positions_full()
 
 
 def compute_exposure() -> float:

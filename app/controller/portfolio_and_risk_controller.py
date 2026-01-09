@@ -54,6 +54,22 @@ def get_positions() -> List[Dict[str, Any]]:
     return risk_engine.get_positions_summary()
 
 
+def get_positions_breakdown() -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Raw positions split into equities vs options for display (does not affect equity-only metrics).
+    """
+    positions = risk_engine.get_positions_full()
+    equities: List[Dict[str, Any]] = []
+    options: List[Dict[str, Any]] = []
+    for p in positions:
+        cls = str(p.get("asset_class", "")).lower()
+        if "option" in cls:
+            options.append(p)
+        elif "equity" in cls:
+            equities.append(p)
+    return {"equities": equities, "options": options}
+
+
 def get_risk_summary(confidence: float = 0.95) -> Dict[str, Any]:
     """
     Build a compact risk summary dictionary for the view layer.
@@ -196,6 +212,7 @@ __all__ = [
     # Risk metrics / exposure
     "get_account",
     "get_positions",
+    "get_positions_breakdown",
     "get_risk_summary",
     # Allocation tools
     "get_portfolio_snapshot",

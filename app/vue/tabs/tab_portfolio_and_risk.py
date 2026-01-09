@@ -84,6 +84,25 @@ def _render_pnl_chart(pnl_series: pd.Series | None) -> None:
     st.line_chart(df.set_index("Date"), height=260, width="stretch")
 
 
+def _render_positions_breakdown() -> None:
+    st.markdown("### Positions (spot & options)")
+    positions = ctrl.get_positions_breakdown()
+
+    equities = positions.get("equities") or []
+    options = positions.get("options") or []
+
+    if not equities and not options:
+        st.info("Aucune position Alpaca.")
+        return
+
+    if equities:
+        st.caption("Positions spot")
+        st.dataframe(pd.DataFrame(equities), hide_index=True, width="stretch")
+    if options:
+        st.caption("Positions options")
+        st.dataframe(pd.DataFrame(options), hide_index=True, width="stretch")
+
+
 def _alloc_method_mapping(label: str) -> str:
     mapping = {
         "EigenPortfolio (PCA-based)": "eigen",
@@ -160,24 +179,11 @@ def render_tab() -> None:
         badge="Risk",
     )
 
-    account = ctrl.get_account()
-    summary = ctrl.get_risk_summary()
-
-    # Top row: account + alerts vs. PnL
-    col_left, col_right = st.columns(2)
-    with col_left:
-        _render_account_snapshot(account)
-        st.divider()
-        _render_alerts(summary.get("alerts", []))
-
-    with col_right:
-        _render_pnl_and_var(
-            summary.get("unrealized_pnl_total", 0.0), summary.get("var_lite", 0.0)
-        )
-        with st.expander("Rolling PnL", expanded=False):
-            _render_pnl_chart(summary.get("pnl_series"))
-
+    # Positions overview (spot + options) replaces the account/PnL header section
+    _render_positions_breakdown()
     st.divider()
+
+    summary = ctrl.get_risk_summary()
 
     # Middle row: exposure vs. allocation & rebalance tools
     col_expo, col_alloc = st.columns(2)

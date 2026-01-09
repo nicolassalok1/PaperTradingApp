@@ -68,7 +68,12 @@ class AlpacaPortfolioClient:
             positions = self.trading.get_all_positions()
         except Exception:
             return []
-        return [_to_dict(p) for p in positions] if positions else []
+        results: List[Dict[str, Any]] = []
+        for p in positions or []:
+            pdict = _to_dict(p)
+            if "equity" in str(pdict.get("asset_class", "")).lower():
+                results.append(pdict)
+        return results
 
     def get_latest_price(self, symbol: str) -> float:
         if self.offline or self.data is None:

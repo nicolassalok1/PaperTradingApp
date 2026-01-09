@@ -419,9 +419,9 @@ def render_tab() -> None:
 
             # Profil unique (Heston) pour NN + calibration
             profile_map = {
-                "Rapide": {"max_nfev": 30, "n_starts": 1},
-                "Normal": {"max_nfev": 60, "n_starts": 1},
-                "Fine": {"max_nfev": 120, "n_starts": 3},
+                "Rapide": {"max_nfev": 40, "n_starts": 1, "u_max": 40.0, "n_integration": 800},
+                "Normal": {"max_nfev": 80, "n_starts": 2, "u_max": 60.0, "n_integration": 1500},
+                "Fin": {"max_nfev": 160, "n_starts": 4, "u_max": 80.0, "n_integration": 2500},
             }
             if model_key == "heston_v1":
                 profile = st.radio(
@@ -439,6 +439,8 @@ def render_tab() -> None:
             cfg = profile_map.get(profile, profile_map["Normal"])
             max_nfev = int(cfg["max_nfev"])
             n_starts = int(cfg["n_starts"])
+            u_max_profile = float(cfg.get("u_max", 50.0))
+            n_integration_profile = int(cfg.get("n_integration", 2000))
 
             def _eta_human(seconds: float) -> str:
                 seconds = max(0.0, float(seconds))
@@ -477,6 +479,9 @@ def render_tab() -> None:
                     "seed": seed,
                     "constraints": constraints,
                 }
+                if model_key == "heston_v1":
+                    payload["u_max"] = u_max_profile
+                    payload["n_integration"] = n_integration_profile
                 if m_grid is not None:
                     payload["m_grid"] = m_grid
                 if t_grid is not None:
