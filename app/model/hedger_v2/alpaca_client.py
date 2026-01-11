@@ -15,6 +15,10 @@ from alpaca.trading.requests import MarketOrderRequest
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+try:  # optional feed enum (newer SDKs)
+    from alpaca.data.enums import DataFeed  # type: ignore
+except Exception:
+    DataFeed = None  # type: ignore
 
 from app.utils.paths import CACHE_OHLC_DIR
 from app.utils.secrets import get_secret
@@ -146,6 +150,7 @@ class AlpacaHedgerClient:
         timeframe: str | TimeFrame = "1Day",
         lookback_days: int = 180,
         force_refresh: bool = False,
+        feed: str | None = "iex",
     ):
         """
         Fetch historical bars for a symbol (cached to disk).
@@ -182,14 +187,32 @@ class AlpacaHedgerClient:
         end = datetime.now(timezone.utc)
         start = end - timedelta(days=max(int(lookback_days), 1) + 5)
         limit = min(max(int(lookback_days) * 2, 50), 5_000)
-        req = StockBarsRequest(
-            symbol_or_symbols=sym,
-            timeframe=tf,
-            start=start,
-            end=end,
-            limit=limit,
-        )
-        bars = self.data.get_stock_bars(req)
+        req_kwargs = {
+            "symbol_or_symbols": sym,
+            "timeframe": tf,
+            "start": start,
+            "end": end,
+            "limit": limit,
+        }
+        feed_to_use = (feed or "").lower().strip()
+        if feed_to_use:
+            req_kwargs["feed"] = DataFeed.IEX if (DataFeed and feed_to_use == "iex") else feed_to_use
+
+        def _fetch(req_params):
+            req = StockBarsRequest(**req_params)
+            return self.data.get_stock_bars(req)
+
+        try:
+            bars = _fetch(req_kwargs)
+        except Exception as exc:
+            # Fallback: if SIP not permitted, retry with IEX feed explicitly
+            msg = str(exc).lower()
+            if "sip" in msg or "subscription does not permit" in msg:
+                req_kwargs["feed"] = DataFeed.IEX if DataFeed else "iex"
+                bars = _fetch(req_kwargs)
+            else:
+                raise
+
         df = getattr(bars, "df", None)
         if df is None or df.empty:
             return pd.DataFrame()

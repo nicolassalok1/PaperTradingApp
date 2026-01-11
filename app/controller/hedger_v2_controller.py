@@ -145,7 +145,6 @@ def train_dqn_model(
     train_steps: int | None = None,
     seed: int | None = None,
     force_retrain: bool = False,
-    train_mode: str | None = None,
     historical_symbol: str | None = None,
     historical_timeframe: str | None = None,
     historical_lookback_days: int | None = None,
@@ -167,10 +166,6 @@ def train_dqn_model(
             s = base_cfg.seed
         cfg_kwargs["seed"] = s
 
-    if train_mode:
-        mode = train_mode.strip().lower()
-        if mode in {"historical", "synthetic"}:
-            cfg_kwargs["train_mode"] = mode
     if historical_symbol:
         cfg_kwargs["historical_symbol"] = (historical_symbol or "").strip().upper()
     if historical_timeframe:

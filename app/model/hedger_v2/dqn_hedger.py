@@ -4,7 +4,7 @@ Deep Q-Network (DQN) hedger (numpy-only).
 Goal: suggest a *discrete* hedge adjustment (hold / buy / sell / flatten) for an
 underlying stock, given a simplified state (net option delta proxy + equity hedge).
 
-The model is trained offline on a synthetic environment and persisted under:
+The model is trained offline on historical price paths (Alpaca bars) and persisted under:
 `cache/HedgerDQN/`.
 """
 
@@ -21,10 +21,10 @@ import numpy as np
 from app.utils.paths import CACHE_CSV_DIR
 
 from .alpaca_client import AlpacaHedgerClient
-from .env import HedgingEnv, HistoricalHedgingEnv, SyntheticHedgingEnv
+from .env import HedgingEnv, HistoricalHedgingEnv
 
 
-DQN_HEDGER_VERSION = "dqn-v2-numpy"
+DQN_HEDGER_VERSION = "dqn-v3-historical"
 
 
 @dataclass(frozen=True)
@@ -54,15 +54,9 @@ class DQNConfig:
     train_steps: int = 7_500
     eval_episodes: int = 25
 
-    # Synthetic env
-    env_max_steps: int = 32
-    env_max_abs_delta: float = 10.0
+    # Historical env (only mode kept)
+    train_mode: str = "historical"  # enforced historical-only training
     env_position_scale: float = 1.0
-    env_delta_drift_std: float = 0.60
-    env_transaction_cost: float = 0.02
-
-    # Historical env
-    train_mode: str = "synthetic"  # "synthetic" or "historical"
     historical_symbol: str = "SPY"
     historical_timeframe: str = "1Day"
     historical_lookback_days: int = 180
@@ -414,17 +408,6 @@ def _epsilon_at_step(cfg: DQNConfig, step: int) -> float:
     return float(cfg.epsilon_start + frac * (cfg.epsilon_end - cfg.epsilon_start))
 
 
-def _make_synthetic_env(cfg: DQNConfig, seed: int | None = None) -> SyntheticHedgingEnv:
-    return SyntheticHedgingEnv(
-        max_steps=cfg.env_max_steps,
-        max_abs_delta=cfg.env_max_abs_delta,
-        position_scale=cfg.env_position_scale,
-        delta_drift_std=cfg.env_delta_drift_std,
-        transaction_cost=cfg.env_transaction_cost,
-        seed=seed,
-    )
-
-
 def _make_historical_env(cfg: DQNConfig, prices: np.ndarray, seed: int | None = None) -> HistoricalHedgingEnv:
     return HistoricalHedgingEnv(
         prices=tuple(float(x) for x in prices),
@@ -491,17 +474,12 @@ def load_or_train_dqn_model(
 
     global _CACHED_AGENT, _CACHED_META
     cfg = config or DQNConfig()
-    requested_train_mode = (cfg.train_mode or "synthetic").lower().strip()
+    requested_train_mode = "historical"
 
     weights_path = _weights_path()
     meta_path = _meta_path()
 
-    if (
-        not force_retrain
-        and _CACHED_AGENT is not None
-        and _CACHED_META is not None
-        and (_CACHED_META.get("config", {}) or {}).get("train_mode") == requested_train_mode
-    ):
+    if not force_retrain and _CACHED_AGENT is not None and _CACHED_META is not None:
         return dict(_CACHED_META)
 
     agent = DQNAgent(cfg, n_actions=4)
@@ -521,9 +499,10 @@ def load_or_train_dqn_model(
                 "config": asdict(cfg),
                 **(meta or {}),
             }
-            cached_mode = (meta.get("config", {}) or {}).get("train_mode")
-            if cached_mode is not None and str(cached_mode).lower() != requested_train_mode:
-                raise ValueError("Cached DQN train_mode differs from requested mode.")
+            meta.setdefault("train_mode", requested_train_mode)
+            cfg_dict = meta.get("config", {}) or {}
+            cfg_dict["train_mode"] = requested_train_mode
+            meta["config"] = cfg_dict
             _CACHED_AGENT = agent
             _CACHED_META = meta
             return dict(meta)
@@ -531,17 +510,11 @@ def load_or_train_dqn_model(
             # fallthrough to retrain if corrupted/incompatible
             pass
 
-    # Train on selected env (synthetic by default, can use historical prices)
+    # Train on historical prices only
     train_mode = requested_train_mode
-    prices: np.ndarray | None = None
-    if train_mode == "historical":
-        prices = _load_historical_prices(cfg)
-        env = _make_historical_env(cfg, prices, seed=cfg.seed)
-        eval_env_factory = lambda: _make_historical_env(cfg, prices, seed=cfg.seed + 1)
-    else:
-        train_mode = "synthetic"
-        env = _make_synthetic_env(cfg, seed=cfg.seed)
-        eval_env_factory = lambda: _make_synthetic_env(cfg)
+    prices = _load_historical_prices(cfg)
+    env = _make_historical_env(cfg, prices, seed=cfg.seed)
+    eval_env_factory = lambda: _make_historical_env(cfg, prices, seed=cfg.seed + 1)
 
     buffer = ReplayBuffer(cfg.buffer_capacity, state_dim=agent.state_dim, seed=cfg.seed)
     state = env.reset(seed=cfg.seed)
@@ -584,18 +557,15 @@ def load_or_train_dqn_model(
         "train_avg_abs_total_delta": float(np.mean(rolling_abs_residual)) if rolling_abs_residual else None,
         **eval_metrics,
     }
-    if train_mode == "historical":
-        meta.update(
-            {
-                "train_mode": "historical",
-                "historical_symbol": cfg.historical_symbol,
-                "historical_timeframe": cfg.historical_timeframe,
-                "historical_lookback_days": int(cfg.historical_lookback_days),
-                "historical_price_points": int(len(prices) if prices is not None else 0),
-            }
-        )
-    else:
-        meta["train_mode"] = "synthetic"
+    meta.update(
+        {
+            "train_mode": "historical",
+            "historical_symbol": cfg.historical_symbol,
+            "historical_timeframe": cfg.historical_timeframe,
+            "historical_lookback_days": int(cfg.historical_lookback_days),
+            "historical_price_points": int(len(prices) if prices is not None else 0),
+        }
+    )
 
     agent.save(weights_path)
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -656,7 +626,7 @@ def suggest_hedge_action(client: AlpacaHedgerClient, underlying_symbol: str) -> 
         "q_values": [float(x) for x in q_vals.tolist()],
         "model_version": DQN_HEDGER_VERSION,
         "model_trained_utc": meta.get("trained_utc") or meta.get("loaded_utc"),
-        "comment": "DQN hedge suggestion (replay buffer + target network; synthetic training)",
+        "comment": "DQN hedge suggestion (replay buffer + target network; historical Alpaca price training)",
         "state": state,
     }
 

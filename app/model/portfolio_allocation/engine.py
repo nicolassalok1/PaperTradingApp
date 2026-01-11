@@ -190,8 +190,28 @@ def compute_returns_matrix(
     client: AlpacaPortfolioClient, symbols: Iterable[str], lookback_days: int = 60
 ) -> Dict[str, Any]:
     df = client.get_history(symbols, lookback_days=lookback_days)
-    if df.empty:
-        return {"symbols": list(symbols), "returns": []}
+    symbols_list = [s for s in symbols if s]
+
+    if df.empty or not {"time", "symbol", "close"}.issubset(set(df.columns)):
+        # Fallback to cached/Stooq/Yahoo OHLC if Alpaca is offline or returns bad payloads
+        from app.model.market_data.market_data import fetch_ohlc_history
+
+        frames: list[pd.DataFrame] = []
+        for sym in symbols_list:
+            try:
+                fb = fetch_ohlc_history(sym, period=f"{lookback_days}d", interval="1d")
+            except Exception:
+                fb = pd.DataFrame()
+            if fb is None or fb.empty or "Date" not in fb.columns or "Close" not in fb.columns:
+                continue
+            f = fb[["Date", "Close"]].rename(columns={"Date": "time", "Close": "close"})
+            f["symbol"] = sym.strip().upper()
+            frames.append(f)
+        if frames:
+            df = pd.concat(frames, axis=0, ignore_index=True)
+        else:
+            return {"symbols": symbols_list, "returns": []}
+
     df = df[["time", "symbol", "close"]]
     pivot = df.pivot_table(index="time", columns="symbol", values="close").ffill().dropna(how="any")
     returns = pivot.pct_change().dropna(how="any")

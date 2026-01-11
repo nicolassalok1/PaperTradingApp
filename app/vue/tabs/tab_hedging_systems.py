@@ -99,17 +99,7 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
         c2.metric("Trained/Loaded (UTC)", str(trained_utc))
         c3.metric("Eval |abs(delta)|", f"{(meta.get('eval_avg_abs_total_delta') or 0.0):.3f}")
         c4.metric("Train avg loss", f"{(meta.get('train_avg_loss') or 0.0):.6f}")
-        st.caption(f"Mode d'entraînement actuel : {meta.get('train_mode') or meta_cfg.get('train_mode', 'synthetic')}")
-
-        current_mode = str(meta.get("train_mode") or meta_cfg.get("train_mode") or "synthetic")
-        train_mode = st.radio(
-            "Source d'entraînement",
-            options=["synthetic", "historical"],
-            index=1 if current_mode == "historical" else 0,
-            format_func=lambda m: "historical (prix Alpaca)" if m == "historical" else "synthetic (env jouet)",
-            help="historical : télécharge des barres Alpaca (credentials requis)",
-            horizontal=True,
-        )
+        st.caption("Mode d'entraînement : historical (prix Alpaca) — nécessite des credentials valides.")
 
         train_steps = st.slider(
             "Train steps",
@@ -127,13 +117,12 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
         hist_episode_len = min(max(hist_episode_len, 8), 256)
         hist_timeframe = str(meta_cfg.get("historical_timeframe", "1Day"))
 
-        if train_mode == "historical":
-            st.info("Le mode historical requiert des credentials Alpaca valides pour télécharger les prix.")
-            col_h1, col_h2 = st.columns(2)
-            hist_symbol = col_h1.text_input("Ticker (historique)", value=str(hist_symbol).upper())
-            hist_timeframe = col_h2.selectbox("Timeframe Alpaca", options=["1Day", "1Hour", "1Min"], index=0)
-            hist_lookback = st.slider("Lookback (jours)", min_value=30, max_value=365, value=hist_lookback, step=15)
-            hist_episode_len = st.slider("Longueur épisode (pas)", min_value=8, max_value=256, value=hist_episode_len, step=8)
+        st.info("Le mode historical requiert des credentials Alpaca valides pour télécharger les prix.")
+        col_h1, col_h2 = st.columns(2)
+        hist_symbol = col_h1.text_input("Ticker (historique)", value=str(hist_symbol).upper())
+        hist_timeframe = col_h2.selectbox("Timeframe Alpaca", options=["1Day", "1Hour", "1Min"], index=0)
+        hist_lookback = st.slider("Lookback (jours)", min_value=30, max_value=365, value=hist_lookback, step=15)
+        hist_episode_len = st.slider("Longueur épisode (pas)", min_value=8, max_value=256, value=hist_episode_len, step=8)
 
         force_retrain = st.checkbox("Force retrain (overwrite cache)", value=False)
         if st.button("Train / update DQN", type="primary"):
@@ -143,11 +132,10 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
                         train_steps=int(train_steps),
                         seed=int(seed),
                         force_retrain=bool(force_retrain),
-                        train_mode=train_mode,
-                        historical_symbol=hist_symbol if train_mode == "historical" else None,
-                        historical_timeframe=hist_timeframe if train_mode == "historical" else None,
-                        historical_lookback_days=int(hist_lookback) if train_mode == "historical" else None,
-                        historical_episode_length=int(hist_episode_len) if train_mode == "historical" else None,
+                        historical_symbol=hist_symbol,
+                        historical_timeframe=hist_timeframe,
+                        historical_lookback_days=int(hist_lookback),
+                        historical_episode_length=int(hist_episode_len),
                     )
             except Exception as exc:
                 st.error(f"Échec de l'entraînement DQN: {exc}")
@@ -220,7 +208,7 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
                 st.error(f"Hedge execution failed: {exc}")
 
     st.caption(
-        "DQN v2 (numpy): replay buffer + target network, entraînement au choix sur un env synthétique ou sur des prix Alpaca."
+        "DQN v3 (numpy): replay buffer + target network, entraîné uniquement sur des prix historiques Alpaca."
     )
 
     # Automatic pass: hedge all underlyings present in the option portfolio
