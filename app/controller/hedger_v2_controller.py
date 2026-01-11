@@ -4,6 +4,7 @@ Controller for Hedger v2 (Alpaca-backed).
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List
 
 from app.model.hedger_v2.alpaca_client import AlpacaHedgerClient
@@ -69,6 +70,40 @@ def get_dqn_hedge_suggestion(underlying_symbol: str) -> Dict[str, Any]:
     return suggest_hedge_action(get_client(), underlying_symbol)
 
 
+def _extract_available_qty_from_error(exc: Exception) -> float:
+    """
+    Attempt to parse an 'available' quantity from Alpaca error payloads.
+    """
+    msg = str(exc)
+    matches = re.findall(r"available[\"']?:\\?\"?([0-9]+(?:\\.[0-9]+)?)", msg)
+    if not matches:
+        return 0.0
+    try:
+        return float(matches[0])
+    except Exception:
+        return 0.0
+
+
+def _manual_order_with_fallback(symbol: str, qty: float, side: str) -> Dict[str, Any]:
+    """
+    Submit order; if insufficient qty for a sell/flatten, clamp to available and retry once.
+    Always returns a dict (never raises) so the UI can surface a clear error.
+    """
+    try:
+        return manual_order(symbol, qty, side)
+    except Exception as exc:
+        avail = _extract_available_qty_from_error(exc)
+        side_lower = (side or "").lower()
+        if side_lower == "sell" and avail > 1e-6 and avail < float(qty) - 1e-6:
+            try:
+                resp = manual_order(symbol, avail, side)
+                resp["note"] = f"Clamped to available quantity {avail}"
+                return resp
+            except Exception:
+                return {"status": "error", "message": str(exc), "available_qty": avail}
+        return {"status": "error", "message": str(exc), "available_qty": avail}
+
+
 def execute_dqn_hedge(underlying_symbol: str) -> Dict[str, Any]:
     if not get_client().is_ready():
         raise RuntimeError("Alpaca credentials missing or client offline; cannot execute hedge.")
@@ -77,11 +112,19 @@ def execute_dqn_hedge(underlying_symbol: str) -> Dict[str, Any]:
     delta_qty = float(suggestion.get("delta_qty", 0.0) or 0.0)
     order_resp: Dict[str, Any] | None = None
     if side in {"buy", "sell"} and abs(delta_qty) > 1e-6:
-        order_resp = manual_order(suggestion.get("underlying", underlying_symbol), abs(delta_qty), side)
+        order_resp = _manual_order_with_fallback(
+            suggestion.get("underlying", underlying_symbol),
+            abs(delta_qty),
+            side,
+        )
     elif side == "flatten" and abs(delta_qty) > 1e-6:
         # flatten means trade delta_qty (could be negative)
         side_exec = "buy" if delta_qty > 0 else "sell"
-        order_resp = manual_order(suggestion.get("underlying", underlying_symbol), abs(delta_qty), side_exec)
+        order_resp = _manual_order_with_fallback(
+            suggestion.get("underlying", underlying_symbol),
+            abs(delta_qty),
+            side_exec,
+        )
     return {"suggestion": suggestion, "order": order_resp}
 
 
@@ -127,11 +170,14 @@ def get_portfolio_option_hedges(execute: bool = False) -> List[Dict[str, Any]]:
                 exec_side = suggestion["side"]
                 if exec_side == "flatten":
                     exec_side = "buy" if delta_qty > 0 else "sell"
-                order_resp = manual_order(
-                    suggestion.get("underlying", u),
-                    abs(delta_qty),
-                    exec_side,
-                )
+                try:
+                    order_resp = _manual_order_with_fallback(
+                        suggestion.get("underlying", u),
+                        abs(delta_qty),
+                        exec_side,
+                    )
+                except Exception as exc:
+                    order_resp = {"status": "error", "message": str(exc)}
         results.append({"underlying": u, "suggestion": suggestion, "order": order_resp})
     return results
 

@@ -382,6 +382,33 @@ def execute_rebalance_orders(
     client: AlpacaPortfolioClient, orders: Iterable[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     executions: List[Dict[str, Any]] = []
+    offline = getattr(client, "offline", False)
+    if offline or client.trading is None:
+        # Surface a clear status instead of silently doing nothing
+        for order in orders or []:
+            executions.append(
+                {
+                    "symbol": order.get("symbol", "-"),
+                    "side": str(order.get("side", "-")),
+                    "qty": float(order.get("qty", 0.0) or 0.0),
+                    "status": "skipped_offline",
+                    "id": None,
+                    "reason": "client offline or trading API unavailable",
+                }
+            )
+        if not executions:
+            executions.append(
+                {
+                    "symbol": "-",
+                    "side": "-",
+                    "qty": 0.0,
+                    "status": "skipped_offline",
+                    "id": None,
+                    "reason": "client offline or trading API unavailable",
+                }
+            )
+        return executions
+
     for order in orders:
         symbol = order.get("symbol")
         qty = float(order.get("qty", 0.0) or 0.0)
@@ -394,17 +421,29 @@ def execute_rebalance_orders(
             side=OrderSide.BUY if side == "buy" else OrderSide.SELL,
             time_in_force=TimeInForce.DAY,  # fractional orders require DAY TIF
         )
-        alpaca_order = client.trading.submit_order(req)
-        alpaca_dict = _to_dict(alpaca_order)
-        executions.append(
-            {
-                "symbol": symbol,
-                "side": side,
-                "qty": qty,
-                "status": alpaca_dict.get("status"),
-                "id": alpaca_dict.get("id"),
-            }
-        )
+        try:
+            alpaca_order = client.trading.submit_order(req)
+            alpaca_dict = _to_dict(alpaca_order)
+            executions.append(
+                {
+                    "symbol": symbol,
+                    "side": side,
+                    "qty": qty,
+                    "status": alpaca_dict.get("status"),
+                    "id": alpaca_dict.get("id"),
+                }
+            )
+        except Exception as exc:
+            executions.append(
+                {
+                    "symbol": symbol,
+                    "side": side,
+                    "qty": qty,
+                    "status": "error",
+                    "id": None,
+                    "reason": str(exc),
+                }
+            )
     return executions
 
 

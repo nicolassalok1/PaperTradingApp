@@ -56,6 +56,33 @@ def _format_execution_text(ref: str, result: dict | str) -> str:
     return f"Hedge request for {ref}: {result}"
 
 
+def _render_pill(title: str, body: str, tone: str = "info") -> None:
+    gradients = {
+        "info": ("#5ac8fa", "#7c83ff"),
+        "success": ("#34d399", "#22d3ee"),
+        "warn": ("#fbbf24", "#f97316"),
+        "error": ("#f43f5e", "#ef4444"),
+    }
+    c1, c2 = gradients.get(tone, gradients["info"])
+    html = f"""
+    <div style="
+        background: linear-gradient(135deg, {c1}, {c2});
+        color: #f8fafc;
+        padding: 12px 14px;
+        border-radius: 14px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        border: 1px solid rgba(255,255,255,0.12);
+        margin: 8px 0;
+    ">
+        <div style="font-weight: 700; font-size: 0.95rem; letter-spacing: 0.01em; margin-bottom: 4px;">
+            {title}
+        </div>
+        <div style="font-size: 0.85rem; opacity: 0.95;">{body}</div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def _render_account() -> None:
     return
 
@@ -199,11 +226,15 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
                 else:
                     result = ctrl.execute_dqn_hedge(underlying_symbol)
                     ref = underlying_symbol
-                _render_pill(
-                    f"Executed hedge for {ref}",
-                    _format_execution_text(ref, result),
-                    tone="success",
-                )
+            tone = "success"
+            msg = _format_execution_text(ref, result)
+            if isinstance(result, dict) and str(result.get("status", "")).lower() == "error":
+                tone = "error"
+            _render_pill(
+                f"Executed hedge for {ref}",
+                msg,
+                tone=tone,
+            )
             except Exception as exc:
                 st.error(f"Hedge execution failed: {exc}")
 
@@ -240,10 +271,20 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
                 tone="info",
             )
             if order:
+                tone = "success"
+                body = _format_execution_text(u, order)
+                if isinstance(order, dict) and str(order.get("status", "")).lower() == "error":
+                    tone = "error"
                 _render_pill(
                     f"Ordre exécuté pour {u or 'n/a'}",
-                    _format_execution_text(u, order),
-                    tone="success",
+                    body,
+                    tone=tone,
+                )
+            else:
+                _render_pill(
+                    f"Ordre exécuté pour {u or 'n/a'}",
+                    "Aucun ordre exécuté ou execution non demandée.",
+                    tone="warn",
                 )
 
 
