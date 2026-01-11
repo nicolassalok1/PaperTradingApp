@@ -66,11 +66,12 @@ def price_lookback_fixed_mc(
     S0, K, r, q, T, sigma, steps=50, n_paths=2000, option_type="call", seed=None
 ):
     paths = simulate_gbm_paths(S0, r, q, sigma, T, steps, n_paths, seed=seed)
-    extrema = paths.min(axis=1) if str(option_type).lower().startswith("c") else paths.max(axis=1)
+    maxima = paths.max(axis=1)
+    minima = paths.min(axis=1)
     if str(option_type).lower().startswith("c"):
-        payoff = np.maximum(extrema - float(K), 0.0)
+        payoff = np.maximum(maxima - float(K), 0.0)
     else:
-        payoff = np.maximum(float(K) - extrema, 0.0)
+        payoff = np.maximum(float(K) - minima, 0.0)
     disc = math.exp(-float(r) * float(T))
     return float(disc * payoff.mean())
 
@@ -98,15 +99,24 @@ def price_barrier_vanilla(
     n_paths=5000,
     seed=None,
 ):
-    paths = simulate_gbm_paths(S0, r, q, sigma, T, steps, n_paths, seed=seed)
-    if barrier_type == "up":
+    # Normalize textual parameters to make the function tolerant to different casings
+    dir_norm = str(barrier_type).lower()
+    knock_norm = str(knock).lower()
+    opt_norm = str(option_type).lower()
+
+    if dir_norm.startswith("up"):
+        paths = simulate_gbm_paths(S0, r, q, sigma, T, steps, n_paths, seed=seed)
         hit = paths.max(axis=1) >= barrier
-    else:
+    elif dir_norm.startswith("down"):
+        paths = simulate_gbm_paths(S0, r, q, sigma, T, steps, n_paths, seed=seed)
         hit = paths.min(axis=1) <= barrier
-    active = ~hit if knock == "out" else hit
+    else:
+        raise ValueError(f"Unknown barrier_type='{barrier_type}', expected 'up' or 'down'.")
+
+    active = ~hit if knock_norm.startswith("out") else hit
     payoff_terminal = (
         np.maximum(paths[:, -1] - K, 0.0)
-        if str(option_type).lower().startswith("c")
+        if opt_norm.startswith("c")
         else np.maximum(K - paths[:, -1], 0.0)
     )
     payoff = payoff_terminal * active

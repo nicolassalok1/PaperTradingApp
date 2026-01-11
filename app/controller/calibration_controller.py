@@ -47,6 +47,7 @@ from app.model.calibration.types import (
 )
 from app.model.options.data.iv_surface import fetch_iv_surface as _fetch_iv_surface
 from app.model.options.logic import download_options_alpaca as _download_options_alpaca
+from app.model.calibration.implied_vol import bs_call_price as _bs_call_price
 
 
 class CalibrationController:
@@ -54,6 +55,11 @@ class CalibrationController:
 
     def get_models(self) -> list[str]:
         return [m.value for m in get_supported_models()]
+
+    @staticmethod
+    def bs_call_price(S0: float, K: float, T: float, r: float, q: float, sigma: float) -> float:
+        """Expose BS call price to the UI layer without importing model modules directly."""
+        return float(_bs_call_price(S0, K, T, r, q, sigma))
 
     def _coerce_model(self, raw: Any) -> CalibrationModelName:
         try:

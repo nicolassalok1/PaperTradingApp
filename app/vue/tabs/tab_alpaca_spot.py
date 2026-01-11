@@ -128,25 +128,11 @@ def _render_price_history() -> None:
         st.info("Enter a symbol then click Fetch.")
         return
 
-    df_hist = None
-    alpaca_error = None
-    try:
-        df_hist = ctrl.get_price_history(symbol, timeframe=timeframe, limit=limit)
-    except Exception as exc:
-        alpaca_error = str(exc)
-
-    # Fallback to cached/stooq/yahoo history if Alpaca is unavailable or empty.
-    if df_hist is None or len(df_hist.index) < 5:
-        try:
-            from app.model.market_data.market_data import fetch_ohlc_history
-
-            df_fallback = fetch_ohlc_history(symbol, period="6mo", interval="1d")
-            if df_fallback is not None and not df_fallback.empty:
-                df_hist = df_fallback
-                st.caption("Fallback data (Stooq/Yahoo) – Alpaca data unavailable or insufficient from Alpaca.")
-        except Exception as exc:
-            if alpaca_error is None:
-                alpaca_error = str(exc)
+    df_hist, source, alpaca_error = ctrl.get_price_history_with_fallback(
+        symbol, timeframe=timeframe, limit=limit
+    )
+    if source == "fallback":
+        st.caption("Fallback data (Stooq/Yahoo) – Alpaca data unavailable or insufficient from Alpaca.")
 
     if df_hist is None or df_hist.empty:
         if alpaca_error:

@@ -15,7 +15,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from app.model.calibration.implied_vol import bs_call_price
+from app.controller.calibration_controller import CalibrationController
 
 
 _SURF_K_ALIASES = {"k", "strike", "strike_price", "strikeprice"}
@@ -82,7 +82,7 @@ def price_grid_from_iv_grid(
             if not np.isfinite(vol) or vol <= 0 or t_val <= 0 or S0_f <= 0:
                 continue
             K = float(mm * S0_f)
-            out[i_t, j_m] = bs_call_price(S0_f, K, t_val, r_f, q_f, vol)
+            out[i_t, j_m] = CalibrationController.bs_call_price(S0_f, K, t_val, r_f, q_f, vol)
     return out
 
 

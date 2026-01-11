@@ -247,18 +247,44 @@ def risk_parity_optimize(returns: Any, max_iter: int = 500, lr: float = 0.01) ->
 
 
 def eigen_portfolio_optimize(returns: Any) -> List[float]:
+    """
+    Long-only EigenPortfolio using the first principal component of the
+    correlation-adjusted returns matrix.
+
+    - Standardises each asset return to avoid scale bias.
+    - Uses the leading eigenvector (largest eigenvalue) of the correlation
+      matrix as loadings.
+    - Enforces a positive orientation and projects to the simplex to keep
+      weights >= 0 and summing to 1.
+    """
     R = _ensure_numpy(returns)
     n = R.shape[1]
     if R.shape[0] < 2:
         return [1.0 / n] * n
-    Sigma = np.cov(R, rowvar=False)
-    Sigma += np.eye(n) * 1e-6
+
+    # Drop rows with non-finite values to avoid NaN pollution
+    mask = np.isfinite(R).all(axis=1)
+    R = R[mask]
+    if R.shape[0] < 2:
+        return [1.0 / n] * n
+
+    # Standardise to unit variance to mimic PCA on correlation matrix
+    R = R - np.mean(R, axis=0, keepdims=True)
+    std = np.std(R, axis=0, ddof=1, keepdims=True)
+    std = np.where(std <= 1e-12, 1.0, std)
+    Z = R / std
+
+    Sigma = np.cov(Z, rowvar=False)
+    Sigma += np.eye(n) * 1e-6  # regularise to avoid singular covariance
+
     vals, vecs = np.linalg.eigh(Sigma)
-    idx = np.argmin(vals)
+    idx = np.argmax(vals)  # first principal component (largest eigenvalue)
     eig_vec = vecs[:, idx]
-    w = np.maximum(eig_vec, 0.0)
-    if w.sum() <= 0:
-        w = np.abs(eig_vec)
+
+    # Fix arbitrary sign, then take absolute loadings for long-only
+    if eig_vec.sum() < 0:
+        eig_vec = -eig_vec
+    w = np.abs(eig_vec)
     w = _project_simplex(w)
     return w.tolist()
 
