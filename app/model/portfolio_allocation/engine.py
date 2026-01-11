@@ -76,31 +76,46 @@ class AlpacaPortfolioClient:
         return results
 
     def get_latest_price(self, symbol: str) -> float:
-        if self.offline or self.data is None:
-            return 0.0
         symbol_norm = (symbol or "").strip().upper()
         if not symbol_norm:
             return 0.0
-        req = StockBarsRequest(
-            symbol_or_symbols=symbol_norm,
-            timeframe=TimeFrame.Day,
-            limit=1,
-        )
-        try:
-            bars = self.data.get_stock_bars(req)
-        except Exception:
-            return 0.0
-        df = getattr(bars, "df", None)
-        if df is None or df.empty:
-            return 0.0
-        if isinstance(df.index, pd.MultiIndex):
+        price = 0.0
+        if not self.offline and self.data is not None:
+            req = StockBarsRequest(
+                symbol_or_symbols=symbol_norm,
+                timeframe=TimeFrame.Day,
+                limit=1,
+            )
             try:
-                df = df.xs(symbol_norm, level="symbol")
+                bars = self.data.get_stock_bars(req)
             except Exception:
-                df = df.reset_index()
-        df = df.reset_index()
-        price_col = "close" if "close" in df.columns else df.columns[-1]
-        price = float(df.iloc[-1][price_col])
+                bars = None
+            if bars is not None:
+                df = getattr(bars, "df", None)
+                if df is not None and not df.empty:
+                    if isinstance(df.index, pd.MultiIndex):
+                        try:
+                            df = df.xs(symbol_norm, level="symbol")
+                        except Exception:
+                            df = df.reset_index()
+                    df = df.reset_index()
+                    price_col = "close" if "close" in df.columns else df.columns[-1]
+                    try:
+                        price = float(df.iloc[-1][price_col])
+                    except Exception:
+                        price = 0.0
+
+        if price <= 0:
+            try:
+                from app.model.market_data.market_data import fetch_ohlc_history
+
+                df_fb = fetch_ohlc_history(symbol_norm, period="3mo", interval="1d")
+                if df_fb is not None and not df_fb.empty:
+                    close_col = "Close" if "Close" in df_fb.columns else df_fb.columns[-1]
+                    price = float(df_fb.iloc[-1][close_col])
+            except Exception:
+                price = 0.0
+
         return price
 
     def get_history(self, symbols: Iterable[str], lookback_days: int = 60) -> pd.DataFrame:
@@ -325,15 +340,26 @@ def compute_rebalance_orders(
 ) -> List[Dict[str, Any]]:
     symbols = target.get("symbols") or current.get("symbols") or []
     target_weights = target.get("weights") or target.get("target_weights") or []
-    current_values = current.get("market_values", [])
+    current_symbols = current.get("symbols") or []
+    current_values = current.get("market_values") or []
+    current_map = {sym: float(val) for sym, val in zip(current_symbols, current_values)}
+
     equity = float(current.get("equity", 0.0) or 0.0)
+    if equity <= 0:
+        equity = sum(abs(v) for v in current_values)
+    if equity <= 0:
+        return []
+
     orders: List[Dict[str, Any]] = []
-    for sym, tw, cv in zip(symbols, target_weights, current_values):
+    for sym, tw in zip(symbols, target_weights):
+        if tw is None:
+            continue
         price = client.get_latest_price(sym)
         if price <= 0:
             continue
         target_value = float(tw) * equity
-        delta_value = target_value - float(cv)
+        current_value = float(current_map.get(sym, 0.0))
+        delta_value = target_value - current_value
         delta_qty = delta_value / price
         if abs(delta_qty) < 1e-3:
             continue
@@ -343,6 +369,9 @@ def compute_rebalance_orders(
                 "symbol": sym,
                 "side": side,
                 "qty": round(abs(delta_qty), 4),
+                "current_value": current_value,
+                "target_value": target_value,
+                "price_used": price,
                 "reason": f"rebalance {target.get('method', '')}".strip(),
             }
         )

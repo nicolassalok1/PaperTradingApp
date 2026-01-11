@@ -201,6 +201,7 @@ def generate_rebalance_plan(method: str, lookback_days: int = 60) -> Dict[str, A
     target_for_orders = {
         "symbols": target.get("symbols", []),
         "weights": target.get("target_weights", []),
+        "target_weights": target.get("target_weights", []),
         "method": target.get("method", ""),
     }
     orders = compute_rebalance_orders(current, target_for_orders, client)

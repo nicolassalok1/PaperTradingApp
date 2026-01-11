@@ -139,15 +139,57 @@ def _render_rebalancing_tools() -> None:
         "Lookback days", min_value=20, max_value=365, value=60, step=5
     )
     method = _alloc_method_mapping(method_label)
+    _ALLOC_STATE_KEY = "por_last_allocation"
 
     if st.button("Compute target allocation", type="primary"):
         allocation_result = ctrl.compute_allocation(method, lookback_days)
+        st.session_state[_ALLOC_STATE_KEY] = {
+            "result": allocation_result,
+            "method": method,
+            "lookback": lookback_days,
+        }
         _render_allocation_results(allocation_result)
 
     if st.button("Generate rebalance plan"):
+        alloc_state = st.session_state.get(_ALLOC_STATE_KEY, {})
+        allocation_result = alloc_state.get("result")
+        if (
+            allocation_result is None
+            or alloc_state.get("method") != method
+            or alloc_state.get("lookback") != lookback_days
+        ):
+            allocation_result = ctrl.compute_allocation(method, lookback_days)
+            st.session_state[_ALLOC_STATE_KEY] = {
+                "result": allocation_result,
+                "method": method,
+                "lookback": lookback_days,
+            }
         plan_result = ctrl.generate_rebalance_plan(method, lookback_days)
+        target = plan_result.get("target") or allocation_result or {}
+        if target and "target_weights" not in target and "weights" in target:
+            target = {
+                **target,
+                "target_weights": target.get("weights", []),
+            }
+        _render_allocation_results(target)
+        # Show current vs target weights to help debug why no orders may be generated
+        current = plan_result.get("current") or {}
+        curr_symbols = current.get("symbols") or []
+        curr_weights = current.get("weights") or []
+        curr_map = {s: float(w) for s, w in zip(curr_symbols, curr_weights)}
+        rows = []
+        for sym, tw in zip(target.get("symbols", []), target.get("target_weights", [])):
+            cw = curr_map.get(sym, 0.0)
+            rows.append({"Symbol": sym, "Current Weight": cw, "Target Weight": tw, "Δ weight": tw - cw})
+        if rows:
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
         orders = plan_result.get("orders", [])
         _render_orders_table(orders)
+        st.session_state[_ALLOC_STATE_KEY] = {
+            "result": target,
+            "method": method,
+            "lookback": lookback_days,
+        }
 
     st.warning(
         "Executing live orders will send market orders to Alpaca. Use with caution."

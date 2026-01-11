@@ -110,23 +110,41 @@ class AlpacaHedgerClient:
         sym = (symbol or "").strip().upper()
         if not sym:
             return 0.0
-        req = StockBarsRequest(
-            symbol_or_symbols=sym,
-            timeframe=TimeFrame.Day,
-            limit=1,
-        )
-        bars = self.data.get_stock_bars(req)
-        df = getattr(bars, "df", None)
-        if df is None or df.empty:
-            return 0.0
-        if df.index.nlevels > 1:
+        req_kwargs = {
+            "symbol_or_symbols": sym,
+            "timeframe": TimeFrame.Day,
+            "limit": 1,
+        }
+        # Prefer IEX feed when available to avoid SIP subscription errors
+        if DataFeed:
+            req_kwargs["feed"] = DataFeed.IEX
+
+        def _fetch(params):
+            return self.data.get_stock_bars(StockBarsRequest(**params))
+
+        try:
+            bars = _fetch(req_kwargs)
+        except Exception:
+            # Retry without feed hint
+            req_kwargs.pop("feed", None)
             try:
-                df = df.xs(sym, level="symbol")
+                bars = _fetch(req_kwargs)
             except Exception:
-                df = df.reset_index()
-        df = df.reset_index()
-        price_col = "close" if "close" in df.columns else df.columns[-1]
-        return float(df.iloc[-1][price_col])
+                return 0.0
+        try:
+            df = getattr(bars, "df", None)
+            if df is None or df.empty:
+                return 0.0
+            if df.index.nlevels > 1:
+                try:
+                    df = df.xs(sym, level="symbol")
+                except Exception:
+                    df = df.reset_index()
+            df = df.reset_index()
+            price_col = "close" if "close" in df.columns else df.columns[-1]
+            return float(df.iloc[-1][price_col])
+        except Exception:
+            return 0.0
 
     def submit_market_order(self, symbol: str, qty: float, side: str) -> Dict[str, Any]:
         if not self.is_ready():
@@ -209,27 +227,33 @@ class AlpacaHedgerClient:
             msg = str(exc).lower()
             if "sip" in msg or "subscription does not permit" in msg:
                 req_kwargs["feed"] = DataFeed.IEX if DataFeed else "iex"
-                bars = _fetch(req_kwargs)
+                try:
+                    bars = _fetch(req_kwargs)
+                except Exception:
+                    return pd.DataFrame()
             else:
                 raise
 
-        df = getattr(bars, "df", None)
-        if df is None or df.empty:
-            return pd.DataFrame()
-        if df.index.nlevels > 1:
-            try:
-                df = df.xs(sym, level="symbol")
-            except Exception:
-                df = df.reset_index()
-        df = df.reset_index()
-        # Normalise timestamp column name
-        if "timestamp" not in df.columns and "time" in df.columns:
-            df = df.rename(columns={"time": "timestamp"})
         try:
-            df.to_csv(cache_path, index=False)
+            df = getattr(bars, "df", None)
+            if df is None or df.empty:
+                return pd.DataFrame()
+            if df.index.nlevels > 1:
+                try:
+                    df = df.xs(sym, level="symbol")
+                except Exception:
+                    df = df.reset_index()
+            df = df.reset_index()
+            # Normalise timestamp column name
+            if "timestamp" not in df.columns and "time" in df.columns:
+                df = df.rename(columns={"time": "timestamp"})
+            try:
+                df.to_csv(cache_path, index=False)
+            except Exception:
+                pass
+            return df
         except Exception:
-            pass
-        return df
+            return pd.DataFrame()
 
 
 __all__ = ["AlpacaHedgerClient"]
