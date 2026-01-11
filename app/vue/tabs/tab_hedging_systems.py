@@ -226,15 +226,15 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
                 else:
                     result = ctrl.execute_dqn_hedge(underlying_symbol)
                     ref = underlying_symbol
-            tone = "success"
-            msg = _format_execution_text(ref, result)
-            if isinstance(result, dict) and str(result.get("status", "")).lower() == "error":
-                tone = "error"
-            _render_pill(
-                f"Executed hedge for {ref}",
-                msg,
-                tone=tone,
-            )
+                tone = "success"
+                msg = _format_execution_text(ref, result)
+                if isinstance(result, dict) and str(result.get("status", "")).lower() == "error":
+                    tone = "error"
+                _render_pill(
+                    f"Executed hedge for {ref}",
+                    msg,
+                    tone=tone,
+                )
             except Exception as exc:
                 st.error(f"Hedge execution failed: {exc}")
 
