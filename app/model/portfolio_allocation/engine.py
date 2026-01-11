@@ -107,6 +107,8 @@ class AlpacaPortfolioClient:
         symbols_norm = [s.strip().upper() for s in symbols if s]
         if not symbols_norm:
             return pd.DataFrame()
+        if self.offline or self.data is None:
+            return pd.DataFrame()
         req = StockBarsRequest(
             symbol_or_symbols=symbols_norm,
             timeframe=TimeFrame.Day,
@@ -116,18 +118,27 @@ class AlpacaPortfolioClient:
             bars = self.data.get_stock_bars(req)
         except Exception:
             return pd.DataFrame()
-        df = getattr(bars, "df", None)
+        try:
+            df = getattr(bars, "df", None)
+        except Exception:
+            return pd.DataFrame()
         if df is None or df.empty:
             return pd.DataFrame()
-        if isinstance(df.index, pd.MultiIndex):
-            df = df.reset_index()
-        if "timestamp" in df.columns:
-            df = df.rename(columns={"timestamp": "time"})
-        if "close" not in df.columns and "Close" in df.columns:
-            df = df.rename(columns={"Close": "close"})
-        df["time"] = pd.to_datetime(df["time"], errors="coerce")
-        df = df.dropna(subset=["time"])
-        return df
+        try:
+            if isinstance(df.index, pd.MultiIndex):
+                df = df.reset_index()
+            if "timestamp" in df.columns:
+                df = df.rename(columns={"timestamp": "time"})
+            if "close" not in df.columns and "Close" in df.columns:
+                df = df.rename(columns={"Close": "close"})
+            df["time"] = pd.to_datetime(df.get("time"), errors="coerce")
+            df = df.dropna(subset=["time"])
+            # Inject symbol if missing and single ticker requested
+            if "symbol" not in df.columns and len(symbols_norm) == 1:
+                df["symbol"] = symbols_norm[0]
+            return df
+        except Exception:
+            return pd.DataFrame()
 
 
 def _to_dict(obj: Any) -> Dict[str, Any]:

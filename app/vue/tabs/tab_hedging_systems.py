@@ -93,31 +93,68 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
 
         meta = status.get("meta") or {}
         trained_utc = meta.get("trained_utc") or meta.get("loaded_utc") or "n/a"
+        meta_cfg = meta.get("config", {}) or {}
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Version", str(status.get("version", "n/a")))
         c2.metric("Trained/Loaded (UTC)", str(trained_utc))
         c3.metric("Eval |abs(delta)|", f"{(meta.get('eval_avg_abs_total_delta') or 0.0):.3f}")
         c4.metric("Train avg loss", f"{(meta.get('train_avg_loss') or 0.0):.6f}")
+        st.caption(f"Mode d'entraînement actuel : {meta.get('train_mode') or meta_cfg.get('train_mode', 'synthetic')}")
+
+        current_mode = str(meta.get("train_mode") or meta_cfg.get("train_mode") or "synthetic")
+        train_mode = st.radio(
+            "Source d'entraînement",
+            options=["synthetic", "historical"],
+            index=1 if current_mode == "historical" else 0,
+            format_func=lambda m: "historical (prix Alpaca)" if m == "historical" else "synthetic (env jouet)",
+            help="historical : télécharge des barres Alpaca (credentials requis)",
+            horizontal=True,
+        )
 
         train_steps = st.slider(
-            "Train steps (synthetic env)",
+            "Train steps",
             min_value=500,
             max_value=25_000,
             value=int((meta.get("train_steps") or 7_500)),
             step=250,
         )
-        seed = st.number_input("Seed", min_value=0, value=int(meta.get("config", {}).get("seed", 42)), step=1)
+        seed = st.number_input("Seed", min_value=0, value=int(meta_cfg.get("seed", 42)), step=1)
+
+        hist_symbol = meta_cfg.get("historical_symbol", "SPY")
+        hist_lookback = int(meta_cfg.get("historical_lookback_days", 180) or 180)
+        hist_lookback = min(max(hist_lookback, 30), 365)
+        hist_episode_len = int(meta_cfg.get("historical_episode_length", 64) or 64)
+        hist_episode_len = min(max(hist_episode_len, 8), 256)
+        hist_timeframe = str(meta_cfg.get("historical_timeframe", "1Day"))
+
+        if train_mode == "historical":
+            st.info("Le mode historical requiert des credentials Alpaca valides pour télécharger les prix.")
+            col_h1, col_h2 = st.columns(2)
+            hist_symbol = col_h1.text_input("Ticker (historique)", value=str(hist_symbol).upper())
+            hist_timeframe = col_h2.selectbox("Timeframe Alpaca", options=["1Day", "1Hour", "1Min"], index=0)
+            hist_lookback = st.slider("Lookback (jours)", min_value=30, max_value=365, value=hist_lookback, step=15)
+            hist_episode_len = st.slider("Longueur épisode (pas)", min_value=8, max_value=256, value=hist_episode_len, step=8)
+
         force_retrain = st.checkbox("Force retrain (overwrite cache)", value=False)
         if st.button("Train / update DQN", type="primary"):
-            with st.spinner("Training DQN (numpy)..."):
-                meta_out = ctrl.train_dqn_model(
-                    train_steps=int(train_steps),
-                    seed=int(seed),
-                    force_retrain=bool(force_retrain),
-                )
-            st.success("DQN entraîné et sauvegardé.")
-            with st.expander("Détails (meta)", expanded=False):
-                st.json(meta_out)
+            try:
+                with st.spinner("Training DQN (numpy)..."):
+                    meta_out = ctrl.train_dqn_model(
+                        train_steps=int(train_steps),
+                        seed=int(seed),
+                        force_retrain=bool(force_retrain),
+                        train_mode=train_mode,
+                        historical_symbol=hist_symbol if train_mode == "historical" else None,
+                        historical_timeframe=hist_timeframe if train_mode == "historical" else None,
+                        historical_lookback_days=int(hist_lookback) if train_mode == "historical" else None,
+                        historical_episode_length=int(hist_episode_len) if train_mode == "historical" else None,
+                    )
+            except Exception as exc:
+                st.error(f"Échec de l'entraînement DQN: {exc}")
+            else:
+                st.success("DQN entraîné et sauvegardé.")
+                with st.expander("Détails (meta)", expanded=False):
+                    st.json(meta_out)
 
     if option_positions:
         choices = [
@@ -182,7 +219,9 @@ def _render_dqn_panel(option_positions: list[dict]) -> None:
             except Exception as exc:
                 st.error(f"Hedge execution failed: {exc}")
 
-    st.caption("DQN v1 (numpy): replay buffer + target network, entraîné sur un environnement synthétique.")
+    st.caption(
+        "DQN v2 (numpy): replay buffer + target network, entraînement au choix sur un env synthétique ou sur des prix Alpaca."
+    )
 
     # Automatic pass: hedge all underlyings present in the option portfolio
     st.markdown("### Couverture automatique (options en portefeuille)")

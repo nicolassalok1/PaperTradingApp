@@ -14,17 +14,17 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, Callable, Dict, Iterable, Tuple
 
 import numpy as np
 
 from app.utils.paths import CACHE_CSV_DIR
 
 from .alpaca_client import AlpacaHedgerClient
-from .env import HedgingEnv, SyntheticHedgingEnv
+from .env import HedgingEnv, HistoricalHedgingEnv, SyntheticHedgingEnv
 
 
-DQN_HEDGER_VERSION = "dqn-v1-numpy"
+DQN_HEDGER_VERSION = "dqn-v2-numpy"
 
 
 @dataclass(frozen=True)
@@ -61,6 +61,15 @@ class DQNConfig:
     env_delta_drift_std: float = 0.60
     env_transaction_cost: float = 0.02
 
+    # Historical env
+    train_mode: str = "synthetic"  # "synthetic" or "historical"
+    historical_symbol: str = "SPY"
+    historical_timeframe: str = "1Day"
+    historical_lookback_days: int = 180
+    historical_episode_length: int = 64
+    historical_delta_scale: float = 80.0
+    historical_transaction_cost: float = 0.02
+
     # Repro
     seed: int = 42
 
@@ -81,6 +90,44 @@ def _weights_path() -> Path:
 
 def _meta_path() -> Path:
     return _model_dir() / f"{DQN_HEDGER_VERSION}.json"
+
+
+def _load_historical_prices(cfg: DQNConfig) -> np.ndarray:
+    client = AlpacaHedgerClient()
+    if not client.is_ready():
+        raise RuntimeError("Alpaca client offline; impossible de récupérer les données historiques.")
+
+    df = client.get_stock_bars_df(
+        cfg.historical_symbol,
+        timeframe=cfg.historical_timeframe,
+        lookback_days=cfg.historical_lookback_days,
+    )
+    if df is None or df.empty:
+        raise RuntimeError("Aucune donnée historique Alpaca récupérée pour l'entraînement.")
+    if "timestamp" in df.columns:
+        df = df.sort_values("timestamp")
+
+    price_col = None
+    for col in ("close", "Close", "c"):
+        if col in df.columns:
+            price_col = col
+            break
+    if price_col is None:
+        for col in df.columns[::-1]:
+            try:
+                df[col].astype(float)
+                price_col = col
+                break
+            except Exception:
+                continue
+    if price_col is None:
+        raise RuntimeError("Impossible de trouver une colonne de prix dans les barres Alpaca.")
+
+    prices = np.asarray(df[price_col].astype(float).to_numpy(), dtype=np.float32)
+    prices = prices[np.isfinite(prices)]
+    if prices.size < 3:
+        raise RuntimeError("Données Alpaca insuffisantes pour entraîner le DQN (moins de 3 points).")
+    return prices
 
 
 class ReplayBuffer:
@@ -367,10 +414,33 @@ def _epsilon_at_step(cfg: DQNConfig, step: int) -> float:
     return float(cfg.epsilon_start + frac * (cfg.epsilon_end - cfg.epsilon_start))
 
 
-def _eval_agent(agent: DQNAgent, env: SyntheticHedgingEnv, episodes: int) -> Dict[str, float]:
+def _make_synthetic_env(cfg: DQNConfig, seed: int | None = None) -> SyntheticHedgingEnv:
+    return SyntheticHedgingEnv(
+        max_steps=cfg.env_max_steps,
+        max_abs_delta=cfg.env_max_abs_delta,
+        position_scale=cfg.env_position_scale,
+        delta_drift_std=cfg.env_delta_drift_std,
+        transaction_cost=cfg.env_transaction_cost,
+        seed=seed,
+    )
+
+
+def _make_historical_env(cfg: DQNConfig, prices: np.ndarray, seed: int | None = None) -> HistoricalHedgingEnv:
+    return HistoricalHedgingEnv(
+        prices=tuple(float(x) for x in prices),
+        position_scale=cfg.env_position_scale,
+        delta_scale=cfg.historical_delta_scale,
+        transaction_cost=cfg.historical_transaction_cost,
+        max_episode_length=cfg.historical_episode_length,
+        seed=seed,
+    )
+
+
+def _eval_agent_generic(agent: DQNAgent, env_factory: Callable[[], Any], episodes: int) -> Dict[str, float]:
     rewards: list[float] = []
     abs_residual: list[float] = []
     for _ in range(int(episodes)):
+        env = env_factory()
         state = env.reset()
         done = False
         ep_r = 0.0
@@ -421,11 +491,17 @@ def load_or_train_dqn_model(
 
     global _CACHED_AGENT, _CACHED_META
     cfg = config or DQNConfig()
+    requested_train_mode = (cfg.train_mode or "synthetic").lower().strip()
 
     weights_path = _weights_path()
     meta_path = _meta_path()
 
-    if not force_retrain and _CACHED_AGENT is not None and _CACHED_META is not None:
+    if (
+        not force_retrain
+        and _CACHED_AGENT is not None
+        and _CACHED_META is not None
+        and (_CACHED_META.get("config", {}) or {}).get("train_mode") == requested_train_mode
+    ):
         return dict(_CACHED_META)
 
     agent = DQNAgent(cfg, n_actions=4)
@@ -445,6 +521,9 @@ def load_or_train_dqn_model(
                 "config": asdict(cfg),
                 **(meta or {}),
             }
+            cached_mode = (meta.get("config", {}) or {}).get("train_mode")
+            if cached_mode is not None and str(cached_mode).lower() != requested_train_mode:
+                raise ValueError("Cached DQN train_mode differs from requested mode.")
             _CACHED_AGENT = agent
             _CACHED_META = meta
             return dict(meta)
@@ -452,15 +531,17 @@ def load_or_train_dqn_model(
             # fallthrough to retrain if corrupted/incompatible
             pass
 
-    # Train on synthetic env
-    env = SyntheticHedgingEnv(
-        max_steps=cfg.env_max_steps,
-        max_abs_delta=cfg.env_max_abs_delta,
-        position_scale=cfg.env_position_scale,
-        delta_drift_std=cfg.env_delta_drift_std,
-        transaction_cost=cfg.env_transaction_cost,
-        seed=cfg.seed,
-    )
+    # Train on selected env (synthetic by default, can use historical prices)
+    train_mode = requested_train_mode
+    prices: np.ndarray | None = None
+    if train_mode == "historical":
+        prices = _load_historical_prices(cfg)
+        env = _make_historical_env(cfg, prices, seed=cfg.seed)
+        eval_env_factory = lambda: _make_historical_env(cfg, prices, seed=cfg.seed + 1)
+    else:
+        train_mode = "synthetic"
+        env = _make_synthetic_env(cfg, seed=cfg.seed)
+        eval_env_factory = lambda: _make_synthetic_env(cfg)
 
     buffer = ReplayBuffer(cfg.buffer_capacity, state_dim=agent.state_dim, seed=cfg.seed)
     state = env.reset(seed=cfg.seed)
@@ -492,7 +573,7 @@ def load_or_train_dqn_model(
         if (step + 1) % int(cfg.target_update_interval) == 0:
             agent.update_target_hard()
 
-    eval_metrics = _eval_agent(agent, env, episodes=cfg.eval_episodes)
+    eval_metrics = _eval_agent_generic(agent, eval_env_factory, episodes=cfg.eval_episodes)
     meta = {
         "version": DQN_HEDGER_VERSION,
         "trained_utc": _utc_iso_now(),
@@ -503,6 +584,18 @@ def load_or_train_dqn_model(
         "train_avg_abs_total_delta": float(np.mean(rolling_abs_residual)) if rolling_abs_residual else None,
         **eval_metrics,
     }
+    if train_mode == "historical":
+        meta.update(
+            {
+                "train_mode": "historical",
+                "historical_symbol": cfg.historical_symbol,
+                "historical_timeframe": cfg.historical_timeframe,
+                "historical_lookback_days": int(cfg.historical_lookback_days),
+                "historical_price_points": int(len(prices) if prices is not None else 0),
+            }
+        )
+    else:
+        meta["train_mode"] = "synthetic"
 
     agent.save(weights_path)
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -575,4 +668,3 @@ __all__ = [
     "load_or_train_dqn_model",
     "suggest_hedge_action",
 ]
-

@@ -4,9 +4,11 @@ Alpaca client utilities for Hedger v2.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import os
 from typing import Any, Dict, List
 
+import pandas as pd
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.trading.requests import MarketOrderRequest
@@ -14,6 +16,7 @@ from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 
+from app.utils.paths import CACHE_OHLC_DIR
 from app.utils.secrets import get_secret
 
 
@@ -135,6 +138,75 @@ class AlpacaHedgerClient:
         )
         order = self.trading.submit_order(req)
         return _to_dict(order)
+
+    def get_stock_bars_df(
+        self,
+        symbol: str,
+        *,
+        timeframe: str | TimeFrame = "1Day",
+        lookback_days: int = 180,
+        force_refresh: bool = False,
+    ):
+        """
+        Fetch historical bars for a symbol (cached to disk).
+
+        Returns a pandas DataFrame with a timestamp column and OHLCV columns.
+        """
+        sym = (symbol or "").strip().upper()
+        if not sym:
+            return pd.DataFrame()
+
+        # Cache path keyed by symbol/timeframe/lookback
+        tf_key = str(timeframe).replace("TimeFrame.", "").replace(".", "_")
+        cache_path = CACHE_OHLC_DIR / f"alpaca_{sym}_{tf_key}_{int(lookback_days)}d.csv"
+        if cache_path.exists() and not force_refresh:
+            try:
+                return pd.read_csv(cache_path, parse_dates=["timestamp"])
+            except Exception:
+                pass
+
+        if self.offline or self.data is None:
+            return pd.DataFrame()
+
+        # Parse timeframe if passed as string (supports "1Day", "1Hour", "1Min")
+        tf = timeframe
+        if isinstance(tf, str):
+            tf_norm = tf.strip().lower()
+            if "day" in tf_norm:
+                tf = TimeFrame.Day
+            elif "hour" in tf_norm:
+                tf = TimeFrame.Hour
+            else:
+                tf = TimeFrame.Minute
+
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=max(int(lookback_days), 1) + 5)
+        limit = min(max(int(lookback_days) * 2, 50), 5_000)
+        req = StockBarsRequest(
+            symbol_or_symbols=sym,
+            timeframe=tf,
+            start=start,
+            end=end,
+            limit=limit,
+        )
+        bars = self.data.get_stock_bars(req)
+        df = getattr(bars, "df", None)
+        if df is None or df.empty:
+            return pd.DataFrame()
+        if df.index.nlevels > 1:
+            try:
+                df = df.xs(sym, level="symbol")
+            except Exception:
+                df = df.reset_index()
+        df = df.reset_index()
+        # Normalise timestamp column name
+        if "timestamp" not in df.columns and "time" in df.columns:
+            df = df.rename(columns={"time": "timestamp"})
+        try:
+            df.to_csv(cache_path, index=False)
+        except Exception:
+            pass
+        return df
 
 
 __all__ = ["AlpacaHedgerClient"]

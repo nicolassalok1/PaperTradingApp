@@ -145,21 +145,50 @@ def train_dqn_model(
     train_steps: int | None = None,
     seed: int | None = None,
     force_retrain: bool = False,
+    train_mode: str | None = None,
+    historical_symbol: str | None = None,
+    historical_timeframe: str | None = None,
+    historical_lookback_days: int | None = None,
+    historical_episode_length: int | None = None,
 ) -> Dict[str, Any]:
-    cfg = DQNConfig()
+    base_cfg = DQNConfig()
+    cfg_kwargs = {**base_cfg.__dict__}
     if train_steps is not None:
         try:
             ts = int(train_steps)
         except Exception:
-            ts = cfg.train_steps
+            ts = base_cfg.train_steps
         ts = max(250, min(ts, 250_000))
-        cfg = DQNConfig(**{**cfg.__dict__, "train_steps": ts})
+        cfg_kwargs["train_steps"] = ts
     if seed is not None:
         try:
             s = int(seed)
         except Exception:
-            s = cfg.seed
-        cfg = DQNConfig(**{**cfg.__dict__, "seed": s})
+            s = base_cfg.seed
+        cfg_kwargs["seed"] = s
+
+    if train_mode:
+        mode = train_mode.strip().lower()
+        if mode in {"historical", "synthetic"}:
+            cfg_kwargs["train_mode"] = mode
+    if historical_symbol:
+        cfg_kwargs["historical_symbol"] = (historical_symbol or "").strip().upper()
+    if historical_timeframe:
+        cfg_kwargs["historical_timeframe"] = str(historical_timeframe).strip()
+    if historical_lookback_days is not None:
+        try:
+            lb = int(historical_lookback_days)
+        except Exception:
+            lb = base_cfg.historical_lookback_days
+        cfg_kwargs["historical_lookback_days"] = max(30, min(lb, 1_500))
+    if historical_episode_length is not None:
+        try:
+            elen = int(historical_episode_length)
+        except Exception:
+            elen = base_cfg.historical_episode_length
+        cfg_kwargs["historical_episode_length"] = max(8, min(elen, 512))
+
+    cfg = DQNConfig(**cfg_kwargs)
 
     return load_or_train_dqn_model(config=cfg, force_retrain=bool(force_retrain))
 

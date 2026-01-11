@@ -74,45 +74,53 @@ class HedgingEnv:
 
 
 @dataclass
-class SyntheticHedgingEnv:
+class HistoricalHedgingEnv:
     """
-    Toy hedging environment used to train the DQN offline (no Alpaca dependency).
+    Hedging environment driven by historical price paths (no option greeks required).
 
-    State is kept intentionally minimal:
-    - net_delta_proxy: exogenous option delta exposure (drifts stochastically)
-    - equity_position: hedge position (shares, delta=1 per share)
-
-    Reward penalizes absolute residual delta + transaction costs.
+    net_delta_proxy is derived from log returns, scaled/clipped to stay in a realistic range.
     """
 
-    max_steps: int = 32
-    max_abs_delta: float = 10.0
+    prices: Tuple[float, ...]
     position_scale: float = 1.0
-    delta_drift_std: float = 0.60
+    delta_scale: float = 50.0
     transaction_cost: float = 0.02
-    seed: int | None = 42
+    max_episode_length: int = 64
+    seed: int | None = None
 
     _rng: np.random.Generator = field(init=False, repr=False)
     _t: int = field(init=False, default=0, repr=False)
-    _net_delta: float = field(init=False, default=0.0, repr=False)
+    _end: int = field(init=False, default=0, repr=False)
     _equity_pos: float = field(init=False, default=0.0, repr=False)
+    _log_returns: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
+        if len(self.prices) < 3:
+            raise ValueError("HistoricalHedgingEnv requires at least 3 price points.")
         self._rng = np.random.default_rng(self.seed)
+        # Use log returns to avoid negative prices; length = len(prices) - 1
+        self._log_returns = np.diff(np.log(np.asarray(self.prices, dtype=np.float32)))
 
     def reset(self, seed: int | None = None) -> Dict[str, float]:
         if seed is not None:
             self._rng = np.random.default_rng(seed)
-        self._t = 0
-        self._net_delta = float(self._rng.uniform(-self.max_abs_delta, self.max_abs_delta))
-        # start hedge position around 0 to let the agent learn adjustments
+        # Random start so episodes span different segments
+        max_start = max(len(self.prices) - int(self.max_episode_length) - 1, 1)
+        self._t = int(self._rng.integers(1, max_start + 1))
+        self._end = min(len(self.prices) - 1, self._t + int(self.max_episode_length))
         self._equity_pos = float(self._rng.integers(-2, 3))
         return self._state()
 
     def _state(self) -> Dict[str, float]:
+        # Clamp index to stay within bounds
+        idx = min(max(self._t, 1), len(self.prices) - 1)
+        ret = float(self._log_returns[idx - 1]) if idx - 1 < len(self._log_returns) else 0.0
+        net_delta_proxy = float(np.clip(ret * self.delta_scale, -self.delta_scale, self.delta_scale))
         return {
-            "net_delta_proxy": float(self._net_delta),
+            "underlying_price": float(self.prices[idx]),
+            "net_delta_proxy": net_delta_proxy,
             "equity_position": float(self._equity_pos),
+            "cash": 0.0,
         }
 
     def step(self, action: int) -> Tuple[Dict[str, float], float, bool, Dict[str, Any]]:
@@ -121,28 +129,18 @@ class SyntheticHedgingEnv:
         elif action == 2:
             delta_qty = -1.0 * self.position_scale
         elif action == 3:
-            # flatten hedge leg (close stock position)
             delta_qty = -self._equity_pos
         else:
             delta_qty = 0.0
 
         self._equity_pos = float(self._equity_pos + delta_qty)
-        # option delta drifts
-        self._net_delta = float(
-            np.clip(
-                self._net_delta + self._rng.normal(0.0, self.delta_drift_std),
-                -self.max_abs_delta,
-                self.max_abs_delta,
-            )
-        )
-
-        total_delta = float(self._net_delta + self._equity_pos)
-        reward = -abs(total_delta) - self.transaction_cost * abs(float(delta_qty))
-
         self._t += 1
-        done = self._t >= int(self.max_steps)
-        info = {"delta_qty": float(delta_qty), "total_delta": total_delta, "t": self._t}
-        return self._state(), float(reward), bool(done), info
+        done = self._t >= self._end or self._t >= len(self.prices) - 1
+        next_state = self._state()
+        total_delta = float(next_state["net_delta_proxy"] + self._equity_pos)
+        reward = -abs(total_delta) - self.transaction_cost * abs(float(delta_qty))
+        info = {"delta_qty": float(delta_qty), "total_delta": total_delta, "t": int(self._t)}
+        return next_state, float(reward), bool(done), info
 
 
-__all__ = ["HedgingEnv", "SyntheticHedgingEnv"]
+__all__ = ["HedgingEnv", "HistoricalHedgingEnv"]
