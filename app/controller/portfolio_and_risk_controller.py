@@ -146,7 +146,20 @@ def compute_allocation(method: str, lookback_days: int = 60) -> Dict[str, Any]:
     symbols = list(returns_data.get("symbols", symbols) or symbols)
 
     # If we have no return history, fall back to equal weights to avoid UI errors.
-    if not returns:
+    returns_empty = False
+    try:
+        import numpy as _np
+
+        if returns is None:
+            returns_empty = True
+        elif isinstance(returns, _np.ndarray):
+            returns_empty = returns.size == 0
+        else:
+            returns_empty = len(returns) == 0  # type: ignore[arg-type]
+    except Exception:
+        returns_empty = True
+
+    if returns_empty:
         n = len(symbols)
         return {
             "method": method,
