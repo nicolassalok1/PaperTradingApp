@@ -153,7 +153,6 @@ venv.bak/
 dmypy.json
 
 # Data and generated caches
-data/*
 database/*
 cache/HedgerDQN/
 cache/
