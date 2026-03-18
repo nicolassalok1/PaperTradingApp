@@ -9,6 +9,8 @@ import streamlit as st
 
 from app.controller.calibration_controller import CalibrationController
 from app.controller import yieldcurve_controller as yc
+from app.vue.components.calibration_diagnostics import render_calibration_diagnostics
+from app.vue.components.model_comparison import render_model_comparison
 from app.vue.components.page_utils import render_page_header
 from app.vue.components.surface_ui import (
     canonicalize_surface_df,
@@ -509,6 +511,13 @@ def render_tab() -> None:
                     except Exception:
                         pass
                 st.session_state[last_key] = result
+                # Accumulate in comparison history
+                if isinstance(result, dict) and result.get("success"):
+                    hist = st.session_state.get("calib_history")
+                    if not isinstance(hist, dict):
+                        hist = {}
+                    hist[model_key] = result
+                    st.session_state["calib_history"] = hist
 
             result = st.session_state.get(last_key)
             if not isinstance(result, dict) or not result:
@@ -536,6 +545,19 @@ def render_tab() -> None:
                 col_a.metric("MAE (IV)", f"{float(metrics.get('mae', 0.0)):.4f}")
                 col_b.metric("RMSE (IV)", f"{float(metrics.get('rmse', 0.0)):.4f}")
                 col_c.metric("Max |err| (IV)", f"{float(metrics.get('max_abs', 0.0)):.4f}")
+
+            metrics_vw = result.get("metrics_vw") or {}
+            if isinstance(metrics_vw, dict) and metrics_vw and any(
+                v is not None and str(v) != "nan" for v in metrics_vw.values()
+            ):
+                col_d, col_e, _ = st.columns(3)
+                col_d.metric("MAE (vega-wt)", f"{float(metrics_vw.get('mae_vw', float('nan'))):.4f}")
+                col_e.metric("RMSE (vega-wt)", f"{float(metrics_vw.get('rmse_vw', float('nan'))):.4f}")
+                st.caption("Métriques vega-weighted : les points ATM/proches de la monnaie pèsent davantage.")
+
+            with st.expander("📊 Diagnostics détaillés", expanded=False):
+                diag_data = ctrl.compute_diagnostics(result)
+                render_calibration_diagnostics(diag_data)
 
             st.markdown("### Paramètres calibrés")
             st.json(result.get("params") or {})
@@ -651,6 +673,18 @@ def render_tab() -> None:
                     st.warning(f"Affichage 3D des prix indisponible: {exc}")
             else:
                 st.info("Aucune surface à afficher.")
+
+            # Comparaison inter-modèles
+            calib_history = st.session_state.get("calib_history")
+            if isinstance(calib_history, dict) and len(calib_history) >= 1:
+                st.markdown("---")
+                with st.expander(f"📈 Comparaison de modèles ({len(calib_history)} calibré(s))", expanded=False):
+                    col_reset, _ = st.columns([1, 4])
+                    with col_reset:
+                        if st.button("Effacer l'historique", key=_k("calib_history_clear"), type="secondary"):
+                            st.session_state["calib_history"] = {}
+                            st.rerun()
+                    render_model_comparison(calib_history)
 
             # Détails bruts supprimés (non affichés)
 render = render_tab

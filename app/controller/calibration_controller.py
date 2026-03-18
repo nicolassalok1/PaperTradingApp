@@ -48,6 +48,7 @@ from app.model.calibration.types import (
 from app.model.options.data.iv_surface import fetch_iv_surface as _fetch_iv_surface
 from app.model.options.logic import download_options_alpaca as _download_options_alpaca
 from app.model.calibration.implied_vol import bs_call_price as _bs_call_price
+from app.model.calibration.loss_surface import compute_bs_vega_grid, iv_error_metrics_weighted
 
 
 class CalibrationController:
@@ -602,6 +603,8 @@ class CalibrationController:
 
         iv_error = np.where(mask_bool, iv_model - iv_market, np.nan)
         metrics = self._iv_error_metrics(iv_error, mask_bool)
+        vega_weights = compute_bs_vega_grid(S0_val, m_grid, t_grid, r, q, iv_market)
+        metrics_vw = iv_error_metrics_weighted(iv_error, mask_bool, vega_weights)
 
         result = {
             "success": True,
@@ -610,6 +613,7 @@ class CalibrationController:
             "model": "heston_v1",
             "params": params_final,
             "metrics": metrics,
+            "metrics_vw": metrics_vw,
             "ticker": ticker,
             "S0": S0_val,
             "r": r,
@@ -619,6 +623,7 @@ class CalibrationController:
             "iv_market": iv_market.tolist(),
             "iv_model": iv_model.tolist(),
             "iv_error": iv_error.tolist(),
+            "vega_weights": vega_weights.tolist(),
             "mask": mask_bool.tolist(),
             "details": {"pred": pred, "calibration": calib},
         }
@@ -957,6 +962,7 @@ class CalibrationController:
                 "method": str(result.method),
                 "params": result.params,
                 "metrics": result.metrics or {},
+                "metrics_vw": result.metrics_vw or {},
                 "S0": float(surface.S0),
                 "r": float(surface.r),
                 "q": float(surface.q),
@@ -965,10 +971,22 @@ class CalibrationController:
                 "iv_market": surface.iv_market,
                 "iv_model": result.iv_model,
                 "iv_error": result.iv_error,
+                "vega_weights": result.vega_weights,
                 "mask": surface.mask,
                 "details": result.details or {},
             }
         )
+
+    def compute_diagnostics(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Compute per-maturity/moneyness/smile diagnostics from a calibration result dict.
+        Kept in controller so the view layer never imports from app.model directly.
+        """
+        from app.model.calibration.diagnostics import compute_all_diagnostics
+        try:
+            return compute_all_diagnostics(result)
+        except Exception:
+            return {}
 
     def kalman_smooth(self, payload: Dict | None) -> Dict[str, Any]:
         """
