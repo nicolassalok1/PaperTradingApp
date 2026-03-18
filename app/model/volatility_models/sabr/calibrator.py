@@ -15,7 +15,12 @@ from app.model.calibration.base_calibrator import (
     SurfaceCalibrationResult,
     SurfaceGrid,
 )
-from app.model.calibration.loss_surface import effective_mask, iv_error_metrics
+from app.model.calibration.loss_surface import (
+    compute_bs_vega_grid,
+    effective_mask,
+    iv_error_metrics,
+    iv_error_metrics_weighted,
+)
 from app.model.volatility_models.sabr.analytic import hagan_black_iv_vectorized
 from app.model.volatility_models.sabr.model import SABRAnalyticModel
 
@@ -160,6 +165,8 @@ class SABRAnalyticCalibrator(BaseSurfaceCalibrator):
         iv_model_full = self._model.implied_vol_surface(surface, params)
         iv_error = np.where(mask_eff, iv_model_full - iv_mkt, np.nan)
         metrics = iv_error_metrics(iv_error, mask_eff)
+        vega_weights = compute_bs_vega_grid(S0, m_grid, t_grid, r, q, iv_mkt)
+        metrics_vw = iv_error_metrics_weighted(iv_error, mask_eff, vega_weights)
 
         return SurfaceCalibrationResult(
             success=True,
@@ -168,8 +175,10 @@ class SABRAnalyticCalibrator(BaseSurfaceCalibrator):
             method=self.method,
             params=params,
             metrics=metrics,
+            metrics_vw=metrics_vw,
             iv_model=iv_model_full,
             iv_error=iv_error,
+            vega_weights=vega_weights,
             details={"runs": runs, "beta": float(beta)},
         )
 

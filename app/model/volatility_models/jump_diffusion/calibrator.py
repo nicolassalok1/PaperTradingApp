@@ -16,7 +16,12 @@ from app.model.calibration.base_calibrator import (
     SurfaceGrid,
 )
 from app.model.calibration.implied_vol import bs_call_price, implied_vol_grid
-from app.model.calibration.loss_surface import effective_mask, iv_error_metrics
+from app.model.calibration.loss_surface import (
+    compute_bs_vega_grid,
+    effective_mask,
+    iv_error_metrics,
+    iv_error_metrics_weighted,
+)
 from app.model.volatility_models.common.fft import FFTConfig, carr_madan_fft_call_prices, interp_prices
 from app.model.volatility_models.jump_diffusion.cf import merton_log_return_cf
 
@@ -216,6 +221,8 @@ class MertonJumpDiffusionCalibrator(BaseSurfaceCalibrator):
         iv_model = implied_vol_grid(price_grid, S0, m_grid, t_grid, r, q)
         iv_error = np.where(mask_eff, iv_model - iv_mkt, np.nan)
         metrics = iv_error_metrics(iv_error, mask_eff)
+        vega_weights = compute_bs_vega_grid(S0, m_grid, t_grid, r, q, iv_mkt)
+        metrics_vw = iv_error_metrics_weighted(iv_error, mask_eff, vega_weights)
 
         if best_meta is not None:
             best_meta["best"] = True
@@ -227,8 +234,10 @@ class MertonJumpDiffusionCalibrator(BaseSurfaceCalibrator):
             method=self.method,
             params=params,
             metrics=metrics,
+            metrics_vw=metrics_vw,
             iv_model=iv_model,
             iv_error=iv_error,
+            vega_weights=vega_weights,
             details={"runs": runs, "fft_cfg": {"alpha": cfg.alpha, "n": cfg.n, "eta": cfg.eta}},
         )
 
