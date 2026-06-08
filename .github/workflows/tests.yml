@@ -28,7 +28,8 @@ jobs:
       - name: Secret scan (tracked files)
         run: python scripts/scan_secrets.py
 
-      - name: Unit + smoke tests (network blocked)
+      - name: Unit + smoke tests (network blocked) + coverage floor
         # --disable-socket comes from pyproject addopts; proves the app imports
         # and boots offline WITHOUT the optional runtime-ml (torch) stack.
-        run: python -m pytest -m "unit or smoke" -ra
+        # --cov enforces the progressive fail_under floor from pyproject.
+        run: python -m pytest -m "unit or smoke" --cov=app -ra

@@ -15,6 +15,7 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 
 from app.utils.secrets import get_secret
+from app.utils.trading_guard import enforce_paper_endpoint
 
 
 def _to_dict(obj: Any) -> Dict[str, Any]:
@@ -42,7 +43,7 @@ class AlpacaHedgerClient:
     def __init__(self) -> None:
         api_key = (get_secret("APCA_API_KEY_ID") or "").strip()
         api_secret = (get_secret("APCA_API_SECRET_KEY") or "").strip()
-        base_url = (get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets").strip()
+        base_url = enforce_paper_endpoint(get_secret("APCA_API_BASE_URL"))
         self.offline = False
         if (not api_key or not api_secret) or api_key.lower().startswith("dummy") or api_secret.lower().startswith("dummy"):
             self.offline = True

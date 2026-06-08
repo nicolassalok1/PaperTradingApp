@@ -23,5 +23,6 @@ omit = ["*/__pycache__/*", "*/tests/*"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-# Progressive gate — raised as Step-4 coverage lands on the quant core.
-fail_under = 0
+# Progressive ratchet floor — current global baseline ~13% after Step-4 quant
+# coverage. Raise this as more tests land (per-module targets next).
+fail_under = 12

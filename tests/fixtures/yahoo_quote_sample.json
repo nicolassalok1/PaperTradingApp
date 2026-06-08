@@ -1,0 +1,21 @@
+{
+  "quoteResponse": {
+    "result": [
+      {
+        "symbol": "FAKE",
+        "shortName": "Fake Sample Corp",
+        "regularMarketPrice": 100.25,
+        "regularMarketPreviousClose": 99.80,
+        "regularMarketOpen": 99.95,
+        "regularMarketDayHigh": 101.10,
+        "regularMarketDayLow": 99.50,
+        "regularMarketVolume": 1234567,
+        "bid": 100.20,
+        "ask": 100.30,
+        "currency": "USD",
+        "marketState": "REGULAR"
+      }
+    ],
+    "error": null
+  }
+}
