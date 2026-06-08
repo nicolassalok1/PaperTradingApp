@@ -1,0 +1,6 @@
+# RUNTIME-ML — optional ML INFERENCE deps (Heston neural-net calibration).
+# The app must run WITHOUT these: heston_nn.py lazy-imports torch and the
+# calibration path shows "model unavailable" when torch is missing.
+-r runtime.txt
+torch==2.2.2
+torchvision==0.17.2

@@ -1,4 +1,8 @@
+import pytest
+
 from app.utils import paths
+
+pytestmark = pytest.mark.unit
 
 
 def test_cache_subdirectories_exist():

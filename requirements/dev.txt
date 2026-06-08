@@ -1,0 +1,13 @@
+# DEV — full local stack: runtime + ML + tests + QA tooling.
+-r test.txt
+-r runtime-ml.txt
+# UI crawler / QA scripts (scripts/run_ui_crawler*.py)
+playwright==1.40.0
+# Misc local utilities used by scripts
+tqdm==4.66.2
+pyyaml==6.0
+ujson==5.9.0
+
+# REMOVED as unused (zero imports across app/ + scripts/, verified by grep):
+#   tensorflow, scikit-learn, statsmodels, seaborn, wordcloud, websockets
+# If a future feature needs one, add it to the appropriate group with its import site.

@@ -1,0 +1,6 @@
+# TEST — CI test stack. Runtime only (NO torch): CI must pass without runtime-ml,
+# so the offline smoke proves the app imports torch-free.
+-r runtime.txt
+pytest==8.4.1
+pytest-socket==0.8.0
+pytest-cov==7.1.0
