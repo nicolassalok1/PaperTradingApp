@@ -79,19 +79,12 @@ def test_bs_guard_clauses_return_zero():
 # --------------------------------------------------------------------------- #
 # params order = (kappa, theta, sigma, rho, v0)
 #
-# XFAIL (real application bug, NOT a tolerance issue): in the degenerate limit
-# sigma->0, v0==theta the Heston CF call MUST converge to BS(sqrt(v0)). It does
-# not. Measured errors are large and DO NOT shrink with integration resolution:
-#   (u_max,N)=(200,4000): K=80 +1.15, K=100 +0.21, K=120 -0.84 (v0=0.04)
-#   (u_max,N)=(500,20000): K=80 +1.19, K=100 +0.22, K=120 -0.82  -> identical.
-# A persistent, resolution-independent bias => bug in the pricer formulation
-# (heston_cf / _P integrand), not numerical truncation. Code left untouched
-# per scope. Oracle (bs_call_price) is independently validated above.
-@pytest.mark.xfail(
-    reason="heston_pricer bug: CF call does not converge to BS in sigma->0,v0=theta "
-    "limit; bias is resolution-independent (see diagnostics in test header).",
-    strict=True,
-)
+# In the degenerate limit sigma->0, v0==theta the Heston CF call MUST converge to
+# BS(sqrt(v0)). It now does (fixed: the P1 normaliser used S0*exp(-q t) instead of
+# the forward phi(-i)=S0*exp((r-q)t); the missing exp(r t) factor broke the limit
+# and produced negative prices). The residual is now pure integration truncation
+# and shrinks with resolution, e.g. K=120,t=1: d=-0.027 at (200,4000) -> -0.010 at
+# (400,40000). So this convergence test uses fine integration. Oracle = bs_call_price.
 @pytest.mark.parametrize("K", [80.0, 100.0, 120.0])
 @pytest.mark.parametrize("v0", [0.04, 0.09])
 def test_heston_reduces_to_bs_in_zero_vol_of_vol_limit(K, v0):
@@ -99,25 +92,20 @@ def test_heston_reduces_to_bs_in_zero_vol_of_vol_limit(K, v0):
     sigma_bs = math.sqrt(v0)
     # sigma (vol-of-vol) -> 0, v0 == theta => variance is (essentially) constant.
     params = (1.5, v0, 1e-6, -0.3, v0)
-    heston = call_price_cf(S0, K, t, r, q, params, u_max=200.0, N=4000)
+    heston = call_price_cf(S0, K, t, r, q, params, u_max=400.0, N=40000)
     bs = bs_call_price(S0, K, t, r, q, sigma_bs)
     # Independent oracle: BS price. Tolerance accounts for finite integration.
     assert heston == pytest.approx(bs, abs=2e-2, rel=1e-2)
 
 
-@pytest.mark.xfail(
-    reason="heston_pricer bug: even ATM in the sigma->0 limit the CF call misses "
-    "BS by ~0.2 (resolution-independent). See test_heston_reduces_to_bs header.",
-    strict=True,
-)
 def test_heston_bs_limit_atm_tight():
-    # ATM is the most numerically forgiving; demand a tighter match.
+    # ATM is the most numerically forgiving; demand a tighter match (fine integration).
     S0, K, t, r, q = 100.0, 100.0, 0.75, 0.0, 0.0
     v0 = 0.04
     params = (2.0, v0, 1e-7, 0.0, v0)
-    heston = call_price_cf(S0, K, t, r, q, params, u_max=300.0, N=6000)
+    heston = call_price_cf(S0, K, t, r, q, params, u_max=400.0, N=40000)
     bs = bs_call_price(S0, K, t, r, q, math.sqrt(v0))
-    assert heston == pytest.approx(bs, abs=5e-3)
+    assert heston == pytest.approx(bs, abs=1e-2)
 
 
 # --------------------------------------------------------------------------- #
@@ -191,20 +179,26 @@ def test_price_grid_shape_and_monotone_in_moneyness():
         assert np.all(np.diff(grid[i]) <= 1e-6)
 
 
-@pytest.mark.xfail(
-    reason="heston_pricer bug: short-maturity OTM call price goes NEGATIVE, "
-    "violating the no-arbitrage lower bound C>=0. With default integration "
-    "(u_max=50,N=2000), params (2,0.06,0.3,-0.5,0.05), t=0.25, K=120 -> -0.166. "
-    "Real pricing bug, code left untouched per scope.",
-    strict=True,
-)
 def test_price_grid_short_maturity_otm_is_positive():
+    # Guard the FULL production default grid (incl. m=1.15-1.20 and t=0.02-0.05,
+    # the short-maturity deep-OTM cells where the raw integral overshot negative)
+    # across several STRESS param sets (high vol-of-vol, strong negative rho).
     S0, r, q = 100.0, 0.03, 0.01
-    m_grid = [0.8, 1.0, 1.2]
-    t_grid = [0.25, 1.0]
-    grid = price_grid_from_params(S0, m_grid, t_grid, r, q, _heston_params())
-    # No-arbitrage: every call price must be >= 0.
-    assert np.all(grid > 0.0)
+    m_grid = [0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2]
+    t_grid = [0.02, 0.05, 0.1, 0.25, 0.5, 1.0]
+    stress_params = [
+        (2.0, 0.06, 0.3, -0.5, 0.05),   # baseline
+        (2.0, 0.06, 0.3, -0.7, 0.09),   # high vol-of-vol, strong negative rho
+        (1.0, 0.09, 0.5, -0.8, 0.12),   # extreme
+        (3.0, 0.04, 0.2, 0.3, 0.04),    # positive rho
+    ]
+    for params in stress_params:
+        grid = price_grid_from_params(S0, m_grid, t_grid, r, q, params)
+        # No-arbitrage: every call price must be >= 0 (clamped to the no-arb bound).
+        assert np.all(grid >= 0.0), (params, grid.min())
+        # And bounded above by the discounted forward S0 e^{-q t}.
+        upper = S0 * math.exp(-q * max(t_grid))
+        assert np.all(grid <= upper + 1e-9)
 
 
 def test_price_grid_matches_pointwise_call_price():

@@ -175,20 +175,11 @@ def test_price_european_mc_unknown_model_raises():
         price_european_mc(100.0, 100.0, 1.0, 0.2, model="rheston")
 
 
-@pytest.mark.xfail(
-    reason=(
-        "APP BUG: service.price_option_mc_unified() european branch calls "
-        "price_mc_european (service.py:174) but service.py only imports "
-        "price_european_mc / price_mc_lsmc -> NameError at runtime. "
-        "Out of scope to fix here; documents the broken code path."
-    ),
-    raises=NameError,
-    strict=True,
-)
+@pytest.mark.slow
 def test_unified_european_branch_matches_bsm():
     """service.price_option_mc_unified (european) ~ analytic BSM.
 
-    Currently xfail: the european branch is dead (NameError, see decorator).
+    Fixed: service.py now imports price_mc_european, so the european branch runs.
     """
     res = price_option_mc_unified(
         ticker=None,

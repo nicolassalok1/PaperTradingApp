@@ -13,7 +13,7 @@ from app.model.options.core.greeks import compute_option_greeks
 from app.model.options.heatmaps import compute_crr_heatmaps, heatmap_axis
 from app.model.options.engines.pricing import CrankNicolsonBS, bs_option_price
 from app.model.options.data.iv_surface import fetch_iv_surface, interpolate_surface
-from app.model.options.mc_engine import MCModel, price_european_mc
+from app.model.options.mc_engine import MCModel, price_european_mc, price_mc_european
 from app.model.options.exercise import build_exercise_dates
 from app.model.options.mc_engine import price_mc_lsmc
 from app.model.yieldcurve.rates_utils import get_q, get_r

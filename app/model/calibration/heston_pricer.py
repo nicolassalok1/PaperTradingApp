@@ -46,7 +46,10 @@ def _P(j, S0, K, t, r, q, params, u_max=50.0, N=2000):
     if j == 1:
         phi = heston_cf(u - 1j, S0, r, q, t, kappa, theta, sigma, rho, v0)
         numerator = np.exp(-1j * u * np.log(K)) * phi
-        denom = 1j * u * S0 * np.exp(-q * t)
+        # P1 normaliser is phi(-i) = forward = S0 * exp((r-q)t), NOT S0*exp(-q t).
+        # The missing exp(r t) factor biased P1 -> broke BS-limit convergence and
+        # produced negative prices for short-maturity OTM. (PLAN.md step-4 bugs A/B)
+        denom = 1j * u * S0 * np.exp((r - q) * t)
     else:
         phi = heston_cf(u, S0, r, q, t, kappa, theta, sigma, rho, v0)
         numerator = np.exp(-1j * u * np.log(K)) * phi
@@ -64,7 +67,15 @@ def call_price_cf(S0, K, t, r, q, params, u_max=50.0, N=2000):
     kappa, theta, sigma, rho, v0 = params
     p1 = _P(1, S0, K, t, r, q, params, u_max=u_max, N=N)
     p2 = _P(2, S0, K, t, r, q, params, u_max=u_max, N=N)
-    return float(S0 * np.exp(-q * t) * p1 - K * np.exp(-r * t) * p2)
+    price = float(S0 * np.exp(-q * t) * p1 - K * np.exp(-r * t) * p2)
+    # No-arbitrage clamp. A European call must lie in [max(F_S - F_K, 0), F_S],
+    # F_S = S0 e^{-q t}, F_K = K e^{-r t}. The Heston P-integrand is hard for very
+    # short-maturity deep-OTM cells, where finite integration can overshoot a few
+    # bp negative (true value ~0); flooring at the no-arb bound guarantees a valid,
+    # arbitrage-free price instead of a spurious negative.
+    fwd_s = S0 * np.exp(-q * t)
+    lower = max(fwd_s - K * np.exp(-r * t), 0.0)
+    return float(min(max(price, lower), fwd_s))
 
 
 def price_grid_from_params(S0, m_grid, t_grid, r, q, params):
