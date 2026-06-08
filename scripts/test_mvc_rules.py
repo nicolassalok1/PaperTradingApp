@@ -1,45 +1,31 @@
+"""
+MVC import-matrix test — delegates to the SINGLE source of truth
+(`scripts/check_mvc_integrity.py`) so the test can never drift from, or weaken,
+the gate. The canonical rule is documented in `docs/mvc_import_matrix.md`.
+"""
+
 from __future__ import annotations
 
-import ast
+import importlib.util
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_CHECKER_PATH = _REPO_ROOT / "scripts" / "check_mvc_integrity.py"
 
-def _imports_in(path: Path) -> list[str]:
-    text = path.read_text(encoding="utf-8", errors="ignore")
-    tree = ast.parse(text, filename=str(path))
-    imports: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imports.extend([a.name for a in node.names if a.name])
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                imports.append(node.module)
-    return imports
+
+def _load_checker():
+    spec = importlib.util.spec_from_file_location("check_mvc_integrity", _CHECKER_PATH)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def test_mvc_rules_hold():
-    repo_root = Path(__file__).resolve().parent.parent
-    app_root = repo_root / "app"
-
-    for py in app_root.rglob("*.py"):
-        if "__pycache__" in py.parts:
-            continue
-        rel = py.relative_to(app_root).as_posix()
-        layer = rel.split("/", 1)[0] if "/" in rel else rel
-        mods = _imports_in(py)
-
-        if layer == "model":
-            assert not any(m.startswith("streamlit") for m in mods), f"Model imports streamlit: {py}"
-            assert not any(m.startswith("app.vue") for m in mods), f"Model imports view: {py}"
-            assert not any(
-                m.startswith("app.controller") for m in mods
-            ), f"Model imports controller: {py}"
-
-        if layer == "controller":
-            assert not any(m.startswith("streamlit") for m in mods), f"Controller imports streamlit: {py}"
-            assert not any(m.startswith("app.vue") for m in mods), f"Controller imports view: {py}"
-
-        if layer == "vue":
-            assert not any(m.startswith("app.model") for m in mods), f"View imports model: {py}"
-            assert not any(m.startswith("app.utils") for m in mods), f"View imports utils: {py}"
-
+    checker = _load_checker()
+    app_root = _REPO_ROOT / "app"
+    violations = checker.check_mvc_integrity(app_root)
+    assert not violations, "MVC import-matrix violations:\n" + "\n".join(
+        f" - [{code}] {Path(path).relative_to(_REPO_ROOT)}: {msg}"
+        for code, path, msg in violations
+    )
