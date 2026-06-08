@@ -25,6 +25,21 @@ def test_paper_url_passes_through():
     assert enforce_paper_endpoint(PAPER_BASE_URL) == PAPER_BASE_URL
 
 
+@pytest.mark.parametrize(
+    "tricky",
+    [
+        "https://paper-api.alpaca.markets@api.alpaca.markets",  # userinfo trick -> host is live
+        "https://api.alpaca.markets/paper-api.alpaca.markets",  # path contains marker
+        "https://api.alpaca.markets#paper-api.alpaca.markets",  # fragment contains marker
+    ],
+)
+def test_substring_tricks_are_not_classified_paper(monkeypatch, tricky):
+    assert is_paper_endpoint(tricky) is False
+    monkeypatch.delenv("ALPACA_ALLOW_LIVE", raising=False)
+    with pytest.raises(RuntimeError, match="fail-closed"):
+        enforce_paper_endpoint(tricky)
+
+
 def test_live_url_blocked_without_optin(monkeypatch):
     monkeypatch.delenv("ALPACA_ALLOW_LIVE", raising=False)
     with pytest.raises(RuntimeError, match="fail-closed"):

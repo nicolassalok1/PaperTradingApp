@@ -81,18 +81,33 @@ def _model_dir() -> Path:
     return path
 
 
-def _weights_path() -> Path:
-    tracked = _TRACKED_WEIGHTS_DIR / f"{DQN_HEDGER_VERSION}.npz"
-    if tracked.exists():
-        return tracked
+def _cache_weights_path() -> Path:
     return _model_dir() / f"{DQN_HEDGER_VERSION}.npz"
 
 
-def _meta_path() -> Path:
-    tracked = _TRACKED_WEIGHTS_DIR / f"{DQN_HEDGER_VERSION}.json"
-    if tracked.exists():
-        return tracked
+def _cache_meta_path() -> Path:
     return _model_dir() / f"{DQN_HEDGER_VERSION}.json"
+
+
+def _read_dir() -> Path:
+    """
+    READ resolution: prefer the tracked shipped checkpoint, but only as a CONSISTENT
+    PAIR (both .npz and .json present) so weights and metadata never come from
+    different dirs. Otherwise fall back to the (gitignored) cache dir.
+    """
+    t_npz = _TRACKED_WEIGHTS_DIR / f"{DQN_HEDGER_VERSION}.npz"
+    t_json = _TRACKED_WEIGHTS_DIR / f"{DQN_HEDGER_VERSION}.json"
+    if t_npz.exists() and t_json.exists():
+        return _TRACKED_WEIGHTS_DIR
+    return _model_dir()
+
+
+def _weights_path() -> Path:
+    return _read_dir() / f"{DQN_HEDGER_VERSION}.npz"
+
+
+def _meta_path() -> Path:
+    return _read_dir() / f"{DQN_HEDGER_VERSION}.json"
 
 
 class ReplayBuffer:
@@ -503,8 +518,11 @@ def train_dqn_model(*, config: DQNConfig | None = None) -> Dict[str, Any]:
     """
     global _CACHED_AGENT, _CACHED_META
     cfg = config or DQNConfig()
-    weights_path = _weights_path()
-    meta_path = _meta_path()
+    # Always write to the (gitignored) CACHE dir — training never clobbers the
+    # tracked, version-controlled shipped checkpoint. Shipping a new checkpoint is
+    # a deliberate step (copy cache -> weights/ + checksum, then commit).
+    weights_path = _cache_weights_path()
+    meta_path = _cache_meta_path()
 
     agent = DQNAgent(cfg, n_actions=4)
 

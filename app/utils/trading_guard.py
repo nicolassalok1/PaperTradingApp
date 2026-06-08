@@ -10,15 +10,27 @@ Anything ambiguous fails closed (defaults to paper).
 from __future__ import annotations
 
 import os
+from urllib.parse import urlparse
 
 PAPER_BASE_URL = "https://paper-api.alpaca.markets"
-_PAPER_HOST_MARKER = "paper-api.alpaca.markets"
+_PAPER_HOST = "paper-api.alpaca.markets"
 _LIVE_OPT_IN_ENV = "ALPACA_ALLOW_LIVE"
 _TRUTHY = {"1", "true", "yes", "on"}
 
 
+def _hostname(base_url: str | None) -> str:
+    u = (base_url or "").strip()
+    if not u:
+        return ""
+    if "://" not in u:
+        u = "//" + u  # let urlparse treat a bare host as netloc
+    return (urlparse(u).hostname or "").lower()
+
+
 def is_paper_endpoint(base_url: str | None) -> bool:
-    return _PAPER_HOST_MARKER in (base_url or "")
+    # Exact hostname match (not substring): defeats the userinfo trick
+    # https://paper-api.alpaca.markets@api.alpaca.markets whose real host is live.
+    return _hostname(base_url) == _PAPER_HOST
 
 
 def live_opt_in_enabled() -> bool:

@@ -59,3 +59,28 @@ def test_dynamic_literal_import_is_detected(tmp_path):
     )
     imps = checker.parse_imports(f, tmp_path)
     assert "streamlit" in imps, imps
+
+
+def test_from_import_name_resolves_submodule(tmp_path):
+    # `from app import vue` and `from .. import vue` both pull in app.vue.
+    checker = _load_checker()
+    f1 = _write(tmp_path, "app/model/a.py", "from app import vue\n")
+    assert "app.vue" in checker.parse_imports(f1, tmp_path)
+    f2 = _write(tmp_path, "app/model/sub/b.py", "from ... import vue\n")
+    assert "app.vue" in checker.parse_imports(f2, tmp_path)
+
+
+def test_from_import_name_flagged_as_model_view_violation(tmp_path):
+    checker = _load_checker()
+    _write(tmp_path, "app/__init__.py", "")
+    _write(tmp_path, "app/model/__init__.py", "")
+    _write(tmp_path, "app/model/bad.py", "from app import vue\n")
+    violations = checker.check_mvc_integrity(tmp_path / "app")
+    assert "model-view-import" in {c for c, _p, _m in violations}, violations
+
+
+def test_non_importlib_import_module_not_false_positive(tmp_path):
+    # A method named import_module on some other object must NOT be treated as an import.
+    checker = _load_checker()
+    f = _write(tmp_path, "app/utils/x.py", "loader.import_module('app.vue.tabs')\n")
+    assert "app.vue.tabs" not in checker.parse_imports(f, tmp_path)

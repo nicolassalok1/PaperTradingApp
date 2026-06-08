@@ -33,3 +33,17 @@ def test_shipped_checkpoint_checksum_matches():
     expected = _SHA.read_text(encoding="utf-8").split()[0]
     actual = hashlib.sha256(_NPZ.read_bytes()).hexdigest()
     assert actual == expected, "DQN checkpoint corrupted (checksum mismatch)"
+
+
+@pytest.mark.slow
+def test_training_does_not_clobber_shipped_checkpoint():
+    # Training writes to the gitignored cache, never the tracked shipped checkpoint.
+    before = hashlib.sha256(_NPZ.read_bytes()).hexdigest()
+    base = dh.DQNConfig()
+    cfg = dh.DQNConfig(
+        **{**base.__dict__, "train_steps": 100, "warmup_steps": 30, "eval_episodes": 1}
+    )
+    dh.train_dqn_model(config=cfg)
+    after = hashlib.sha256(_NPZ.read_bytes()).hexdigest()
+    assert before == after, "training overwrote the tracked shipped checkpoint"
+    assert dh._cache_weights_path().exists()

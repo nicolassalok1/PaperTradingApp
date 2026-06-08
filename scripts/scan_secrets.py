@@ -23,8 +23,11 @@ if str(REPO_ROOT) not in sys.path:
 # Single source of truth for patterns (shared with app.utils.logging_config.redact).
 from app.utils.secret_patterns import NAMED_PATTERNS, PLACEHOLDER
 
-# Paths never scanned (the deliberate local secret mechanism).
-ALLOWLIST_PREFIXES = (".env", ".streamlit/secrets.toml")
+# No path is unconditionally skipped. `.env` / `.streamlit/secrets.toml` are
+# gitignored so they don't appear in `git ls-files`; if one IS tracked (committed
+# by mistake) we WANT to flag it rather than allowlist it. Intentional synthetic
+# secrets opt out per-line via ALLOWLIST_COMMENT below.
+ALLOWLIST_PREFIXES: tuple[str, ...] = ()
 # Extensions we don't scan (binaries / generated).
 SKIP_SUFFIXES = (
     ".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".pyc", ".so", ".dll",

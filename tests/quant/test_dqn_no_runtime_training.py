@@ -11,11 +11,12 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture(autouse=True)
 def _isolated_model(monkeypatch, tmp_path):
-    # Hermetic: point checkpoint paths at an empty tmp dir and clear the cache.
+    # Hermetic: cache dir = empty tmp; tracked dir = nonexistent (no shipped pair),
+    # so reads resolve to the empty cache and writes go to the empty cache too.
     monkeypatch.setattr(dh, "_CACHED_AGENT", None, raising=False)
     monkeypatch.setattr(dh, "_CACHED_META", None, raising=False)
-    monkeypatch.setattr(dh, "_weights_path", lambda: tmp_path / "model.npz")
-    monkeypatch.setattr(dh, "_meta_path", lambda: tmp_path / "model.meta.json")
+    monkeypatch.setattr(dh, "_model_dir", lambda: tmp_path)
+    monkeypatch.setattr(dh, "_TRACKED_WEIGHTS_DIR", tmp_path / "no_tracked")
     yield
 
 
@@ -24,7 +25,7 @@ def test_load_returns_unavailable_and_never_trains(tmp_path):
     assert meta["available"] is False
     assert meta["status"] == "model_unavailable"
     # Critical: no checkpoint was written -> the app did not train at runtime.
-    assert not (tmp_path / "model.npz").exists()
+    assert not dh._cache_weights_path().exists()
 
 
 def test_get_cached_agent_raises_typed_unavailable():
@@ -49,7 +50,7 @@ def test_train_then_load_roundtrip(tmp_path):
     )
     meta = dh.train_dqn_model(config=cfg)
     assert meta["available"] is True
-    assert (tmp_path / "model.npz").exists()
+    assert dh._cache_weights_path().exists()
 
     # Fresh process-like state: clear cache, then a plain load must succeed.
     dh._CACHED_AGENT = None

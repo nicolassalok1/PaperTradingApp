@@ -59,18 +59,22 @@ def _module_name(path: Path, repo_root: Path) -> str:
     return ".".join(parts)
 
 
-def _resolve_relative(node: "ast.ImportFrom", pkg_parts: List[str]) -> str | None:
-    """Resolve a relative import (from . / .. import x) to an absolute dotted module."""
+def _resolve_base(node: "ast.ImportFrom", pkg_parts: List[str]) -> str | None:
+    """
+    Resolve the base package/module of a `from X import ...` to an absolute dotted
+    path, handling relative levels. Returns None if it cannot be resolved.
+    """
     level = node.level or 0
     if level <= 0:
-        return node.module
+        return node.module  # absolute: `from app.model import x`
     # level=1 -> current package; level=2 -> parent; etc.
     keep = len(pkg_parts) - (level - 1)
     if keep < 0:
         keep = 0
-    base = pkg_parts[:keep]
-    tail = [node.module] if node.module else []
-    return ".".join(base + tail) or None
+    base_parts = list(pkg_parts[:keep])
+    if node.module:
+        base_parts += node.module.split(".")
+    return ".".join(base_parts) or None
 
 
 def parse_imports(path: Path, repo_root: Path) -> List[str]:
@@ -89,17 +93,28 @@ def parse_imports(path: Path, repo_root: Path) -> List[str]:
                 imports.append(alias.name)
         elif isinstance(node, ast.ImportFrom):
             # Resolve relative imports (node.level) to absolute modules so that
-            # `from ..model import x` is checked just like `from app.model import x`.
-            resolved = _resolve_relative(node, pkg_parts)
-            if resolved:
-                imports.append(resolved)
+            # `from ..model import x` is checked like `from app.model import x`.
+            base = _resolve_base(node, pkg_parts)
+            if base:
+                imports.append(base)
+                # `from BASE import name` also pulls in BASE.name, which may be a
+                # subpackage/module (e.g. `from app import vue`, `from .. import vue`).
+                for alias in node.names:
+                    if alias.name and alias.name != "*":
+                        imports.append(f"{base}.{alias.name}")
         elif isinstance(node, ast.Call):
-            # Best-effort: dynamic imports with a STRING LITERAL target.
+            # Best-effort: dynamic imports with an ABSOLUTE STRING LITERAL target.
+            # Matches `importlib.import_module("...")` and `__import__("...")`.
+            # Computed/relative dynamic imports cannot be resolved statically.
             fn = node.func
-            is_dyn = (isinstance(fn, ast.Attribute) and fn.attr == "import_module") or (
-                isinstance(fn, ast.Name) and fn.id == "__import__"
+            is_importlib = (
+                isinstance(fn, ast.Attribute)
+                and fn.attr == "import_module"
+                and isinstance(fn.value, ast.Name)
+                and fn.value.id == "importlib"
             )
-            if is_dyn and node.args:
+            is_dunder = isinstance(fn, ast.Name) and fn.id == "__import__"
+            if (is_importlib or is_dunder) and node.args:
                 a0 = node.args[0]
                 if isinstance(a0, ast.Constant) and isinstance(a0.value, str):
                     imports.append(a0.value)

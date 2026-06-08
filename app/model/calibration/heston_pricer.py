@@ -3,6 +3,12 @@ from __future__ import annotations
 import cmath
 import numpy as np
 
+from app.utils.logging_config import get_logger
+
+_log = get_logger(__name__)
+# Above this, a clamp correction signals a real pricer/integration problem, not noise.
+_CLAMP_WARN_TOL = 0.05
+
 
 def heston_cf(u, S0, r, q, t, kappa, theta, sigma, rho, v0):
     """
@@ -82,7 +88,13 @@ def call_price_cf(S0, K, t, r, q, params, u_max=200.0, N=8000, clamp=True):
     # resolution (verified in tests), confirming truncation rather than mis-formulation.
     fwd_s = S0 * np.exp(-q * t)
     lower = max(fwd_s - K * np.exp(-r * t), 0.0)
-    return float(min(max(price, lower), fwd_s))
+    clamped = float(min(max(price, lower), fwd_s))
+    if abs(clamped - price) > _CLAMP_WARN_TOL:
+        _log.warning(
+            "heston clamp correction %.4f (raw=%.4f, K=%.2f, t=%.4f) — raise u_max/N",
+            clamped - price, price, K, t,
+        )
+    return clamped
 
 
 def price_grid_from_params(S0, m_grid, t_grid, r, q, params):
