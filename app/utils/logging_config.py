@@ -35,7 +35,8 @@ _TOKEN_PATTERNS = [
 _REDACTION = "***REDACTED***"
 
 
-def _redact(text: str) -> str:
+def redact(text: str) -> str:
+    """Mask known secret env values and secret-looking tokens in a string."""
     for key in _SECRET_ENV_KEYS:
         val = os.getenv(key)
         if val and len(val) >= 6 and val in text:
@@ -43,6 +44,10 @@ def _redact(text: str) -> str:
     for pat in _TOKEN_PATTERNS:
         text = pat.sub(_REDACTION, text)
     return text
+
+
+# Backwards-compatible private alias.
+_redact = redact
 
 
 class _RedactionFilter(logging.Filter):
