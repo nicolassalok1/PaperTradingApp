@@ -103,3 +103,17 @@ Review cross-model du programme complété (résumé embarqué, read-only). Aucu
 
 _Note d'honnêteté : un précédent message affirmait à tort « Codex APPROVED le fix Heston » — c'était une relecture d'un fichier verdict périmé (round-3 du plan). Les reviews Heston/finale lancées en arrière-plan avaient calé (sandbox Codex Windows) ; relancées en synchrone, le verdict final ci-dessus est réel. La correctness du fix Heston reposait de toute façon sur les numériques + 224 tests + la critique de complétude adverse._
 
+## Codex review INLINE du vrai diff (pas un résumé)
+Diff source réel (879 lignes) passé à Codex via **stdin** (l'argv dépassait E2BIG ; le sandbox FS de Codex calant, stdin = le bon canal). Round 1 → **VERDICT: REVISE**, 6 findings réels + 1 faux :
+1. **Sécurité** : `is_paper_endpoint` faisait un test substring → bypass userinfo `…paper-api.alpaca.markets@api.alpaca.markets` classé paper. → parse hostname exact.
+2. `scan_secrets` allowlistait `.env` même si tracké → un `.env` commité par erreur passait. → allowlist de chemins retirée.
+3. (faux) « pas de `set_secret_source` » → en réalité dans `streamlit_app.py`, hors extrait → N/A.
+4. Gate MVC ratait `from .. import vue` / `from app import vue` (ImportFrom name) → résolution `base.<nom>` ajoutée.
+5. Détection imports dynamiques trop large → resserrée à `importlib.import_module` exact.
+6. DQN : `force_retrain` clobbait le checkpoint tracké + lecture weights/meta dissociée → lecture en paire tracked-prioritaire / écriture cache only.
+7. Heston clamp masquait une erreur arbitraire → log diagnostic si correction > tolérance.
+
+Tous corrigés + tests de régression (userinfo trick, `from .. import vue`, non-clobber checkpoint, importlib false-positive). Round 2 (re-review du diff corrigé via stdin) → **VERDICT: APPROVED** (7/7 résolus, #3 N/A).
+
+**BILAN FINAL** : 8/8 étapes, gates verts, **231 tests / 0 xfailed**, couverture 15.8%. Vérifié par : 1 grill + 3 rounds Codex (plan) + 2 vagues adverses multi-agents (14 + completeness critic) + 1 review Codex inline du vrai code (REVISE→APPROVED). PR #2.
+
