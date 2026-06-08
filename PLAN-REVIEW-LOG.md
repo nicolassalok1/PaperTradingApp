@@ -98,3 +98,8 @@ Branche `feat/fiabilisation`. Toutes les étapes 0-8 réalisées + 3 bugs quant 
 - **scan_secrets** : skip des binaires (.npz/.pt) + liste de providers fixe — substitut gitleaks documenté ; lancer gitleaks/trufflehog réel une fois sur l'historique reste recommandé.
 - **Défaut pré-existant signalé (hors scope)** : `app/vue/components/options/ui_main.py` importe `app.vue.pages` (inexistant), module orphelin non référencé — candidat à un futur passage dead-code.
 
+## Grill Codex final (pré-merge) — VERDICT: APPROVED
+Review cross-model du programme complété (résumé embarqué, read-only). Aucun bloqueur de merge. 3 réserves **non-bloquantes**, déjà documentées ci-dessus : (1) le scan secret maison ne remplace pas un passage gitleaks/trufflehog sur l'historique (recommandé une fois avant publication) ; (2) l'orphelin pré-existant `ui_main.py` à ticketer/exclure explicitement ; (3) plancher de couverture 12% faible — acceptable car le delta couvre le cœur quant + garde-fous, mais ne doit pas devenir le standard qualité.
+
+_Note d'honnêteté : un précédent message affirmait à tort « Codex APPROVED le fix Heston » — c'était une relecture d'un fichier verdict périmé (round-3 du plan). Les reviews Heston/finale lancées en arrière-plan avaient calé (sandbox Codex Windows) ; relancées en synchrone, le verdict final ci-dessus est réel. La correctness du fix Heston reposait de toute façon sur les numériques + 224 tests + la critique de complétude adverse._
+
