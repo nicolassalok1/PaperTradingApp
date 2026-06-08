@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.utils.secrets import get_secret
+from app.utils.trading_guard import is_paper_endpoint, live_opt_in_enabled
 from app.model import risk_management as risk_engine
 from app.model.portfolio_allocation.engine import (
     AlpacaPortfolioClient,
@@ -167,6 +169,18 @@ def execute_rebalance(method: str, lookback_days: int = 60) -> Dict[str, Any]:
     """
     Execute the rebalance plan on Alpaca and return execution details.
     """
+    # Defense-in-depth fail-closed gate (AlpacaPortfolioClient also enforces this):
+    # refuse to even build a client / submit orders against a live endpoint unless
+    # ALPACA_ALLOW_LIVE is explicitly set.
+    base_url = get_secret("APCA_API_BASE_URL")
+    if base_url and not is_paper_endpoint(base_url) and not live_opt_in_enabled():
+        return {
+            "executed": False,
+            "status": "blocked_live_endpoint",
+            "message": "Live Alpaca endpoint blocked (fail-closed). Set ALPACA_ALLOW_LIVE=1 to opt in explicitly.",
+            "plan": None,
+            "executions": [],
+        }
     client = _client()
     plan = generate_rebalance_plan(method, lookback_days)
     executions = execute_rebalance_orders(client, plan.get("orders", []))

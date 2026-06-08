@@ -14,7 +14,6 @@ green (it really fires on a secret), then we assert the real fixtures are clean.
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 import pytest
@@ -25,26 +24,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 
 
-def _load_scanner():
-    """Import scripts/scan_secrets.py by path (it is not a package module)."""
-    path = REPO_ROOT / "scripts" / "scan_secrets.py"
-    spec = importlib.util.spec_from_file_location("scan_secrets", path)
-    assert spec and spec.loader, f"cannot load scanner at {path}"
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-_scanner = _load_scanner()
-PATTERNS = _scanner.PATTERNS
-PLACEHOLDER = _scanner.PLACEHOLDER
+# Detection regexes come from the SINGLE source of truth shared by both the
+# production scanner (scripts/scan_secrets.py) and runtime redaction
+# (app.utils.logging_config.redact) — so this test can never drift from either.
+from app.utils.secret_patterns import NAMED_PATTERNS, PLACEHOLDER
 
 
 def _scan_text(text: str) -> list[tuple[str, str]]:
     """Return [(pattern_name, matched_token)] for real (non-placeholder) hits."""
     hits: list[tuple[str, str]] = []
     for line in text.splitlines():
-        for name, pat in PATTERNS.items():
+        for name, pat in NAMED_PATTERNS:
             m = pat.search(line)
             if m and not PLACEHOLDER.search(m.group(0)):
                 hits.append((name, m.group(0)))
@@ -71,13 +61,15 @@ def test_fixtures_dir_is_populated():
 @pytest.mark.parametrize(
     "name, payload",
     [
-        ("openai_key", "sk-abcdEFGH1234567890ZZZZ1234"),
-        ("alpaca_key", "PKABCDEFGHIJ1234567890"),
-        ("alpaca_secret", "AKABCDEFGHIJ1234567890ZZZZ"),
+        # Tokens assembled at runtime so no literal secret appears in source
+        # (satisfies GitHub push protection + the repo secret scanner).
+        ("openai_key", "sk-" + "abcdEFGH1234567890ZZZZ1234"),
+        ("alpaca_key", "PK" + "ABCDEFGHIJ1234567890"),
+        ("alpaca_secret", "AK" + "ABCDEFGHIJ1234567890ZZZZ"),
         ("aws_key", "AKIA" + "Z3K7Q9W1N5R2T8P4"),  # AKIA + exactly 16 [0-9A-Z]
         ("github_pat", "ghp_" + "a" * 36),
-        ("assigned_token", 'token = "abcdefghijklmnopqrstuvwxyz123456"'),
-        ("assigned_apikey", 'api_key: "abcdefghijklmnopqrstuvwxyz123456"'),
+        ("assigned_token", 'token = "' + "abcdefghijklmnopqrstuvwxyz123456" + '"'),
+        ("assigned_apikey", 'api_key: "' + "abcdefghijklmnopqrstuvwxyz123456" + '"'),
     ],
 )
 def test_detector_fires_on_synthetic_secret(name, payload):

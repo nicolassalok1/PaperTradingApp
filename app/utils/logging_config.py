@@ -14,35 +14,40 @@ Usage:
 from __future__ import annotations
 
 import logging
-import os
-import re
 
-# Env var names whose VALUES must never appear in logs.
-_SECRET_ENV_KEYS = (
-    "APCA_API_KEY_ID",
-    "APCA_API_SECRET_KEY",
-    "ALPACA_API_KEY",
-    "ALPACA_SECRET_KEY",
-    "OPENAI_API_KEY",
+from app.utils.secret_patterns import (
+    ASSIGNED_SECRET,
+    SECRET_ENV_KEYS as _SECRET_ENV_KEYS,
+    TOKEN_PATTERNS as _TOKEN_PATTERNS,
 )
-
-# Generic secret-looking token patterns (OpenAI sk-, Alpaca PK.../AK..., long hex).
-_TOKEN_PATTERNS = [
-    re.compile(r"sk-[A-Za-z0-9_\-]{16,}"),
-    re.compile(r"\b[PA]K[A-Z0-9]{12,}\b"),
-]
 
 _REDACTION = "***REDACTED***"
 
 
+def _resolved_secret(key: str):
+    """Resolve a secret value via the same path the app uses (env + st.secrets).
+
+    Imported lazily to avoid any import cycle and to pick up the injected source.
+    """
+    try:
+        from app.utils.secrets import get_secret
+
+        return get_secret(key)
+    except Exception:
+        return None
+
+
 def redact(text: str) -> str:
-    """Mask known secret env values and secret-looking tokens in a string."""
+    """Mask resolved secret values (env OR injected st.secrets) and secret-shaped tokens."""
+    # 1) Exact resolved values — covers secrets injected via st.secrets, not just os.environ.
     for key in _SECRET_ENV_KEYS:
-        val = os.getenv(key)
-        if val and len(val) >= 6 and val in text:
-            text = text.replace(val, _REDACTION)
+        val = _resolved_secret(key)
+        if val and len(str(val)) >= 6 and str(val) in text:
+            text = text.replace(str(val), _REDACTION)
+    # 2) Shape-based detectors (single source of truth, shared with scan_secrets).
     for pat in _TOKEN_PATTERNS:
         text = pat.sub(_REDACTION, text)
+    text = ASSIGNED_SECRET.sub(_REDACTION, text)
     return text
 
 

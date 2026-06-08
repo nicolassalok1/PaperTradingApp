@@ -35,11 +35,13 @@ def test_secrets_are_redacted_before_send(monkeypatch):
     client = _CapturingClient()
     monkeypatch.setattr(chatgpt, "_get_openai_client", lambda: (client, ""))
 
-    leaked = "my key is sk-ABCDEFGHIJKLMNOPQRSTUVWX and a token"
+    # token assembled at runtime so no literal secret appears in source
+    token = "sk-" + "ABCDEFGHIJKLMNOPQRSTUVWX"
+    leaked = f"my key is {token} and a token"
     chatgpt.chatgpt_response(leaked)
 
     sent = client.captured[0]["content"]
-    assert "sk-ABCDEFGHIJKLMNOPQRSTUVWX" not in sent
+    assert token not in sent
     assert "REDACTED" in sent
 
 
