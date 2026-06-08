@@ -1,0 +1,3 @@
+# TRAIN — offline training of the Heston surface net (train_heston_surface_net.py).
+# Same ML deps as inference; kept separate so CI/runtime never pull a training stack.
+-r runtime-ml.txt

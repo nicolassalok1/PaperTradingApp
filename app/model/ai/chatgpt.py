@@ -8,6 +8,10 @@ except Exception:  # noqa: BLE001
     openai = None  # type: ignore
 
 from app.utils.secrets import get_secret
+from app.utils.logging_config import redact
+
+# Cost/rate guard: cap the prompt size sent to the paid API.
+MAX_PROMPT_CHARS = 8000
 
 
 def _get_openai_client() -> Tuple[object, str]:
@@ -43,12 +47,17 @@ def chatgpt_response(prompt: str) -> str:
     if err:
         return f"[ChatGPT unavailable: {err}]"
 
+    # Never send secrets to the API; cap size to bound cost.
+    safe_prompt = redact(prompt or "")
+    if len(safe_prompt) > MAX_PROMPT_CHARS:
+        return f"[ChatGPT request rejected: prompt too long (>{MAX_PROMPT_CHARS} chars)]"
+
     try:
         # New SDK style
         if hasattr(client, "chat"):
             completion = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": safe_prompt}],
                 temperature=0.2,
             )
             return completion.choices[0].message.content
@@ -56,7 +65,7 @@ def chatgpt_response(prompt: str) -> str:
         # Legacy SDK style
         completion = client.ChatCompletion.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": safe_prompt}],
             temperature=0.2,
         )
         return completion.choices[0].message["content"]

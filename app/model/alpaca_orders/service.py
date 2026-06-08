@@ -36,6 +36,7 @@ except Exception:  # pragma: no cover - compatibility shim
     _QueryOrderStatus = None
 
 from app.utils.secrets import get_secret
+from app.utils.trading_guard import enforce_paper_endpoint
 
 
 @dataclass
@@ -49,7 +50,7 @@ class AlpacaKeys:
         """Load Alpaca credentials from env or Streamlit secrets."""
         api_key = (get_secret("APCA_API_KEY_ID") or "").strip()
         api_secret = (get_secret("APCA_API_SECRET_KEY") or "").strip()
-        base_url = (get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets").strip()
+        base_url = enforce_paper_endpoint(get_secret("APCA_API_BASE_URL"))
         if not api_key or not api_secret:
             raise EnvironmentError("APCA_API_KEY_ID and APCA_API_SECRET_KEY must be set")
         return cls(api_key=api_key, api_secret=api_secret, base_url=base_url)

@@ -235,7 +235,8 @@ class DashboardV2Client:
             return {"max_drawdown": 0.0, "drawdown_series": []}
         equity = np.array(equity_series, dtype=float)
         peaks = np.maximum.accumulate(equity)
-        drawdowns = (equity - peaks) / peaks
+        drawdowns = np.zeros_like(equity, dtype=float)
+        np.divide(equity - peaks, peaks, out=drawdowns, where=peaks != 0)
         return {"max_drawdown": float(drawdowns.min() if len(drawdowns) else 0.0), "drawdown_series": drawdowns.tolist()}
 
     @staticmethod

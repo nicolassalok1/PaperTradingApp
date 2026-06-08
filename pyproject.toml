@@ -1,0 +1,28 @@
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests", "scripts"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+# --strict-markers: only registered markers allowed.
+# --disable-socket: network is blocked in tests by default (mocked adapters only).
+#   A test that genuinely needs a socket must opt in with @pytest.mark.enable_socket.
+addopts = "--strict-markers --disable-socket -ra"
+markers = [
+    "unit: fast, isolated; no network, no real IO",
+    "smoke: offline import/boot guards (must stay green every step)",
+    "characterization: snapshot of current behavior, captured before a refactor",
+    "integration: cross-component; uses mocked/cassette adapters, never real network",
+    "slow: heavy/long (MC convergence, calibration, DQN); run manually / nightly",
+]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+omit = ["*/__pycache__/*", "*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+# Progressive ratchet floor — current global baseline ~13% after Step-4 quant
+# coverage. Raise this as more tests land (per-module targets next).
+fail_under = 12

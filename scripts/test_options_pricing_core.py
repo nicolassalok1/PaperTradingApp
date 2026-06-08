@@ -2,6 +2,7 @@ import math
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from app.model.options.core import pricing_lib
 from app.model.options.core.trees import (
@@ -13,6 +14,8 @@ from app.model.options.core.trees import (
 from app.model.options.engines.black_scholes import price_call_spread, price_put_spread
 from app.model.options.core.shared import get_cached_iv_for
 from app.model.options.engines.crr import price_american_crr
+
+pytestmark = pytest.mark.unit
 
 
 def test_american_crr_discount_uses_r_not_r_minus_q():

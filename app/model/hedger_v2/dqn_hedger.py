@@ -72,18 +72,45 @@ def _utc_iso_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# Versioned checkpoint shipped with the repo (tracked). Loaded in preference to a
+# locally-trained one in the (gitignored) cache dir, so a fresh checkout/CI/deploy
+# has a working model without training. Training writes to the cache dir.
+_TRACKED_WEIGHTS_DIR = Path(__file__).resolve().parent / "weights"
+
+
 def _model_dir() -> Path:
     path = CACHE_CSV_DIR / "HedgerDQN"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def _weights_path() -> Path:
+def _cache_weights_path() -> Path:
     return _model_dir() / f"{DQN_HEDGER_VERSION}.npz"
 
 
-def _meta_path() -> Path:
+def _cache_meta_path() -> Path:
     return _model_dir() / f"{DQN_HEDGER_VERSION}.json"
+
+
+def _read_dir() -> Path:
+    """
+    READ resolution: prefer the tracked shipped checkpoint, but only as a CONSISTENT
+    PAIR (both .npz and .json present) so weights and metadata never come from
+    different dirs. Otherwise fall back to the (gitignored) cache dir.
+    """
+    t_npz = _TRACKED_WEIGHTS_DIR / f"{DQN_HEDGER_VERSION}.npz"
+    t_json = _TRACKED_WEIGHTS_DIR / f"{DQN_HEDGER_VERSION}.json"
+    if t_npz.exists() and t_json.exists():
+        return _TRACKED_WEIGHTS_DIR
+    return _model_dir()
+
+
+def _weights_path() -> Path:
+    return _read_dir() / f"{DQN_HEDGER_VERSION}.npz"
+
+
+def _meta_path() -> Path:
+    return _read_dir() / f"{DQN_HEDGER_VERSION}.json"
 
 
 def _load_historical_prices(cfg: DQNConfig) -> np.ndarray:
@@ -461,57 +488,105 @@ _CACHED_AGENT: DQNAgent | None = None
 _CACHED_META: Dict[str, Any] | None = None
 
 
+class DQNModelUnavailable(RuntimeError):
+    """Raised when no usable DQN checkpoint is present (training is offline-only)."""
+
+
+_UNAVAILABLE_MSG = (
+    "No DQN checkpoint found. Train one offline via: python scripts/train_dqn_hedger.py"
+)
+
+
+def _unavailable_meta(message: str = _UNAVAILABLE_MSG) -> Dict[str, Any]:
+    return {
+        "version": DQN_HEDGER_VERSION,
+        "available": False,
+        "status": "model_unavailable",
+        "message": message,
+    }
+
+
 def load_or_train_dqn_model(
     *,
     config: DQNConfig | None = None,
     force_retrain: bool = False,
 ) -> Dict[str, Any]:
     """
-    Loads the persisted DQN model if present; otherwise trains a default model and saves it.
+    Load the persisted DQN model if present.
 
-    Returns the metadata dict (also cached in-memory).
+    The app NEVER trains on its render path: training is blocking and must run
+    offline. With ``force_retrain=False`` (the default, used by the UI), this loads
+    an existing checkpoint or returns an "unavailable" meta. ``force_retrain=True``
+    (CLI / explicit) delegates to :func:`train_dqn_model`.
     """
 
     global _CACHED_AGENT, _CACHED_META
     cfg = config or DQNConfig()
     requested_train_mode = "historical"
 
-    weights_path = _weights_path()
-    meta_path = _meta_path()
-
     if not force_retrain and _CACHED_AGENT is not None and _CACHED_META is not None:
         return dict(_CACHED_META)
 
+    if force_retrain:
+        return train_dqn_model(config=cfg)
+
+    weights_path = _weights_path()
+    meta_path = _meta_path()
+
+    if not weights_path.exists():
+        return _unavailable_meta()
+
+    agent = DQNAgent(cfg, n_actions=4)
+    try:
+        agent.load(weights_path)
+    except Exception as exc:
+        # Corrupted/incompatible checkpoint: stay unavailable, never train at runtime.
+        return _unavailable_meta(
+            f"DQN checkpoint unreadable ({exc}). Retrain via: python scripts/train_dqn_hedger.py"
+        )
+
+    meta: Dict[str, Any] = {}
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            meta = {}
+    meta = {
+        "version": DQN_HEDGER_VERSION,
+        "available": True,
+        "loaded_utc": _utc_iso_now(),
+        "config": asdict(cfg),
+        **(meta or {}),
+    }
+    # Reflect the (historical) training mode in the loaded meta + config (from main).
+    meta.setdefault("train_mode", requested_train_mode)
+    cfg_dict = meta.get("config", {}) or {}
+    cfg_dict["train_mode"] = requested_train_mode
+    meta["config"] = cfg_dict
+    _CACHED_AGENT = agent
+    _CACHED_META = meta
+    return dict(meta)
+
+
+def train_dqn_model(*, config: DQNConfig | None = None) -> Dict[str, Any]:
+    """
+    Train the DQN on the synthetic env and persist a checkpoint.
+
+    OFFLINE/CLI ONLY — this is blocking and is never invoked on the app's render
+    path. Caches the trained agent in-memory and returns its metadata.
+    """
+    global _CACHED_AGENT, _CACHED_META
+    cfg = config or DQNConfig()
+    # Always write to the (gitignored) CACHE dir — training never clobbers the
+    # tracked, version-controlled shipped checkpoint. Shipping a new checkpoint is
+    # a deliberate step (copy cache -> weights/ + checksum, then commit).
+    weights_path = _cache_weights_path()
+    meta_path = _cache_meta_path()
+
     agent = DQNAgent(cfg, n_actions=4)
 
-    if not force_retrain and weights_path.exists():
-        try:
-            agent.load(weights_path)
-            meta: Dict[str, Any] = {}
-            if meta_path.exists():
-                try:
-                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                except Exception:
-                    meta = {}
-            meta = {
-                "version": DQN_HEDGER_VERSION,
-                "loaded_utc": _utc_iso_now(),
-                "config": asdict(cfg),
-                **(meta or {}),
-            }
-            meta.setdefault("train_mode", requested_train_mode)
-            cfg_dict = meta.get("config", {}) or {}
-            cfg_dict["train_mode"] = requested_train_mode
-            meta["config"] = cfg_dict
-            _CACHED_AGENT = agent
-            _CACHED_META = meta
-            return dict(meta)
-        except Exception:
-            # fallthrough to retrain if corrupted/incompatible
-            pass
-
     # Train on historical prices only
-    train_mode = requested_train_mode
+    train_mode = "historical"  # enforced historical-only training
     prices = _load_historical_prices(cfg)
     env = _make_historical_env(cfg, prices, seed=cfg.seed)
     eval_env_factory = lambda: _make_historical_env(cfg, prices, seed=cfg.seed + 1)
@@ -549,6 +624,7 @@ def load_or_train_dqn_model(
     eval_metrics = _eval_agent_generic(agent, eval_env_factory, episodes=cfg.eval_episodes)
     meta = {
         "version": DQN_HEDGER_VERSION,
+        "available": True,
         "trained_utc": _utc_iso_now(),
         "config": asdict(cfg),
         "train_steps": int(cfg.train_steps),
@@ -580,7 +656,7 @@ def _get_cached_agent(config: DQNConfig | None = None) -> Tuple[DQNAgent, Dict[s
     if _CACHED_AGENT is None or _CACHED_META is None:
         meta = load_or_train_dqn_model(config=config, force_retrain=False)
         if _CACHED_AGENT is None:
-            raise RuntimeError("DQN model training/loading failed.")
+            raise DQNModelUnavailable(meta.get("message", _UNAVAILABLE_MSG))
         _CACHED_META = meta
     return _CACHED_AGENT, dict(_CACHED_META or {})
 
@@ -597,10 +673,25 @@ def suggest_hedge_action(client: AlpacaHedgerClient, underlying_symbol: str) -> 
     """
 
     sym = (underlying_symbol or "").strip().upper()
+
+    try:
+        agent, meta = _get_cached_agent()
+    except DQNModelUnavailable as exc:
+        # Graceful degradation: never train at render time, never emit a trade.
+        return {
+            "underlying": sym,
+            "available": False,
+            "status": "model_unavailable",
+            "message": str(exc),
+            "action": 0,
+            "side": "none",
+            "delta_qty": 0.0,
+            "model_version": DQN_HEDGER_VERSION,
+        }
+
     env = HedgingEnv(client=client, underlying_symbol=sym, position_scale=1.0)
     state = env.reset()
 
-    agent, meta = _get_cached_agent()
     q_vals = agent.q_values(state)
     action = int(np.argmax(q_vals))
 
@@ -620,6 +711,7 @@ def suggest_hedge_action(client: AlpacaHedgerClient, underlying_symbol: str) -> 
 
     return {
         "underlying": sym,
+        "available": True,
         "action": action,
         "side": side,
         "delta_qty": float(delta_qty),
@@ -634,7 +726,9 @@ def suggest_hedge_action(client: AlpacaHedgerClient, underlying_symbol: str) -> 
 __all__ = [
     "DQNConfig",
     "DQNAgent",
+    "DQNModelUnavailable",
     "get_dqn_model_info",
     "load_or_train_dqn_model",
+    "train_dqn_model",
     "suggest_hedge_action",
 ]

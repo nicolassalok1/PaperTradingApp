@@ -1,0 +1,16 @@
+# RUNTIME — minimum to run the app (and degrade gracefully without ML/AI extras).
+# Versions resolved from the known-good papertrading env (py3.10/3.11), see lock.txt.
+streamlit==1.51.0
+numpy==1.26.4
+pandas==2.1.4
+scipy==1.11.4
+numba==0.59.1
+requests==2.31.0
+urllib3>=1.26.18,<2
+python-dotenv==1.0.1
+altair==5.3.0
+plotly==5.22.0
+matplotlib==3.8.4
+alpaca-py==0.12.0
+# Optional AI assistant (small, pure-python); app degrades if its key is absent.
+openai==1.13.3

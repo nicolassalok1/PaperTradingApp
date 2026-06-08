@@ -1,6 +1,11 @@
 import pkgutil
 import importlib
+
+import pytest
+
 import app.model.options as opt
+
+pytestmark = pytest.mark.unit
 
 
 def test_model_options_no_streamlit():

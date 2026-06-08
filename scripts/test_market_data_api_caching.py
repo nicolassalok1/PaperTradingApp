@@ -1,9 +1,12 @@
 import json
 
 import pandas as pd
+import pytest
 
 from app.model.market_data import market_data as md
 from app.model.options import logic as opt_logic
+
+pytestmark = pytest.mark.unit
 
 
 def test_yahoo_option_chain_cache_hit(monkeypatch, tmp_path):

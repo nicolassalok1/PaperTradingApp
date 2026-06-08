@@ -39,102 +39,20 @@ d_common = opt_ui.d_common
 option_char = opt_ui.option_char
 _k = opt_ui._k
 
-# Close series guard
-def ensure_close_history(ctx: dict) -> bool:
-    """
-    Ensure closing prices are available for the current global ticker.
-    When unavailable, show a notice and skip rendering.
-    """
-    available = bool(ctx.get("close_available"))
-    if available:
-        return True
-    ticker = ctx.get("ticker") or resolve_common_underlying()
-    tkr_display = (ticker or "").strip().upper() or "N/A"
-    st.info(
-        f"Clotures introuvables pour le ticker global ({tkr_display}). "
-        "Renseigne un ticker valide puis recharge les clÙtures pour afficher ce panneau."
-    )
-    return False
-
-
-def current_ticker(ctx: dict) -> str:
-    """Return the active ticker used for charts/labels."""
-    return (ctx.get("ticker") or resolve_common_underlying() or "").strip().upper()
-
-
-def current_spot(ctx: dict) -> float:
-    """
-    Derive a spot anchor from the latest close when available,
-    then fallback to S0/context defaults.
-    """
-    close_series = ctx.get("close_series")
-    spot = None
-    try:
-        if hasattr(close_series, "dropna") and len(close_series.dropna()) > 0:
-            spot = float(close_series.dropna().iloc[-1])
-    except Exception:
-        spot = None
-    if spot is None and ctx.get("S0") is not None:
-        try:
-            spot = float(ctx.get("S0"))
-        except Exception:
-            spot = None
-    if spot is None:
-        spot = float(st.session_state.get("common_spot_value", 100.0))
-    return float(spot)
-
-
-def get_common_maturity_value(default: float = 1.0) -> float:
-    try:
-        return float(st.session_state.get("common_maturity_value", default))
-    except Exception:
-        return float(default)
-
-
-def get_common_rate_value(default: float = 0.01) -> float:
-    try:
-        return float(st.session_state.get("common_rate_value", default))
-    except Exception:
-        return float(default)
-
-
-def get_common_sigma_value(default: float = 0.2) -> float:
-    try:
-        return float(st.session_state.get("common_sigma_value", default))
-    except Exception:
-        return float(default)
-
-
-def get_common_div_yield(default: float = 0.0) -> float:
-    try:
-        return float(st.session_state.get("d_common", default))
-    except Exception:
-        return float(default)
-
-
-def get_rate_for_ttm(T: float, default: float = 0.01) -> float:
-    """
-    Resolve the risk-free rate for a given maturity:
-    - If Options is configured to use Yield Curve, query yc.get_risk_free_rate(T).
-    - Otherwise, fall back to the global manual rate (common_rate_value).
-    """
-    try:
-        use_yc = bool(st.session_state.get("opt_use_yield_curve_rate", True))
-    except Exception:
-        use_yc = False
-
-    if use_yc:
-        currency = (st.session_state.get("yc_currency") or "USD").strip().upper()
-        try:
-            from app.controller import yieldcurve_controller as yc  # local import (UI helper)
-
-            return float(
-                yc.get_risk_free_rate(T_ref=float(T), currency=currency, ensure_cache=True)
-            )
-        except Exception:
-            pass
-
-    return float(get_common_rate_value(default))
+# Close series guard + context/rate helpers — extracted to bridge_context (Step-6).
+# Re-exported here so the public façade and `import *` consumers are unchanged.
+from app.vue.components.options.bridge_context import (  # noqa: E402
+    ensure_close_history,
+    current_ticker,
+    current_spot,
+    get_common_maturity_value,
+    get_common_rate_value,
+    get_common_sigma_value,
+    get_common_div_yield,
+    get_rate_for_ttm,
+    resolve_common_underlying,
+    load_shared_close_series,
+)
 
 # View/payoff builders
 view_asset_or_nothing = oc.view_asset_or_nothing
@@ -225,126 +143,14 @@ def _bootstrap_fake_streamlit():
 _bootstrap_fake_streamlit()
 
 
-def resolve_common_underlying() -> str:
-    """Return the shared ticker set by the user (empty string if unset)."""
-    ticker = (
-        st.session_state.get("tkr_common")
-        or st.session_state.get("common_underlying")
-        or st.session_state.get("ticker_default")
-        or ""
-    )
-    return str(ticker or "").strip().upper()
-
-
-def load_shared_close_series(fallback_value: float):
-    """
-    Load close series for the shared ticker only if the user provided one.
-    Returns (ticker, series|None).
-    """
-    ticker = resolve_common_underlying()
-    if not ticker or load_close_series_for_ticker is None:
-        return ticker, None
-    try:
-        return ticker, load_close_series_for_ticker(ticker, fallback_value=fallback_value)
-    except Exception:
-        return ticker, None
-
-
-def render_static_line_chart(series, title: str | None = None, y_label: str | None = None) -> bool:
-    """
-    Render a non-interactive Altair line chart for a pandas Series.
-    Returns True if rendered, False otherwise.
-    """
-    if series is None or getattr(series, "empty", True):
-        return False
-    try:
-        df = series.reset_index()
-    except Exception:
-        return False
-
-    if df.shape[1] < 2:
-        return False
-
-    x_col, y_col = df.columns[:2]
-    y_title = y_label or str(y_col)
-
-    x_enc = alt.X(f"{x_col}:T", title="Date")
-    try:
-        # If conversion to temporal fails, fall back to nominal axis
-        _ = pd.to_datetime(df[x_col])
-    except Exception:
-        x_enc = alt.X(f"{x_col}:O", title=str(x_col))
-
-    chart = (
-        alt.Chart(df)
-        .mark_line()
-        .encode(
-            x=x_enc,
-            y=alt.Y(f"{y_col}:Q", title=y_title),
-            tooltip=[alt.Tooltip(f"{x_col}:T", title="Date"), alt.Tooltip(f"{y_col}:Q", title=y_title)],
-        )
-        .properties(title=title or "", height=260)
-        .interactive(False)
-        .configure_view(continuousHeight=260, strokeWidth=0)
-    )
-    st.altair_chart(chart, use_container_width=True, theme=None)
-    return True
-
-
-def render_figures_grid(figs):
-    """
-    Render a list of matplotlib figures in responsive 2-column rows.
-    On narrow viewports Streamlit stacks columns automatically.
-    """
-    if not figs:
-        return
-
-    for i in range(0, len(figs), 2):
-        pair = [f for f in figs[i : i + 2] if f is not None]
-        if not pair:
-            continue
-        cols = st.columns(len(pair), gap="small")
-        for col, fig in zip(cols, pair):
-            safe_fig = limit_figure_width(fig)
-            col.pyplot(safe_fig, clear_figure=True)
-            plt.close(fig)
-
-
-def build_close_with_strike_fig(close_series, ticker: str, strike: float | None):
-    """Build a closing-price figure with an optional horizontal strike overlay."""
-    if close_series is None or getattr(close_series, "empty", True):
-        return None
-    tkr = (ticker or "Ticker").strip().upper() or "Ticker"
-    try:
-        fig, ax = plt.subplots(figsize=(8, 3))
-        ax.plot(close_series.index, close_series.values, label=f"{tkr} close")
-        if strike is not None:
-            ax.axhline(float(strike), color="gray", linestyle="--", label=f"Strike = {float(strike):.2f}")
-        ax.set_ylabel("Prix")
-        ax.set_title(f"Clôtures {tkr} (strike)")
-        ax.legend(loc="best")
-        fig.autofmt_xdate()
-        return mark_full_width(fig)
-    except Exception:
-        return None
-
-
-def show_and_close(fig):
-    """Render a matplotlib figure in Streamlit and close it to avoid figure leaks."""
-    try:
-        from streamlit.runtime.scriptrunner import get_script_run_ctx
-
-        # When running outside `streamlit run` (e.g., tests), skip rendering to avoid warnings.
-        if get_script_run_ctx() is None:
-            plt.close(fig)
-            return
-    except Exception:
-        plt.close(fig)
-        return
-
-    safe_fig = limit_figure_width(fig)
-    st.pyplot(safe_fig, clear_figure=True)
-    plt.close(fig)
+# Rendering helpers — extracted to bridge_render (Step-6). Re-exported unchanged.
+# bridge_render carries main's plot_limits width-limiting (ported into the submodule).
+from app.vue.components.options.bridge_render import (  # noqa: E402
+    render_static_line_chart,
+    render_figures_grid,
+    build_close_with_strike_fig,
+    show_and_close,
+)
 
 __all__ = [
     "_choose_option_select",

@@ -1,8 +1,11 @@
 import math
 
 import numpy as np
+import pytest
 
 from app.model.portfolio_allocation.engine import eigen_portfolio_optimize
+
+pytestmark = pytest.mark.unit
 
 
 def test_eigen_portfolio_equals_first_pc_for_collinear_assets():
