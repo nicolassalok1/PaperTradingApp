@@ -69,3 +69,32 @@ Les deux précisions intégrées au PLAN.md (bootstrap deps-only en étape 0 ; a
 ---
 **CONVERGENCE : APPROVED au round 3 sur 5.** Plan durci par 1 round de grill (7 décisions verrouillées avec l'utilisateur) + 3 rounds Codex (36 findings traités, ~6 réduits/rejetés avec raison).
 
+---
+
+# Implémentation + vérification adverse (ultracode)
+
+Branche `feat/fiabilisation`. Toutes les étapes 0-8 réalisées + 3 bugs quant corrigés + 2 vagues de vérification adverse multi-agents.
+
+## Étapes livrées (gates verts, 224 tests, 0 xfailed, couverture 15.7%)
+- **S0** filets : smoke offline (11 tabs+8 ctrl+bridge, réseau bloqué) + snapshot caractérisation API `controller_bridge`.
+- **S1** sécurité : `ConfigProvider` (utils Streamlit-free), injection st.secrets via composition root, `logs/` dé-tracké, `.env.example`, logging rédigé, `scripts/scan_secrets.py`.
+- **S2** MVC : matrice d'imports documentée + gate (source unique via délégation du test).
+- **S3** CI : env reproductible, split deps (runtime/runtime-ml/test/train/dev) + drop bloat, `pytest-socket`, marker policy unmarked=fail, workflow GitHub Actions torch-free.
+- **S4** quant : 156 tests à oracles indépendants (BSM/CRR/MC/Heston/exotics) + paper fail-closed (`trading_guard`).
+- **S5** DQN : zéro entraînement runtime + **checkpoint versionné livré** (`app/model/hedger_v2/weights/`, 18KB + checksum).
+- **S6** refacto `controller_bridge` → façade stable + `bridge_context`/`bridge_render` (caractérisation identique).
+- **S7** suppression code mort prouvé (`vue/components/shared.py`).
+- **S8** bots : redaction prompt + garde coût.
+
+## Bugs réels trouvés par les tests/vérification, corrigés
+1. Heston `call_price_cf` P1 normaliseur (forward) — non-convergence BS + prix négatifs (Codex APPROVED le fix).
+2. `price_option_mc_unified` branche EU NameError.
+3. **Vérif adverse round 1 (36 agents)** : 14 defects dans mon propre travail (scan_secrets CI rouge + faux négatifs ; redact ignorant st.secrets ; **CRITICAL** paper bypass `portfolio_allocation` ; Heston positivité non tenue sur grille défaut ; gate MVC ratant imports relatifs/dynamiques). Tous corrigés.
+4. **Vérif adverse round 2 (completeness critic)** : Heston précision brute défaut (-0.20) + test vacuous → résolution (200,8000) + test non-vacuous (brut + convergence) ; checkpoint DQN livré ; guard MC promu unit.
+
+## Décisions résiduelles documentées (non-bugs)
+- **Idempotence rerun** : garantie par Streamlit (`st.form_submit_button`/`st.button` one-shot pour ordres/calibration) + DQN load-only. Aucun code spéculatif ajouté (éviterait du code mort).
+- **Coverage** : plancher global 12% (ratchet) ; pas de seuils par-module (limite coverage.py) — `trading_guard` à 100%, cœur quant couvert.
+- **scan_secrets** : skip des binaires (.npz/.pt) + liste de providers fixe — substitut gitleaks documenté ; lancer gitleaks/trufflehog réel une fois sur l'historique reste recommandé.
+- **Défaut pré-existant signalé (hors scope)** : `app/vue/components/options/ui_main.py` importe `app.vue.pages` (inexistant), module orphelin non référencé — candidat à un futur passage dead-code.
+
