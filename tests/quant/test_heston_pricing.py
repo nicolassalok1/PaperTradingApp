@@ -179,26 +179,50 @@ def test_price_grid_shape_and_monotone_in_moneyness():
         assert np.all(np.diff(grid[i]) <= 1e-6)
 
 
-def test_price_grid_short_maturity_otm_is_positive():
-    # Guard the FULL production default grid (incl. m=1.15-1.20 and t=0.02-0.05,
-    # the short-maturity deep-OTM cells where the raw integral overshot negative)
-    # across several STRESS param sets (high vol-of-vol, strong negative rho).
+_STRESS_PARAMS = [
+    (2.0, 0.06, 0.3, -0.5, 0.05),   # baseline
+    (2.0, 0.06, 0.3, -0.7, 0.09),   # high vol-of-vol, strong negative rho
+    (1.0, 0.09, 0.5, -0.8, 0.12),   # extreme
+    (3.0, 0.04, 0.2, 0.3, 0.04),    # positive rho
+]
+_M_GRID = [0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2]
+_T_GRID = [0.02, 0.05, 0.1, 0.25, 0.5, 1.0]
+
+
+def test_price_grid_no_arbitrage_bounds_clamped():
+    # PRODUCTION guarantee: clamped grid is within [0, forward] on the FULL default
+    # grid x stress params (incl. m=1.15-1.20, t=0.02-0.05).
     S0, r, q = 100.0, 0.03, 0.01
-    m_grid = [0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2]
-    t_grid = [0.02, 0.05, 0.1, 0.25, 0.5, 1.0]
-    stress_params = [
-        (2.0, 0.06, 0.3, -0.5, 0.05),   # baseline
-        (2.0, 0.06, 0.3, -0.7, 0.09),   # high vol-of-vol, strong negative rho
-        (1.0, 0.09, 0.5, -0.8, 0.12),   # extreme
-        (3.0, 0.04, 0.2, 0.3, 0.04),    # positive rho
-    ]
-    for params in stress_params:
-        grid = price_grid_from_params(S0, m_grid, t_grid, r, q, params)
-        # No-arbitrage: every call price must be >= 0 (clamped to the no-arb bound).
+    for params in _STRESS_PARAMS:
+        grid = price_grid_from_params(S0, _M_GRID, _T_GRID, r, q, params)
         assert np.all(grid >= 0.0), (params, grid.min())
-        # And bounded above by the discounted forward S0 e^{-q t}.
-        upper = S0 * math.exp(-q * max(t_grid))
+        upper = S0 * math.exp(-q * max(_T_GRID))
         assert np.all(grid <= upper + 1e-9)
+
+
+def test_raw_integral_quality_and_convergence():
+    # NON-VACUOUS: assert the RAW (pre-clamp) integral is accurate at the production
+    # default resolution, and that its residual negativity SHRINKS with resolution
+    # (proving truncation, not a formulation bug — so the clamp only fixes noise).
+    S0, r, q = 100.0, 0.03, 0.01
+
+    def worst_raw_negative(u_max, N):
+        worst = 0.0
+        for params in _STRESS_PARAMS:
+            for t in _T_GRID:
+                for m in _M_GRID:
+                    raw = call_price_cf(S0, m * S0, t, r, q, params, u_max=u_max, N=N, clamp=False)
+                    worst = min(worst, raw)
+        return worst
+
+    worst_default = worst_raw_negative(200.0, 8000)     # production default resolution
+    worst_fine = worst_raw_negative(400.0, 40000)       # fine integration
+
+    # At production resolution the raw error is already small (bounded).
+    assert worst_default > -0.05, worst_default
+    # And it converges towards 0 as resolution increases (truncation signature).
+    assert worst_fine >= worst_default - 1e-9
+    assert worst_fine > -0.02, worst_fine
 
 
 def test_price_grid_matches_pointwise_call_price():

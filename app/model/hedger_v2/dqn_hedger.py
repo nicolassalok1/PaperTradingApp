@@ -69,6 +69,12 @@ def _utc_iso_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# Versioned checkpoint shipped with the repo (tracked). Loaded in preference to a
+# locally-trained one in the (gitignored) cache dir, so a fresh checkout/CI/deploy
+# has a working model without training. Training writes to the cache dir.
+_TRACKED_WEIGHTS_DIR = Path(__file__).resolve().parent / "weights"
+
+
 def _model_dir() -> Path:
     path = CACHE_CSV_DIR / "HedgerDQN"
     path.mkdir(parents=True, exist_ok=True)
@@ -76,10 +82,16 @@ def _model_dir() -> Path:
 
 
 def _weights_path() -> Path:
+    tracked = _TRACKED_WEIGHTS_DIR / f"{DQN_HEDGER_VERSION}.npz"
+    if tracked.exists():
+        return tracked
     return _model_dir() / f"{DQN_HEDGER_VERSION}.npz"
 
 
 def _meta_path() -> Path:
+    tracked = _TRACKED_WEIGHTS_DIR / f"{DQN_HEDGER_VERSION}.json"
+    if tracked.exists():
+        return tracked
     return _model_dir() / f"{DQN_HEDGER_VERSION}.json"
 
 

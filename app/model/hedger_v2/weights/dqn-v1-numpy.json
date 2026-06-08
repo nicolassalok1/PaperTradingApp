@@ -1,0 +1,40 @@
+{
+  "version": "dqn-v1-numpy",
+  "available": true,
+  "trained_utc": "2026-06-08T10:56:05+00:00",
+  "config": {
+    "state_keys": [
+      "net_delta_proxy",
+      "equity_position"
+    ],
+    "delta_scale": 10.0,
+    "position_scale": 10.0,
+    "hidden_sizes": [
+      64,
+      64
+    ],
+    "gamma": 0.98,
+    "learning_rate": 0.001,
+    "batch_size": 64,
+    "buffer_capacity": 25000,
+    "warmup_steps": 800,
+    "target_update_interval": 250,
+    "epsilon_start": 1.0,
+    "epsilon_end": 0.05,
+    "epsilon_decay_steps": 4000,
+    "train_steps": 7500,
+    "eval_episodes": 25,
+    "env_max_steps": 32,
+    "env_max_abs_delta": 10.0,
+    "env_position_scale": 1.0,
+    "env_delta_drift_std": 0.6,
+    "env_transaction_cost": 0.02,
+    "seed": 42
+  },
+  "train_steps": 7500,
+  "train_updates": 6701,
+  "train_avg_loss": 16.198540579141245,
+  "train_avg_abs_total_delta": 2.4861521112335985,
+  "eval_avg_reward": -36.93979858465892,
+  "eval_avg_abs_total_delta": 1.147443705770591
+}

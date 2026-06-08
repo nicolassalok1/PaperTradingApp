@@ -58,9 +58,13 @@ def _P(j, S0, K, t, r, q, params, u_max=50.0, N=2000):
     return 0.5 + (du / np.pi) * integrand.sum()
 
 
-def call_price_cf(S0, K, t, r, q, params, u_max=50.0, N=2000):
+def call_price_cf(S0, K, t, r, q, params, u_max=200.0, N=8000, clamp=True):
     """
     Semi-closed form Heston call via Carr-Madan style integration.
+
+    With ``clamp=True`` (production default) the result is floored/capped to the
+    no-arbitrage band; pass ``clamp=False`` to inspect the raw integral (used by
+    tests to verify the underlying integration quality, not just the clamp).
     """
     if t <= 0 or S0 <= 0 or K <= 0:
         return 0.0
@@ -68,11 +72,14 @@ def call_price_cf(S0, K, t, r, q, params, u_max=50.0, N=2000):
     p1 = _P(1, S0, K, t, r, q, params, u_max=u_max, N=N)
     p2 = _P(2, S0, K, t, r, q, params, u_max=u_max, N=N)
     price = float(S0 * np.exp(-q * t) * p1 - K * np.exp(-r * t) * p2)
+    if not clamp:
+        return price
     # No-arbitrage clamp. A European call must lie in [max(F_S - F_K, 0), F_S],
     # F_S = S0 e^{-q t}, F_K = K e^{-r t}. The Heston P-integrand is hard for very
     # short-maturity deep-OTM cells, where finite integration can overshoot a few
     # bp negative (true value ~0); flooring at the no-arb bound guarantees a valid,
-    # arbitrage-free price instead of a spurious negative.
+    # arbitrage-free price instead of a spurious negative. The raw error shrinks with
+    # resolution (verified in tests), confirming truncation rather than mis-formulation.
     fwd_s = S0 * np.exp(-q * t)
     lower = max(fwd_s - K * np.exp(-r * t), 0.0)
     return float(min(max(price, lower), fwd_s))

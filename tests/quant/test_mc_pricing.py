@@ -175,11 +175,11 @@ def test_price_european_mc_unknown_model_raises():
         price_european_mc(100.0, 100.0, 1.0, 0.2, model="rheston")
 
 
-@pytest.mark.slow
 def test_unified_european_branch_matches_bsm():
     """service.price_option_mc_unified (european) ~ analytic BSM.
 
     Fixed: service.py now imports price_mc_european, so the european branch runs.
+    UNIT (small n_paths) so CI catches a re-break of the NameError regression.
     """
     res = price_option_mc_unified(
         ticker=None,
@@ -189,8 +189,8 @@ def test_unified_european_branch_matches_bsm():
         sigma=0.2,
         option_type="call",
         style="european",
-        n_paths=60000,
-        n_steps=64,
+        n_paths=20000,
+        n_steps=32,
     )
     analytic = bs_price(100.0, 100.0, 1.0, R, 0.2, "call")
     tol = 4.0 * res["stderr"] + 1e-3
