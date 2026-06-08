@@ -42,8 +42,10 @@ class SurfaceCalibrationResult:
     method: str
     params: Dict[str, Any]
     metrics: Dict[str, float] | None = None
+    metrics_vw: Dict[str, float] | None = None
     iv_model: np.ndarray | None = None
     iv_error: np.ndarray | None = None
+    vega_weights: np.ndarray | None = None
     details: Dict[str, Any] | None = None
 
 

@@ -15,6 +15,11 @@ import pandas as pd
 from types import SimpleNamespace
 
 from app.controller import options_controller as oc
+from app.vue.components.options.plot_limits import (
+    MAX_CHART_WIDTH_PX,
+    limit_figure_width,
+    mark_full_width,
+)
 from app.vue.components.options import ui_helpers as opt_ui
 from app.vue.state.options_context import get_option_context
 from app.controller.options_controller import floor_n
@@ -139,6 +144,7 @@ _bootstrap_fake_streamlit()
 
 
 # Rendering helpers — extracted to bridge_render (Step-6). Re-exported unchanged.
+# bridge_render carries main's plot_limits width-limiting (ported into the submodule).
 from app.vue.components.options.bridge_render import (  # noqa: E402
     render_static_line_chart,
     render_figures_grid,
@@ -206,6 +212,8 @@ __all__ = [
     "load_shared_close_series",
     "render_static_line_chart",
     "render_figures_grid",
+    "mark_full_width",
+    "limit_figure_width",
     "build_close_with_strike_fig",
     "show_and_close",
     "floor_n",

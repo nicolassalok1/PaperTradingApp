@@ -16,7 +16,12 @@ from app.model.calibration.base_calibrator import (
     SurfaceGrid,
 )
 from app.model.calibration.implied_vol import bs_call_price, implied_vol_grid
-from app.model.calibration.loss_surface import effective_mask, iv_error_metrics
+from app.model.calibration.loss_surface import (
+    compute_bs_vega_grid,
+    effective_mask,
+    iv_error_metrics,
+    iv_error_metrics_weighted,
+)
 from app.model.volatility_models.common.fft import FFTConfig, carr_madan_fft_call_prices, interp_prices
 from app.model.volatility_models.rheston.cf_markovian import RHestonMarkovianConfig, rheston_log_return_cf_markovian
 
@@ -227,7 +232,14 @@ class RHestonFFTMarkovianCalibrator(BaseSurfaceCalibrator):
                     return d[float(T_in)]
 
                 K_grid, C_grid = carr_madan_fft_call_prices(S0=S0, r=r, q=q, T=float(tt), cf_log_return=_cf, cfg=fft_cfg)
-                out[where] = interp_prices(K_grid=K_grid, C_grid=C_grid, K=strikes)
+                prices = np.asarray(interp_prices(K_grid=K_grid, C_grid=C_grid, K=strikes), dtype=float).reshape(-1)
+                if prices.size < where.size:
+                    padded = np.full(where.size, np.nan, dtype=float)
+                    padded[: prices.size] = prices
+                    prices = padded
+                if prices.size > where.size:
+                    prices = prices[: where.size]
+                out[where] = prices
             return out
 
         def residuals(x: np.ndarray) -> np.ndarray:
@@ -302,11 +314,17 @@ class RHestonFFTMarkovianCalibrator(BaseSurfaceCalibrator):
 
             K_grid, C_grid = carr_madan_fft_call_prices(S0=S0, r=r, q=q, T=float(tt), cf_log_return=_cf, cfg=fft_cfg)
             strikes = (S0 * m_grid).astype(float)
-            price_grid[i_t, :] = interp_prices(K_grid=K_grid, C_grid=C_grid, K=strikes)
+            prices = np.asarray(interp_prices(K_grid=K_grid, C_grid=C_grid, K=strikes), dtype=float).reshape(-1)
+            row = np.full_like(price_grid[i_t, :], np.nan, dtype=float)
+            n = min(row.size, prices.size)
+            row[:n] = prices[:n]
+            price_grid[i_t, :] = row
 
         iv_model = implied_vol_grid(price_grid, S0, m_grid, t_grid, r, q)
         iv_error = np.where(mask_eff, iv_model - iv_mkt, np.nan)
         metrics = iv_error_metrics(iv_error, mask_eff)
+        vega_weights = compute_bs_vega_grid(S0, m_grid, t_grid, r, q, iv_mkt)
+        metrics_vw = iv_error_metrics_weighted(iv_error, mask_eff, vega_weights)
 
         if best_meta is not None:
             best_meta["best"] = True
@@ -318,8 +336,10 @@ class RHestonFFTMarkovianCalibrator(BaseSurfaceCalibrator):
             method=self.method,
             params=params,
             metrics=metrics,
+            metrics_vw=metrics_vw,
             iv_model=iv_model,
             iv_error=iv_error,
+            vega_weights=vega_weights,
             details={
                 "runs": runs,
                 "fft_cfg": {"alpha": fft_cfg.alpha, "n": fft_cfg.n, "eta": fft_cfg.eta},

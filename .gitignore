@@ -153,9 +153,9 @@ venv.bak/
 dmypy.json
 
 # Data and generated caches
-data/*
 database/*
 cache/HedgerDQN/
+cache/
 
 # Runtime logs & debug artefacts (HTML snapshots, calibration PNGs, etc.)
 logs/
@@ -176,3 +176,4 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 graphify-out/
+.streamlit/secrets_template.toml

@@ -2,6 +2,11 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from app.controller import options_controller as oc
+from app.vue.components.options.plot_limits import (
+    MAX_CHART_WIDTH_PX,
+    limit_figure_width,
+    limit_plotly_width,
+)
 from app.vue.components.selector import choose_option_select
 from app.vue.components.options_text import render_option_text as _txt
 from app.vue.components.options.shared import load_cached_option_history, load_options_meta
@@ -68,7 +73,7 @@ def render_options_history_block() -> None:
         xaxis_title="Date",
         yaxis_title="Prix",
     )
-    st.plotly_chart(fig, config={"staticPlot": True, "scrollZoom": False})
+    st.plotly_chart(fig, config={"staticPlot": True, "scrollZoom": False}, use_container_width=True)
 
 
 def option_panel(title: str, subtitle: str | None = None):
@@ -128,8 +133,20 @@ def render_crr_payoff_surface(
     )
     call_fig = render_heatmap(call_matrix, k_values, s_values, title="Payoff CRR - Call")
     put_fig = render_heatmap(put_matrix, k_values, s_values, title="Payoff CRR - Put")
-    st.plotly_chart(call_fig, config={"staticPlot": True, "scrollZoom": False})
-    st.plotly_chart(put_fig, config={"staticPlot": True, "scrollZoom": False})
+    limit_plotly_width(call_fig, MAX_CHART_WIDTH_PX)
+    limit_plotly_width(put_fig, MAX_CHART_WIDTH_PX)
+    st.plotly_chart(
+        call_fig,
+        config={"staticPlot": True, "scrollZoom": False},
+        width=int(MAX_CHART_WIDTH_PX),
+        use_container_width=False,
+    )
+    st.plotly_chart(
+        put_fig,
+        config={"staticPlot": True, "scrollZoom": False},
+        width=int(MAX_CHART_WIDTH_PX),
+        use_container_width=False,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +164,8 @@ def render_crr_tree(option_obj, r: float, sigma: float, n_steps: int):
     """Build and display a CRR tree preview."""
     spot_tree, value_tree = build_crr_tree(option_obj, r=r, sigma=sigma, n_steps=n_steps)
     fig = plot_crr_tree(spot_tree, value_tree)
-    st.pyplot(fig, clear_figure=True)
+    safe_fig = limit_figure_width(fig)
+    st.pyplot(safe_fig, clear_figure=True)
 
 
 def render_heatmap_diagnostics(
@@ -175,5 +193,17 @@ def render_heatmap_diagnostics(
     )
     call_fig = render_heatmap(call_matrix, k_values, s_values, title="Surface CRR Call")
     put_fig = render_heatmap(put_matrix, k_values, s_values, title="Surface CRR Put")
-    st.plotly_chart(call_fig, config={"staticPlot": True, "scrollZoom": False})
-    st.plotly_chart(put_fig, config={"staticPlot": True, "scrollZoom": False})
+    limit_plotly_width(call_fig, MAX_CHART_WIDTH_PX)
+    limit_plotly_width(put_fig, MAX_CHART_WIDTH_PX)
+    st.plotly_chart(
+        call_fig,
+        config={"staticPlot": True, "scrollZoom": False},
+        width=int(MAX_CHART_WIDTH_PX),
+        use_container_width=False,
+    )
+    st.plotly_chart(
+        put_fig,
+        config={"staticPlot": True, "scrollZoom": False},
+        width=int(MAX_CHART_WIDTH_PX),
+        use_container_width=False,
+    )

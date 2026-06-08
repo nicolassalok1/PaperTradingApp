@@ -43,10 +43,23 @@ def test_suggest_hedge_action_degrades_gracefully():
 
 
 @pytest.mark.slow
-def test_train_then_load_roundtrip(tmp_path):
+def test_train_then_load_roundtrip(tmp_path, monkeypatch):
+    import numpy as np
+
+    # Training now pulls historical Alpaca bars; feed deterministic synthetic prices
+    # so the train -> cache -> load roundtrip runs offline (no network).
+    prices = (100.0 + np.cumsum(np.random.default_rng(0).normal(0, 1, 300))).astype(np.float32)
+    monkeypatch.setattr(dh, "_load_historical_prices", lambda cfg: prices)
+
     base = dh.DQNConfig()
     cfg = dh.DQNConfig(
-        **{**base.__dict__, "train_steps": 300, "warmup_steps": 50, "eval_episodes": 2}
+        **{
+            **base.__dict__,
+            "train_steps": 200,
+            "warmup_steps": 30,
+            "eval_episodes": 1,
+            "historical_episode_length": 32,
+        }
     )
     meta = dh.train_dqn_model(config=cfg)
     assert meta["available"] is True

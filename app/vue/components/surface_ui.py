@@ -10,9 +10,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+
+from app.controller.calibration_controller import CalibrationController
 
 
 _SURF_K_ALIASES = {"k", "strike", "strike_price", "strikeprice"}
@@ -23,17 +26,136 @@ _SURF_TYPE_ALIASES = {"type", "option_type", "cp", "right"}
 
 
 def plot_iv_heatmap(z: np.ndarray, x: np.ndarray, y: np.ndarray, title: str) -> None:
+    z_arr = np.asarray(z, dtype=float)
+    title_lower = str(title or "").lower()
+    is_error = "erreur" in title_lower or "error" in title_lower
+
+    colorscale = "Viridis"
+    heatmap_kwargs = {}
+    if is_error:
+        finite = np.abs(z_arr[np.isfinite(z_arr)])
+        vmax = float(finite.max()) if finite.size else 1.0
+        colorscale = [
+            [0.0, "#f7d4d4"],  # negative large -> light red
+            [0.5, "#0b0b0b"],  # zero -> dark center
+            [1.0, "#d2e8ff"],  # positive large -> light blue
+        ]
+        heatmap_kwargs.update({"zmin": -vmax, "zmax": vmax, "zmid": 0.0})
+
     fig = go.Figure(
         data=go.Heatmap(
-            z=z,
+            z=z_arr,
             x=x,
             y=y,
-            colorscale="Viridis",
-            colorbar=dict(title="IV"),
+            colorscale=colorscale,
+            colorbar=dict(title="IV" if not is_error else "Erreur IV"),
+            **heatmap_kwargs,
         )
     )
     fig.update_layout(title=title, xaxis_title="Moneyness", yaxis_title="Time to maturity (y)")
-    st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True, "scrollZoom": False})
+    st.plotly_chart(fig, width="stretch", config={"staticPlot": True, "scrollZoom": False})
+
+
+def price_grid_from_iv_grid(
+    *,
+    S0: float,
+    m_grid: np.ndarray,
+    t_grid: np.ndarray,
+    iv_grid: np.ndarray,
+    r: float = 0.0,
+    q: float = 0.0,
+) -> np.ndarray:
+    """
+    Convert an IV grid on (t_grid, m_grid) to call prices via Black-Scholes.
+    """
+    S0_f = float(S0)
+    r_f = float(r)
+    q_f = float(q)
+    iv = np.asarray(iv_grid, dtype=float)
+    m = np.asarray(m_grid, dtype=float)
+    t = np.asarray(t_grid, dtype=float)
+    out = np.full((len(t), len(m)), np.nan, dtype=float)
+    for i_t, tau in enumerate(t):
+        t_val = float(tau)
+        for j_m, mm in enumerate(m):
+            vol = float(iv[i_t, j_m]) if i_t < iv.shape[0] and j_m < iv.shape[1] else np.nan
+            if not np.isfinite(vol) or vol <= 0 or t_val <= 0 or S0_f <= 0:
+                continue
+            K = float(mm * S0_f)
+            out[i_t, j_m] = CalibrationController.bs_call_price(S0_f, K, t_val, r_f, q_f, vol)
+    return out
+
+
+def render_price_surface_grid(
+    *,
+    S0: float,
+    m_grid: np.ndarray,
+    t_grid: np.ndarray,
+    price_grid: np.ndarray,
+    title: str,
+    key: str,
+    colorscale: str = "Viridis",
+) -> None:
+    """
+    3D surface for prices on a fixed (t_grid, m_grid) grid.
+    Axes: Strike K (x), TTM (years) (y), Price (z).
+    """
+    m = np.asarray(m_grid, dtype=float)
+    t = np.asarray(t_grid, dtype=float)
+    px = np.asarray(price_grid, dtype=float)
+    if px.shape != (len(t), len(m)):
+        st.info("Grille de prix invalide pour l'affichage 3D.")
+        return
+
+    K = m * float(S0)
+    if len(K) == 0 or len(t) == 0:
+        st.info("Grille vide.")
+        return
+
+    cs = colorscale
+    zmin = None
+    zmax = None
+    zmid = None
+    if "erreur" in str(title).lower() or "error" in str(title).lower():
+        finite = px[np.isfinite(px)]
+        vmax = float(np.nanmax(np.abs(finite))) if finite.size else 1.0
+        cs = [
+            [0.0, "#d4d7f7"],  # negative large -> light
+            [0.5, "#0b0b0b"],  # zero -> dark
+            [1.0, "#f7e3d4"],  # positive large -> light
+        ]
+        zmin = -vmax
+        zmax = vmax
+        zmid = 0.0
+
+    fig = go.Figure(
+        data=[
+            go.Surface(
+                x=K,
+                y=t,
+                z=px,
+                colorscale=cs,
+                colorbar=dict(title="Prix"),
+                showscale=True,
+                opacity=0.9,
+                zmin=zmin,
+                zmax=zmax,
+                zmid=zmid,
+            )
+        ]
+    )
+    fig.update_layout(
+        title=title,
+        scene=dict(
+            xaxis_title="Strike K",
+            yaxis_title="TTM (années)",
+            zaxis_title="Prix",
+            xaxis=dict(range=[float(K.min()), float(K.max())]),
+        ),
+        height=520,
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False, "scrollZoom": True}, key=key)
 
 
 def grid_to_surface_df(
@@ -272,14 +394,14 @@ def render_surface_filters(df_canon: pd.DataFrame, *, key_prefix: str) -> pd.Dat
         df_f = df_f.sample(max_rows, random_state=42).reset_index(drop=True)
 
     st.caption(f"Après filtre: {len(df_f):,} lignes")
-    st.dataframe(df_f.head(30), hide_index=True, use_container_width=True)
+    st.dataframe(df_f.head(30), hide_index=True, width="stretch")
     try:
         st.download_button(
             "Télécharger la surface filtrée (CSV)",
             data=df_f[["K", "T", "S0", "iv", "type"]].to_csv(index=False).encode("utf-8"),
             file_name="surface_filtered.csv",
             mime="text/csv",
-            use_container_width=True,
+            width="stretch",
         )
     except Exception:
         pass
@@ -373,9 +495,107 @@ def surface_diagnostics(df: pd.DataFrame, *, scatter_key: str) -> None:
                 )
             )
             fig.update_layout(xaxis_title="Moneyness (K/S0)", yaxis_title="T (years)", height=360)
-            st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True, "scrollZoom": False})
+            st.plotly_chart(fig, width="stretch", config={"staticPlot": True, "scrollZoom": False})
         except Exception as exc:
             st.warning(f"Plot impossible: {exc}")
+
+
+def render_market_surface_3d(
+    df_canon: pd.DataFrame,
+    *,
+    key: str,
+) -> None:
+    """
+    Render a 3D market IV surface (K, TTM, IV) directly from the dataset, with light smoothing.
+    """
+    if df_canon is None or df_canon.empty:
+        st.info("Charge d'abord une surface pour afficher la nappe 3D.")
+        return
+
+    dfw = df_canon.copy()
+    dfw = dfw.dropna(subset=["K", "T", "iv"])
+    dfw = dfw[(dfw["K"] > 0) & (dfw["T"] > 0) & (dfw["iv"] > 0)]
+    if dfw.empty:
+        st.info("Aucune donnée exploitable pour tracer la nappe 3D.")
+        return
+
+    k_min = float(dfw["K"].min())
+    k_max = float(dfw["K"].max())
+    t_min = float(dfw["T"].min())
+    t_max = float(dfw["T"].max())
+    if k_max <= k_min:
+        k_max = k_min + 1e-6
+    if t_max <= t_min:
+        t_max = t_min + 1e-6
+
+    # Build a coarse grid (median IV per bin) to draw a smooth surface and overlay raw points.
+    grid = None
+    try:
+        k_edges = np.linspace(k_min, k_max, 26)
+        t_edges = np.linspace(t_min, t_max, 26)
+        dfw["k_bin"] = pd.cut(dfw["K"], bins=k_edges, labels=False, include_lowest=True)
+        dfw["t_bin"] = pd.cut(dfw["T"], bins=t_edges, labels=False, include_lowest=True)
+        dfw = dfw.dropna(subset=["k_bin", "t_bin"])
+        if not dfw.empty:
+            dfw["k_center"] = dfw["k_bin"].astype(int).map(
+                lambda idx: float(0.5 * (k_edges[idx] + k_edges[idx + 1]))
+            )
+            dfw["t_center"] = dfw["t_bin"].astype(int).map(
+                lambda idx: float(0.5 * (t_edges[idx] + t_edges[idx + 1]))
+            )
+            grid = (
+                dfw.groupby(["t_center", "k_center"])["iv"]
+                .median()
+                .reset_index()
+                .pivot(index="t_center", columns="k_center", values="iv")
+                .sort_index()
+                .sort_index(axis=1)
+            )
+    except Exception:
+        grid = None
+
+    def _smooth(z: np.ndarray, passes: int = 2) -> np.ndarray:
+        arr = np.array(z, dtype=float)
+        for _ in range(max(1, passes)):
+            padded = np.pad(arr, ((1, 1), (1, 1)), mode="constant", constant_values=np.nan)
+            windows = sliding_window_view(padded, (3, 3))
+            arr = np.nanmean(windows, axis=(2, 3))
+        return arr
+
+    fig = go.Figure()
+    if grid is not None and grid.shape[0] >= 2 and grid.shape[1] >= 2:
+        z_raw = grid.to_numpy()
+        z_smooth = _smooth(z_raw, passes=2)
+        if not np.isfinite(z_smooth).any():
+            z_smooth = z_raw
+        fig.add_trace(
+            go.Surface(
+                x=np.array(grid.columns, dtype=float),
+                y=np.array(grid.index, dtype=float),
+                z=z_smooth,
+                colorscale="Viridis",
+                colorbar=dict(title="IV"),
+                showscale=True,
+                opacity=0.9,
+                name="Surface",
+            )
+        )
+    else:
+        st.info("Pas assez de données pour construire une nappe lissée.")
+        return
+
+    fig.update_layout(
+        title="Nappe IV marché (3D)",
+        scene=dict(
+            xaxis_title="Strike K",
+            yaxis_title="TTM (années)",
+            zaxis_title="IV",
+            xaxis=dict(range=[k_min, k_max]),
+        ),
+        height=520,
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False, "scrollZoom": True}, key=key)
 
 
 def render_surface_preview_dropdown(
@@ -392,7 +612,7 @@ def render_surface_preview_dropdown(
     preview_n = 30
 
     def _render() -> None:
-        st.dataframe(df.head(preview_n), hide_index=True, use_container_width=True)
+        st.dataframe(df.head(preview_n), hide_index=True, width="stretch")
         if len(df) > preview_n:
             st.caption(f"Aperçu: {preview_n} premières lignes affichées (sur {len(df):,}).")
         st.divider()
@@ -425,7 +645,10 @@ __all__ = [
     "grid_to_surface_df",
     "median_s0",
     "plot_iv_heatmap",
+    "price_grid_from_iv_grid",
+    "render_price_surface_grid",
     "render_surface_filters",
     "render_surface_preview_dropdown",
+    "render_market_surface_3d",
     "surface_diagnostics",
 ]

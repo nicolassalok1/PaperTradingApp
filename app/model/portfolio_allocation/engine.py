@@ -47,6 +47,7 @@ class AlpacaPortfolioClient:
             self.api_key,
             self.api_secret,
             paper=is_paper,
+            raw_data=True,  # raw responses avoid enum mismatches on asset_class
         )
         self.data = StockHistoricalDataClient(
             api_key=self.api_key,
@@ -69,39 +70,61 @@ class AlpacaPortfolioClient:
             positions = self.trading.get_all_positions()
         except Exception:
             return []
-        return [_to_dict(p) for p in positions] if positions else []
+        results: List[Dict[str, Any]] = []
+        for p in positions or []:
+            pdict = _to_dict(p)
+            if "equity" in str(pdict.get("asset_class", "")).lower():
+                results.append(pdict)
+        return results
 
     def get_latest_price(self, symbol: str) -> float:
-        if self.offline or self.data is None:
-            return 0.0
         symbol_norm = (symbol or "").strip().upper()
         if not symbol_norm:
             return 0.0
-        req = StockBarsRequest(
-            symbol_or_symbols=symbol_norm,
-            timeframe=TimeFrame.Day,
-            limit=1,
-        )
-        try:
-            bars = self.data.get_stock_bars(req)
-        except Exception:
-            return 0.0
-        df = getattr(bars, "df", None)
-        if df is None or df.empty:
-            return 0.0
-        if isinstance(df.index, pd.MultiIndex):
+        price = 0.0
+        if not self.offline and self.data is not None:
+            req = StockBarsRequest(
+                symbol_or_symbols=symbol_norm,
+                timeframe=TimeFrame.Day,
+                limit=1,
+            )
             try:
-                df = df.xs(symbol_norm, level="symbol")
+                bars = self.data.get_stock_bars(req)
             except Exception:
-                df = df.reset_index()
-        df = df.reset_index()
-        price_col = "close" if "close" in df.columns else df.columns[-1]
-        price = float(df.iloc[-1][price_col])
+                bars = None
+            if bars is not None:
+                df = getattr(bars, "df", None)
+                if df is not None and not df.empty:
+                    if isinstance(df.index, pd.MultiIndex):
+                        try:
+                            df = df.xs(symbol_norm, level="symbol")
+                        except Exception:
+                            df = df.reset_index()
+                    df = df.reset_index()
+                    price_col = "close" if "close" in df.columns else df.columns[-1]
+                    try:
+                        price = float(df.iloc[-1][price_col])
+                    except Exception:
+                        price = 0.0
+
+        if price <= 0:
+            try:
+                from app.model.market_data.market_data import fetch_ohlc_history
+
+                df_fb = fetch_ohlc_history(symbol_norm, period="3mo", interval="1d")
+                if df_fb is not None and not df_fb.empty:
+                    close_col = "Close" if "Close" in df_fb.columns else df_fb.columns[-1]
+                    price = float(df_fb.iloc[-1][close_col])
+            except Exception:
+                price = 0.0
+
         return price
 
     def get_history(self, symbols: Iterable[str], lookback_days: int = 60) -> pd.DataFrame:
         symbols_norm = [s.strip().upper() for s in symbols if s]
         if not symbols_norm:
+            return pd.DataFrame()
+        if self.offline or self.data is None:
             return pd.DataFrame()
         req = StockBarsRequest(
             symbol_or_symbols=symbols_norm,
@@ -112,18 +135,27 @@ class AlpacaPortfolioClient:
             bars = self.data.get_stock_bars(req)
         except Exception:
             return pd.DataFrame()
-        df = getattr(bars, "df", None)
+        try:
+            df = getattr(bars, "df", None)
+        except Exception:
+            return pd.DataFrame()
         if df is None or df.empty:
             return pd.DataFrame()
-        if isinstance(df.index, pd.MultiIndex):
-            df = df.reset_index()
-        if "timestamp" in df.columns:
-            df = df.rename(columns={"timestamp": "time"})
-        if "close" not in df.columns and "Close" in df.columns:
-            df = df.rename(columns={"Close": "close"})
-        df["time"] = pd.to_datetime(df["time"], errors="coerce")
-        df = df.dropna(subset=["time"])
-        return df
+        try:
+            if isinstance(df.index, pd.MultiIndex):
+                df = df.reset_index()
+            if "timestamp" in df.columns:
+                df = df.rename(columns={"timestamp": "time"})
+            if "close" not in df.columns and "Close" in df.columns:
+                df = df.rename(columns={"Close": "close"})
+            df["time"] = pd.to_datetime(df.get("time"), errors="coerce")
+            df = df.dropna(subset=["time"])
+            # Inject symbol if missing and single ticker requested
+            if "symbol" not in df.columns and len(symbols_norm) == 1:
+                df["symbol"] = symbols_norm[0]
+            return df
+        except Exception:
+            return pd.DataFrame()
 
 
 def _to_dict(obj: Any) -> Dict[str, Any]:
@@ -175,8 +207,28 @@ def compute_returns_matrix(
     client: AlpacaPortfolioClient, symbols: Iterable[str], lookback_days: int = 60
 ) -> Dict[str, Any]:
     df = client.get_history(symbols, lookback_days=lookback_days)
-    if df.empty:
-        return {"symbols": list(symbols), "returns": []}
+    symbols_list = [s for s in symbols if s]
+
+    if df.empty or not {"time", "symbol", "close"}.issubset(set(df.columns)):
+        # Fallback to cached/Stooq/Yahoo OHLC if Alpaca is offline or returns bad payloads
+        from app.model.market_data.market_data import fetch_ohlc_history
+
+        frames: list[pd.DataFrame] = []
+        for sym in symbols_list:
+            try:
+                fb = fetch_ohlc_history(sym, period=f"{lookback_days}d", interval="1d")
+            except Exception:
+                fb = pd.DataFrame()
+            if fb is None or fb.empty or "Date" not in fb.columns or "Close" not in fb.columns:
+                continue
+            f = fb[["Date", "Close"]].rename(columns={"Date": "time", "Close": "close"})
+            f["symbol"] = sym.strip().upper()
+            frames.append(f)
+        if frames:
+            df = pd.concat(frames, axis=0, ignore_index=True)
+        else:
+            return {"symbols": symbols_list, "returns": []}
+
     df = df[["time", "symbol", "close"]]
     pivot = df.pivot_table(index="time", columns="symbol", values="close").ffill().dropna(how="any")
     returns = pivot.pct_change().dropna(how="any")
@@ -243,18 +295,44 @@ def risk_parity_optimize(returns: Any, max_iter: int = 500, lr: float = 0.01) ->
 
 
 def eigen_portfolio_optimize(returns: Any) -> List[float]:
+    """
+    Long-only EigenPortfolio using the first principal component of the
+    correlation-adjusted returns matrix.
+
+    - Standardises each asset return to avoid scale bias.
+    - Uses the leading eigenvector (largest eigenvalue) of the correlation
+      matrix as loadings.
+    - Enforces a positive orientation and projects to the simplex to keep
+      weights >= 0 and summing to 1.
+    """
     R = _ensure_numpy(returns)
     n = R.shape[1]
     if R.shape[0] < 2:
         return [1.0 / n] * n
-    Sigma = np.cov(R, rowvar=False)
-    Sigma += np.eye(n) * 1e-6
+
+    # Drop rows with non-finite values to avoid NaN pollution
+    mask = np.isfinite(R).all(axis=1)
+    R = R[mask]
+    if R.shape[0] < 2:
+        return [1.0 / n] * n
+
+    # Standardise to unit variance to mimic PCA on correlation matrix
+    R = R - np.mean(R, axis=0, keepdims=True)
+    std = np.std(R, axis=0, ddof=1, keepdims=True)
+    std = np.where(std <= 1e-12, 1.0, std)
+    Z = R / std
+
+    Sigma = np.cov(Z, rowvar=False)
+    Sigma += np.eye(n) * 1e-6  # regularise to avoid singular covariance
+
     vals, vecs = np.linalg.eigh(Sigma)
-    idx = np.argmin(vals)
+    idx = np.argmax(vals)  # first principal component (largest eigenvalue)
     eig_vec = vecs[:, idx]
-    w = np.maximum(eig_vec, 0.0)
-    if w.sum() <= 0:
-        w = np.abs(eig_vec)
+
+    # Fix arbitrary sign, then take absolute loadings for long-only
+    if eig_vec.sum() < 0:
+        eig_vec = -eig_vec
+    w = np.abs(eig_vec)
     w = _project_simplex(w)
     return w.tolist()
 
@@ -264,15 +342,26 @@ def compute_rebalance_orders(
 ) -> List[Dict[str, Any]]:
     symbols = target.get("symbols") or current.get("symbols") or []
     target_weights = target.get("weights") or target.get("target_weights") or []
-    current_values = current.get("market_values", [])
+    current_symbols = current.get("symbols") or []
+    current_values = current.get("market_values") or []
+    current_map = {sym: float(val) for sym, val in zip(current_symbols, current_values)}
+
     equity = float(current.get("equity", 0.0) or 0.0)
+    if equity <= 0:
+        equity = sum(abs(v) for v in current_values)
+    if equity <= 0:
+        return []
+
     orders: List[Dict[str, Any]] = []
-    for sym, tw, cv in zip(symbols, target_weights, current_values):
+    for sym, tw in zip(symbols, target_weights):
+        if tw is None:
+            continue
         price = client.get_latest_price(sym)
         if price <= 0:
             continue
         target_value = float(tw) * equity
-        delta_value = target_value - float(cv)
+        current_value = float(current_map.get(sym, 0.0))
+        delta_value = target_value - current_value
         delta_qty = delta_value / price
         if abs(delta_qty) < 1e-3:
             continue
@@ -282,6 +371,9 @@ def compute_rebalance_orders(
                 "symbol": sym,
                 "side": side,
                 "qty": round(abs(delta_qty), 4),
+                "current_value": current_value,
+                "target_value": target_value,
+                "price_used": price,
                 "reason": f"rebalance {target.get('method', '')}".strip(),
             }
         )
@@ -292,6 +384,33 @@ def execute_rebalance_orders(
     client: AlpacaPortfolioClient, orders: Iterable[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     executions: List[Dict[str, Any]] = []
+    offline = getattr(client, "offline", False)
+    if offline or client.trading is None:
+        # Surface a clear status instead of silently doing nothing
+        for order in orders or []:
+            executions.append(
+                {
+                    "symbol": order.get("symbol", "-"),
+                    "side": str(order.get("side", "-")),
+                    "qty": float(order.get("qty", 0.0) or 0.0),
+                    "status": "skipped_offline",
+                    "id": None,
+                    "reason": "client offline or trading API unavailable",
+                }
+            )
+        if not executions:
+            executions.append(
+                {
+                    "symbol": "-",
+                    "side": "-",
+                    "qty": 0.0,
+                    "status": "skipped_offline",
+                    "id": None,
+                    "reason": "client offline or trading API unavailable",
+                }
+            )
+        return executions
+
     for order in orders:
         symbol = order.get("symbol")
         qty = float(order.get("qty", 0.0) or 0.0)
@@ -302,19 +421,31 @@ def execute_rebalance_orders(
             symbol=symbol,
             qty=qty,
             side=OrderSide.BUY if side == "buy" else OrderSide.SELL,
-            time_in_force=TimeInForce.GTC,
+            time_in_force=TimeInForce.DAY,  # fractional orders require DAY TIF
         )
-        alpaca_order = client.trading.submit_order(req)
-        alpaca_dict = _to_dict(alpaca_order)
-        executions.append(
-            {
-                "symbol": symbol,
-                "side": side,
-                "qty": qty,
-                "status": alpaca_dict.get("status"),
-                "id": alpaca_dict.get("id"),
-            }
-        )
+        try:
+            alpaca_order = client.trading.submit_order(req)
+            alpaca_dict = _to_dict(alpaca_order)
+            executions.append(
+                {
+                    "symbol": symbol,
+                    "side": side,
+                    "qty": qty,
+                    "status": alpaca_dict.get("status"),
+                    "id": alpaca_dict.get("id"),
+                }
+            )
+        except Exception as exc:
+            executions.append(
+                {
+                    "symbol": symbol,
+                    "side": side,
+                    "qty": qty,
+                    "status": "error",
+                    "id": None,
+                    "reason": str(exc),
+                }
+            )
     return executions
 
 

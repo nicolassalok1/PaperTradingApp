@@ -87,6 +87,7 @@ def render_tab_asian():
     ax_ts.set_title(f"Clôtures {hist_tkr} (Asian arith)")
     ax_ts.legend(loc="best")
     fig_ts.autofmt_xdate()
+    mark_full_width(fig_ts)
 
     fig_pay, ax_pay = plt.subplots(figsize=(7, 4))
     ax_pay.plot(s_grid, payoff_grid, label="Payoff")

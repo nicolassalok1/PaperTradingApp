@@ -47,6 +47,8 @@ from app.model.calibration.types import (
 )
 from app.model.options.data.iv_surface import fetch_iv_surface as _fetch_iv_surface
 from app.model.options.logic import download_options_alpaca as _download_options_alpaca
+from app.model.calibration.implied_vol import bs_call_price as _bs_call_price
+from app.model.calibration.loss_surface import compute_bs_vega_grid, iv_error_metrics_weighted
 
 
 class CalibrationController:
@@ -54,6 +56,11 @@ class CalibrationController:
 
     def get_models(self) -> list[str]:
         return [m.value for m in get_supported_models()]
+
+    @staticmethod
+    def bs_call_price(S0: float, K: float, T: float, r: float, q: float, sigma: float) -> float:
+        """Expose BS call price to the UI layer without importing model modules directly."""
+        return float(_bs_call_price(S0, K, T, r, q, sigma))
 
     def _coerce_model(self, raw: Any) -> CalibrationModelName:
         try:
@@ -92,8 +99,16 @@ class CalibrationController:
         return {"success": False, "message": "Calibration non implémentée.", "details": {}}
 
     def _to_ndarray(self, arr: Any) -> np.ndarray:
+        """
+        Convert to numpy array; return empty if input is None or scalar (avoids len() on 0-d arrays).
+        """
+        if arr is None:
+            return np.array([])
         try:
-            return np.asarray(arr, dtype=float)
+            out = np.asarray(arr, dtype=float)
+            if out.ndim == 0:  # scalar -> treat as empty so defaults kick in
+                return np.array([])
+            return out
         except Exception:
             return np.array([])
 
@@ -119,7 +134,7 @@ class CalibrationController:
                 pass
         return info
 
-    def train_heston_nn_weights(self, payload: Dict | None) -> Dict[str, Any]:
+    def train_heston_nn_weights(self, payload: Dict | None, progress_callback=None) -> Dict[str, Any]:
         if not TORCH_AVAILABLE:
             msg = "PyTorch non installé → entraînement NN indisponible."
             if TORCH_IMPORT_ERROR:
@@ -127,53 +142,65 @@ class CalibrationController:
             return {"success": False, "message": msg, "details": {}}
 
         data = payload or {}
-        n_samples = int(data.get("n_samples") or 2000)
-        epochs = int(data.get("epochs") or 25)
-        batch_size = int(data.get("batch_size") or 64)
-        lr = float(data.get("lr") or 1e-3)
-        device = str(data.get("device") or "cpu")
-        seed = data.get("seed")
-        try:
-            seed_i = int(seed) if seed is not None else 42
-        except Exception:
-            seed_i = None
-        u_max = float(data.get("u_max") or 50.0)
-        n_integration = int(data.get("n_integration") or 800)
-        S0 = float(data.get("S0") or 100.0)
-        r = float(data.get("r") or 0.02)
-        q = float(data.get("q") or 0.0)
+        mode = str(data.get("mode") or "surface").lower().strip()
 
-        try:
-            res = train_heston_surface_net(
-                n_samples=n_samples,
-                epochs=epochs,
-                batch_size=batch_size,
-                lr=lr,
-                device=device,
-                seed=seed_i,
-                u_max=u_max,
-                n_integration=n_integration,
-                S0=S0,
-                r=r,
-                q=q,
-                weights_path=WEIGHTS_PATH,
-            )
-        except Exception as exc:
-            return {"success": False, "message": str(exc), "details": {}}
+        # Surface-based CNN (legacy)
+        if mode == "surface":
+            n_samples = int(data.get("n_samples") or 2000)
+            epochs = int(data.get("epochs") or 25)
+            batch_size = int(data.get("batch_size") or 64)
+            lr = float(data.get("lr") or 1e-3)
+            device = str(data.get("device") or "cpu")
+            seed = data.get("seed")
+            try:
+                seed_i = int(seed) if seed is not None else 42
+            except Exception:
+                seed_i = None
+            u_max = float(data.get("u_max") or 50.0)
+            n_integration = int(data.get("n_integration") or 800)
+            S0 = float(data.get("S0") or 100.0)
+            r = float(data.get("r") or 0.02)
+            q = float(data.get("q") or 0.0)
 
-        if isinstance(res, dict) and not bool(res.get("success", True)):
+            try:
+                res = train_heston_surface_net(
+                    n_samples=n_samples,
+                    epochs=epochs,
+                    batch_size=batch_size,
+                    lr=lr,
+                    device=device,
+                    seed=seed_i,
+                    u_max=u_max,
+                    n_integration=n_integration,
+                    S0=S0,
+                    r=r,
+                    q=q,
+                    weights_path=WEIGHTS_PATH,
+                    progress_epoch=progress_callback,
+                )
+            except Exception as exc:
+                return {"success": False, "message": str(exc), "details": {}}
+
+            if isinstance(res, dict) and not bool(res.get("success", True)):
+                return {
+                    "success": False,
+                    "message": str(res.get("message") or "Entraînement NN échoué."),
+                    "details": res,
+                    "nn_info": self.get_heston_nn_info(),
+                }
+
             return {
-                "success": False,
-                "message": str(res.get("message") or "Entraînement NN échoué."),
+                "success": True,
+                "message": "Poids NN entraînés.",
                 "details": res,
                 "nn_info": self.get_heston_nn_info(),
             }
 
+        # Triplet (S0,K,T) → params, price RMSE loss
         return {
-            "success": True,
-            "message": "Poids NN entraînés.",
-            "details": res,
-            "nn_info": self.get_heston_nn_info(),
+            "success": False,
+            "message": "Mode NN par point (S0,K,T -> params) désactivé (paramètres globaux uniquement).",
+            "details": {},
         }
 
     def get_heston_default_bounds(self) -> Dict[str, Any]:
@@ -397,6 +424,214 @@ class CalibrationController:
         max_abs = float(np.max(np.abs(err)))
         return {"mae": mae, "rmse": rmse, "max_abs": max_abs}
 
+    def _sanitize_heston_params(self, params: Dict[str, Any], constraints: Dict[str, Any] | None = None) -> tuple[Dict[str, float], tuple[float, float, float, float, float]]:
+        lb, ub, err = build_heston_bounds(constraints)
+        if err:
+            raise ValueError(err)
+        if not isinstance(params, dict):
+            raise ValueError("Paramètres Heston invalides.")
+
+        clean: Dict[str, float] = {}
+        vals: list[float] = []
+        for i, name in enumerate(HESTON_PARAM_ORDER):
+            try:
+                v = float(params.get(name))
+            except Exception:
+                v = float("nan")
+            v = float(np.minimum(np.maximum(v, lb[i]), ub[i]))
+            if not np.isfinite(v):
+                raise ValueError(f"Paramètre {name} invalide.")
+            clean[name] = v
+            vals.append(v)
+
+        if len(vals) != len(HESTON_PARAM_ORDER):
+            raise ValueError("Paramètres Heston: longueur invalide (attendu 5).")
+
+        kappa, theta, sigma, rho, v0 = vals
+        if kappa <= 0 or theta <= 0 or sigma <= 0 or v0 <= 0 or abs(rho) >= 1:
+            raise ValueError("Paramètres Heston hors domaine (positivité ou |rho|>=1).")
+
+        return clean, (kappa, theta, sigma, rho, v0)
+
+    def run_heston_global_calibration(self, payload: Dict | None) -> Dict[str, Any]:
+        """
+        Global Heston calibration pipeline: fixed grid -> NN warm start -> optional LS refine -> IV surface.
+        Always returns a single parameter vector (kappa, theta, sigma, rho, v0).
+        """
+        data = payload or {}
+        csv_bytes = data.get("csv_bytes") or data.get("file")
+        surface_path = data.get("surface_path")
+        df_in = data.get("df")
+        constraints = data.get("constraints") if isinstance(data.get("constraints"), dict) else None
+        ticker = str(data.get("ticker") or "").strip().upper() or None
+
+        if not isinstance(df_in, pd.DataFrame) and csv_bytes is None and surface_path is None:
+            return {"success": False, "message": "CSV surface requis.", "details": {}}
+
+        try:
+            raw_df = None
+            market_df = None
+            if isinstance(df_in, pd.DataFrame):
+                # If already on (moneyness, ttm, iv[, S0]) grid, keep it; else reparse below.
+                cols = {str(c).strip().lower(): c for c in df_in.columns}
+                if "moneyness" in cols and "ttm" in cols and "iv" in cols:
+                    market_df = pd.DataFrame(
+                        {
+                            "moneyness": pd.to_numeric(df_in[cols["moneyness"]], errors="coerce"),
+                            "ttm": pd.to_numeric(df_in[cols["ttm"]], errors="coerce"),
+                            "iv": pd.to_numeric(df_in[cols["iv"]], errors="coerce"),
+                        }
+                    )
+                    if "s0" in cols:
+                        market_df["S0"] = pd.to_numeric(df_in[cols["s0"]], errors="coerce")
+                    market_df = market_df.dropna(subset=["moneyness", "ttm", "iv"])
+                else:
+                    raw_df = df_in.copy()
+            elif isinstance(csv_bytes, (bytes, bytearray)):
+                raw_df = pd.read_csv(io.BytesIO(csv_bytes))
+            elif surface_path is not None:
+                raw_df = pd.read_csv(surface_path)
+        except Exception as exc:
+            return {"success": False, "message": f"Lecture CSV échouée: {exc}", "details": {}}
+
+        if market_df is None:
+            market_df = load_market_surface_csv_v2(raw_df if raw_df is not None else csv_bytes)
+        if market_df is None or market_df.empty:
+            return {"success": False, "message": "Surface IV vide après parsing.", "details": {}}
+
+        # S0 default from CSV median if not provided
+        S0_raw = data.get("S0")
+        S0_val = None
+        try:
+            if S0_raw is not None:
+                S0_val = float(S0_raw)
+            elif raw_df is not None and "S0" in raw_df.columns:
+                s0_vals = pd.to_numeric(raw_df["S0"], errors="coerce")
+                s0_pos = s0_vals[s0_vals > 0]
+                if not s0_pos.empty:
+                    S0_val = float(s0_pos.median())
+            elif "S0" in market_df.columns:
+                s0_vals = pd.to_numeric(market_df["S0"], errors="coerce")
+                s0_pos = s0_vals[s0_vals > 0]
+                if not s0_pos.empty:
+                    S0_val = float(s0_pos.median())
+        except Exception:
+            S0_val = None
+
+        if S0_val is None or S0_val <= 0:
+            return {"success": False, "message": "S0 invalide ou manquant.", "details": {}}
+
+        r = float(data.get("r") or 0.0)
+        q = float(data.get("q") or 0.0)
+        fit_to_observed_only = bool(data.get("fit_to_observed_only", True))
+        u_max = float(data.get("u_max") or 50.0)
+        n_integration = int(data.get("n_integration") or 2000)
+        max_nfev = int(data.get("max_nfev") or 60)
+        n_starts = int(data.get("n_starts") or 1)
+        seed = data.get("seed")
+        try:
+            seed = int(seed) if seed is not None else None
+        except Exception:
+            seed = None
+        refine = bool(data.get("refine", True))
+
+        m_grid = self._to_ndarray(data.get("m_grid"))
+        t_grid = self._to_ndarray(data.get("t_grid"))
+        if m_grid.size == 0 or t_grid.size == 0:
+            iv_market, mask, m_grid, t_grid = build_fixed_grid(market_df)
+        else:
+            iv_market, mask = make_fixed_grid(market_df, m_grid, t_grid)
+        mask_bool = np.asarray(mask, dtype=bool)
+
+        pred = predict_params(iv_market, m_grid, t_grid, weights_path=WEIGHTS_PATH)
+        if not pred.get("success"):
+            return {"success": False, "message": pred.get("message", "Erreur prédiction."), "details": {"pred": pred}}
+
+        try:
+            params_nn, params_tuple_nn = self._sanitize_heston_params(pred.get("params") or {}, constraints)
+        except Exception as exc:
+            return {
+                "success": False,
+                "message": f"Paramètres NN invalides: {exc}",
+                "details": {"pred": pred},
+            }
+
+        params_final = params_nn
+        params_tuple = params_tuple_nn
+        calib = None
+        msg = str(pred.get("message") or "OK")
+
+        if refine:
+            calib = calibrate_heston_least_squares(
+                S0=S0_val,
+                r=r,
+                q=q,
+                m_grid=m_grid,
+                t_grid=t_grid,
+                iv_market=iv_market,
+                mask=mask_bool,
+                constraints=constraints,
+                fit_to_observed_only=fit_to_observed_only,
+                u_max=u_max,
+                n_integration=n_integration,
+                max_nfev=max_nfev,
+                n_starts=n_starts,
+                seed=seed,
+                x0=params_tuple_nn,
+            )
+            if calib.get("success"):
+                try:
+                    params_final, params_tuple = self._sanitize_heston_params(calib.get("params") or params_nn, constraints)
+                    msg = calib.get("message", msg)
+                except Exception as exc:
+                    msg = f"LS calibrée mais paramètres invalides: {exc}"
+            else:
+                msg = f"NN uniquement (LS: {calib.get('message', 'échec')})"
+
+        try:
+            price_grid = price_grid_from_params(S0_val, m_grid, t_grid, r, q, params_tuple)
+            iv_model = implied_vol_grid(price_grid, S0_val, m_grid, t_grid, r, q)
+        except Exception as exc:
+            return {"success": False, "message": f"Erreur calcul surface modèle: {exc}", "details": {"calib": calib}}
+
+        if iv_model.shape != iv_market.shape:
+            return {
+                "success": False,
+                "message": "Shape IV modèle invalide (ne correspond pas au marché).",
+                "details": {"iv_model_shape": iv_model.shape, "iv_market_shape": iv_market.shape},
+            }
+
+        iv_error = np.where(mask_bool, iv_model - iv_market, np.nan)
+        metrics = self._iv_error_metrics(iv_error, mask_bool)
+        vega_weights = compute_bs_vega_grid(S0_val, m_grid, t_grid, r, q, iv_market)
+        metrics_vw = iv_error_metrics_weighted(iv_error, mask_bool, vega_weights)
+
+        result = {
+            "success": True,
+            "message": msg,
+            "method": "nn_warm_start_least_squares" if refine else "nn_warm_start",
+            "model": "heston_v1",
+            "params": params_final,
+            "metrics": metrics,
+            "metrics_vw": metrics_vw,
+            "ticker": ticker,
+            "S0": S0_val,
+            "r": r,
+            "q": q,
+            "m_grid": m_grid.tolist(),
+            "t_grid": t_grid.tolist(),
+            "iv_market": iv_market.tolist(),
+            "iv_model": iv_model.tolist(),
+            "iv_error": iv_error.tolist(),
+            "vega_weights": vega_weights.tolist(),
+            "mask": mask_bool.tolist(),
+            "details": {"pred": pred, "calibration": calib},
+        }
+        if len(params_final) != len(HESTON_PARAM_ORDER):
+            raise ValueError("Paramètres Heston: longueur inattendue.")
+
+        return result
+
     def run_heston_ls_from_surface(self, payload: Dict | None) -> Dict[str, Any]:
         """
         Least-squares Heston calibration from an IV surface (K,T,S0,iv,type).
@@ -435,6 +670,11 @@ class CalibrationController:
                 S0_val = float(S0_raw)
             elif raw_df is not None and "S0" in raw_df.columns:
                 s0_vals = pd.to_numeric(raw_df["S0"], errors="coerce")
+                s0_pos = s0_vals[s0_vals > 0]
+                if not s0_pos.empty:
+                    S0_val = float(s0_pos.median())
+            elif "S0" in market_df.columns:
+                s0_vals = pd.to_numeric(market_df["S0"], errors="coerce")
                 s0_pos = s0_vals[s0_vals > 0]
                 if not s0_pos.empty:
                     S0_val = float(s0_pos.median())
@@ -576,11 +816,9 @@ class CalibrationController:
         Kept separate from V1 to avoid changing existing behavior.
         """
         return [
+            {"key": "heston_v1", "label": "Heston (least squares)", "pricing": "cf", "calibration": "least_squares", "expensive": False},
             {"key": "sabr", "label": "SABR (Hagan analytic)", "pricing": "analytic_iv", "calibration": "least_squares", "expensive": False},
             {"key": "merton_jump_diffusion", "label": "Jump Diffusion (Merton) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
-            {"key": "bates", "label": "Bates (Heston + Jumps) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
-            {"key": "heston_fft", "label": "Heston via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
-            {"key": "heston_v1", "label": "Heston (legacy V1 engine)", "pricing": "cf_integral", "calibration": "least_squares", "expensive": False},
             {"key": "rheston", "label": "rHeston (Markovian approx) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": True},
             {"key": "rbergomi", "label": "rBergomi (MC + surrogate)", "pricing": "mc", "calibration": "mc_surrogate", "expensive": True},
             {"key": "volterra", "label": "Volterra SDE (MC proxy)", "pricing": "mc", "calibration": "mc_proxy", "expensive": True},
@@ -612,15 +850,13 @@ class CalibrationController:
         from app.model.calibration.base_calibrator import CalibratorSettings, SurfaceGrid
         from app.model.volatility_models.sabr.calibrator import SABRAnalyticCalibrator
         from app.model.volatility_models.jump_diffusion.calibrator import MertonJumpDiffusionCalibrator
-        from app.model.volatility_models.jump_diffusion.calibrator_bates import BatesCalibrator
-        from app.model.volatility_models.heston.calibrator_fft import HestonFFTCalibrator
         from app.model.volatility_models.heston.calibrator_legacy import HestonLegacyLeastSquaresCalibrator
         from app.model.volatility_models.rheston.calibrator_fft import RHestonFFTMarkovianCalibrator
         from app.model.volatility_models.rbergomi.calibrator_mc_surrogate import RBergomiMCSurrogateCalibrator
         from app.model.volatility_models.volterra.calibrator_mc import VolterraSDECalibrator
 
         data = payload or {}
-        model_key = str(data.get("model") or "").strip() or "heston_fft"
+        model_key = str(data.get("model") or "").strip() or "heston_v1"
         constraints = data.get("constraints") if isinstance(data.get("constraints"), dict) else None
 
         r_val = float(data.get("r") or 0.0)
@@ -677,12 +913,34 @@ class CalibrationController:
             mask=np.asarray(mask, dtype=bool),
         )
 
+        if model_key == "heston_v1":
+            try:
+                return self._json_safe(
+                    self.run_heston_global_calibration(
+                        {
+                            "df": market_df,
+                            "S0": float(surface.S0),
+                            "r": float(surface.r),
+                            "q": float(surface.q),
+                            "m_grid": surface.m_grid,
+                            "t_grid": surface.t_grid,
+                            "constraints": constraints,
+                            "fit_to_observed_only": fit_to_observed_only,
+                            "max_nfev": max_nfev,
+                            "n_starts": n_starts,
+                            "seed": seed,
+                            "ticker": data.get("ticker"),
+                            "refine": True,
+                        }
+                    )
+                )
+            except Exception as exc:
+                return {"success": False, "message": f"Erreur calibration Heston: {exc}", "details": {}}
+
         calibrator_map = {
+            "heston_v1": HestonLegacyLeastSquaresCalibrator(),
             "sabr": SABRAnalyticCalibrator(),
             "merton_jump_diffusion": MertonJumpDiffusionCalibrator(),
-            "bates": BatesCalibrator(),
-            "heston_fft": HestonFFTCalibrator(),
-            "heston_v1": HestonLegacyLeastSquaresCalibrator(),
             "rheston": RHestonFFTMarkovianCalibrator(),
             "rbergomi": RBergomiMCSurrogateCalibrator(),
             "volterra": VolterraSDECalibrator(),
@@ -704,6 +962,7 @@ class CalibrationController:
                 "method": str(result.method),
                 "params": result.params,
                 "metrics": result.metrics or {},
+                "metrics_vw": result.metrics_vw or {},
                 "S0": float(surface.S0),
                 "r": float(surface.r),
                 "q": float(surface.q),
@@ -712,10 +971,22 @@ class CalibrationController:
                 "iv_market": surface.iv_market,
                 "iv_model": result.iv_model,
                 "iv_error": result.iv_error,
+                "vega_weights": result.vega_weights,
                 "mask": surface.mask,
                 "details": result.details or {},
             }
         )
+
+    def compute_diagnostics(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Compute per-maturity/moneyness/smile diagnostics from a calibration result dict.
+        Kept in controller so the view layer never imports from app.model directly.
+        """
+        from app.model.calibration.diagnostics import compute_all_diagnostics
+        try:
+            return compute_all_diagnostics(result)
+        except Exception:
+            return {}
 
     def kalman_smooth(self, payload: Dict | None) -> Dict[str, Any]:
         """

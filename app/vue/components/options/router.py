@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from app.controller import options_controller as opt_ctrl
+from app.vue.components.options.plot_limits import MAX_CHART_WIDTH_PX, limit_plotly_width
 from app.vue.components.options.panels.tab_vanilla import render_panel_vanilla
 from app.vue.components.options.panels.tab_path import render_panel_path
 from app.vue.components.options.panels.tab_barrier import render_panel_barrier
@@ -219,7 +220,8 @@ def _render_iv_surface_section(ticker: str) -> None:
             ),
             height=520,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        limit_plotly_width(fig, MAX_CHART_WIDTH_PX)
+        st.plotly_chart(fig, width=int(MAX_CHART_WIDTH_PX), use_container_width=False)
 
     if source_kind.lower().startswith("calib"):
         df_cal = st.session_state.get("calib_model_surface_df")
@@ -252,7 +254,7 @@ def _render_iv_surface_section(ticker: str) -> None:
         st.session_state[_IV_SURFACE_TKR_KEY] = tkr
         st.session_state[_IV_SURFACE_DF_KEY] = None
 
-    refresh = st.button("Refresh IV surface", use_container_width=True, type="secondary")
+    refresh = st.button("Refresh IV surface", width="stretch", type="secondary")
     df_iv = st.session_state.get(_IV_SURFACE_DF_KEY)
 
     if refresh:

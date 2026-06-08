@@ -12,7 +12,12 @@ from app.model.calibration.base_calibrator import (
     SurfaceGrid,
 )
 from app.model.calibration.implied_vol import bs_call_price, implied_vol_grid
-from app.model.calibration.loss_surface import effective_mask, iv_error_metrics
+from app.model.calibration.loss_surface import (
+    compute_bs_vega_grid,
+    effective_mask,
+    iv_error_metrics,
+    iv_error_metrics_weighted,
+)
 from app.model.calibration.optimizers import latin_hypercube_samples
 from app.model.volatility_models.rbergomi.pricing_mc import price_call_grid_mc
 from app.model.volatility_models.volterra.kernels import exponential_kernel, fractional_kernel
@@ -223,6 +228,8 @@ class VolterraSDECalibrator(BaseSurfaceCalibrator):
         iv_model = implied_vol_grid(best_price_grid, S0, m_grid, t_grid, r, q)
         iv_error = np.where(mask_eff, iv_model - iv_mkt, np.nan)
         metrics = iv_error_metrics(iv_error, mask_eff)
+        vega_weights = compute_bs_vega_grid(S0, m_grid, t_grid, r, q, iv_mkt)
+        metrics_vw = iv_error_metrics_weighted(iv_error, mask_eff, vega_weights)
 
         return SurfaceCalibrationResult(
             success=True,
@@ -231,8 +238,10 @@ class VolterraSDECalibrator(BaseSurfaceCalibrator):
             method=self.method,
             params=params,
             metrics=metrics,
+            metrics_vw=metrics_vw,
             iv_model=iv_model,
             iv_error=iv_error,
+            vega_weights=vega_weights,
             details={"design": design_details, "best_design_idx": int(best_idx), "best_loss": float(best_loss)},
         )
 

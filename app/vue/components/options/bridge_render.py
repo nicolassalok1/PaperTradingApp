@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
+from app.vue.components.options.plot_limits import limit_figure_width, mark_full_width
+
 
 def render_static_line_chart(series, title: str | None = None, y_label: str | None = None) -> bool:
     """
@@ -67,9 +69,10 @@ def render_figures_grid(figs):
         pair = [f for f in figs[i : i + 2] if f is not None]
         if not pair:
             continue
-        cols = st.columns(len(pair))
+        cols = st.columns(len(pair), gap="small")
         for col, fig in zip(cols, pair):
-            col.pyplot(fig, clear_figure=True)
+            safe_fig = limit_figure_width(fig)
+            col.pyplot(safe_fig, clear_figure=True)
             plt.close(fig)
 
 
@@ -87,7 +90,7 @@ def build_close_with_strike_fig(close_series, ticker: str, strike: float | None)
         ax.set_title(f"Clôtures {tkr} (strike)")
         ax.legend(loc="best")
         fig.autofmt_xdate()
-        return fig
+        return mark_full_width(fig)
     except Exception:
         return None
 
@@ -105,5 +108,6 @@ def show_and_close(fig):
         plt.close(fig)
         return
 
-    st.pyplot(fig, clear_figure=True)
+    safe_fig = limit_figure_width(fig)
+    st.pyplot(safe_fig, clear_figure=True)
     plt.close(fig)

@@ -16,6 +16,7 @@ from app.vue.components.options.controller_bridge import (
     render_figures_grid,
     resolve_common_underlying,
     view_rainbow,
+    mark_full_width,
 )
 
 
@@ -152,6 +153,7 @@ def render_tab_rainbow():
     ax_ts.set_title(f"Clôtures {ticker_a or 'A'} / {ticker_b or 'B'}")
     ax_ts.legend(loc="best")
     fig_ts.autofmt_xdate()
+    mark_full_width(fig_ts)
     figs.append(fig_ts)
 
     fig_pay, ax_pay = plt.subplots(figsize=(7, 4))

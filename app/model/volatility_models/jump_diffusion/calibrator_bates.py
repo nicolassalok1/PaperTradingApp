@@ -225,7 +225,14 @@ class BatesCalibrator(BaseSurfaceCalibrator):
                 K_grid, C_grid = carr_madan_fft_call_prices(
                     S0=S0, r=r, q=q, T=float(tt), cf_log_return=_cf, cfg=cfg
                 )
-                out[where] = interp_prices(K_grid=K_grid, C_grid=C_grid, K=strikes)
+                prices = np.asarray(interp_prices(K_grid=K_grid, C_grid=C_grid, K=strikes), dtype=float).reshape(-1)
+                if prices.size < where.size:
+                    padded = np.full(where.size, np.nan, dtype=float)
+                    padded[: prices.size] = prices
+                    prices = padded
+                if prices.size > where.size:
+                    prices = prices[: where.size]
+                out[where] = prices
             return out
 
         def residuals(x: np.ndarray) -> np.ndarray:
@@ -237,8 +244,7 @@ class BatesCalibrator(BaseSurfaceCalibrator):
             # soft Feller penalty
             kappa, theta, sigma, _, _, _, _, _ = [float(v) for v in x]
             feller_gap = float(max(0.0, sigma * sigma - 2.0 * kappa * theta))
-            if feller_gap > 0:
-                res = np.concatenate([res, np.array([feller_gap], dtype=float)])
+            res = np.concatenate([res, np.array([feller_gap], dtype=float)])
             return res.astype(float)
 
         runs: list[Dict[str, Any]] = []
@@ -306,7 +312,11 @@ class BatesCalibrator(BaseSurfaceCalibrator):
 
             K_grid, C_grid = carr_madan_fft_call_prices(S0=S0, r=r, q=q, T=float(tt), cf_log_return=_cf, cfg=cfg)
             strikes = (S0 * m_grid).astype(float)
-            price_grid[i_t, :] = interp_prices(K_grid=K_grid, C_grid=C_grid, K=strikes)
+            prices = np.asarray(interp_prices(K_grid=K_grid, C_grid=C_grid, K=strikes), dtype=float).reshape(-1)
+            row = np.full_like(price_grid[i_t, :], np.nan, dtype=float)
+            n = min(row.size, prices.size)
+            row[:n] = prices[:n]
+            price_grid[i_t, :] = row
 
         iv_model = implied_vol_grid(price_grid, S0, m_grid, t_grid, r, q)
         iv_error = np.where(mask_eff, iv_model - iv_mkt, np.nan)

@@ -13,7 +13,12 @@ from app.model.calibration.base_calibrator import (
 from app.model.calibration.heston_calibrator import calibrate_heston_least_squares
 from app.model.calibration.heston_pricer import price_grid_from_params
 from app.model.calibration.implied_vol import implied_vol_grid
-from app.model.calibration.loss_surface import effective_mask, iv_error_metrics
+from app.model.calibration.loss_surface import (
+    compute_bs_vega_grid,
+    effective_mask,
+    iv_error_metrics,
+    iv_error_metrics_weighted,
+)
 
 
 class HestonLegacyLeastSquaresCalibrator(BaseSurfaceCalibrator):
@@ -87,6 +92,8 @@ class HestonLegacyLeastSquaresCalibrator(BaseSurfaceCalibrator):
         iv_model = implied_vol_grid(price_grid, S0, m_grid, t_grid, r, q)
         iv_error = np.where(mask_eff, iv_model - iv_mkt, np.nan)
         metrics = iv_error_metrics(iv_error, mask_eff)
+        vega_weights = compute_bs_vega_grid(S0, m_grid, t_grid, r, q, iv_mkt)
+        metrics_vw = iv_error_metrics_weighted(iv_error, mask_eff, vega_weights)
 
         return SurfaceCalibrationResult(
             success=True,
@@ -95,8 +102,10 @@ class HestonLegacyLeastSquaresCalibrator(BaseSurfaceCalibrator):
             method=self.method,
             params={k: float(v) for k, v in params.items()},
             metrics=metrics,
+            metrics_vw=metrics_vw,
             iv_model=iv_model,
             iv_error=iv_error,
+            vega_weights=vega_weights,
             details=out,
         )
 
