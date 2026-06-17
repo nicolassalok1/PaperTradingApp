@@ -79,28 +79,37 @@
   + 21 smoke). E2E : recharger l'app avec clé révoquée → message propre, **plus de boîte rouge**.
 
 ## E03 — Console navigateur : couleurs de thème sidebar invalides (vides)
-- **Statut** : OPEN
-- **Sévérité** : WARNING
-- **Catégorie** : config/dépendance (thème frontend Streamlit 1.51)
+- **Statut** : WONTFIX (quirk upstream Streamlit 1.51, justifié)
+- **Sévérité** : WARNING (cosmétique — console navigateur uniquement, 0 impact user/fonctionnel)
+- **Catégorie** : dépendance (thème frontend Streamlit 1.51)
 - **Message** (3 distincts, ré-émis à chaque rerun) :
   `Invalid color passed for widgetBackgroundColor / widgetBorderColor / skeletonBackgroundColor
   in theme.sidebar: ""`
-- **Cause racine** : (à confirmer) `config.toml` définit `[theme]` mais aucun token de couleur
-  sidebar ; Streamlit 1.51 dérive les couleurs widget sidebar et reçoit des chaînes vides.
-- **Fix** : (Phase 2) définir les tokens sidebar manquants dans `config.toml` (vérifier doc thème
-  Streamlit 1.51 via context7) OU confirmer défaut upstream à justifier.
+- **Cause racine** : `widgetBackgroundColor` / `widgetBorderColor` / `skeletonBackgroundColor`
+  sont des **tokens internes dérivés** de Streamlit, **pas des clés configurables** (absents
+  de la doc des options `[theme]`/`[theme.sidebar]`). Streamlit 1.51 dérive ces tokens pour la
+  sidebar à partir de valeurs vides → le frontend émet le warning. Le défaut est **interne à
+  Streamlit**, indépendant de la config app.
+- **Tenté & infirmé** : ajout d'un bloc `[theme.sidebar]` (backgroundColor/secondaryBackgroundColor,
+  via doc context7) → **warnings inchangés** (toujours 21 = 7×3). Reverté (no-op). Ces tokens
+  ne sont pas atteignables par config, et un warning console frontend ne peut pas être filtré
+  côté app.
+- **Fix** : aucun côté app. Disparaîtra à un futur upgrade Streamlit. À ré-vérifier après bump.
 
 ## E04 — DeprecationWarning matplotlib (API pyparsing) ×3, à l'import
-- **Statut** : OPEN (décision deps)
-- **Sévérité** : WARNING
+- **Statut** : WONTFIX (env) — bump matplotlib **optionnel**
+- **Sévérité** : WARNING (masqué par défaut)
 - **Catégorie** : dépendance/déprécation
 - **Message** : `matplotlib/_fontconfig_pattern.py:88 'parseString' deprecated`,
   `:92 'resetCache' deprecated`, `_mathtext.py:45 'enablePackrat' deprecated`.
 - **Cause racine** : matplotlib (utilisé dans `model/options/engines/{pricing,tree}.py`,
   `model/yieldcurve/engine.py` + vues) appelle l'ancienne API pyparsing. **Code app non
   concerné** — interne à matplotlib.
-- **Fix** : (Phase 2) décision USER — bump matplotlib / pin pyparsing / `warnings.filterwarnings`
-  ciblé. Candidat `WONTFIX (env)` si on ne touche pas les deps.
+- **Important** : ce sont des `DeprecationWarning`, **masqués par défaut** en Python. Ils
+  n'apparaissent **qu'avec `PYTHONWARNINGS=default`** (ma capture) — **invisibles en run
+  normal et sur le cloud**. Aucun impact user.
+- **Fix** : aucun requis. Optionnel si on veut des logs CI propres : bump matplotlib vers une
+  version compatible pyparsing récent (impact deps à valider — prudence vu le boot cloud).
 
 ## E05 — PendingDeprecationWarning conda (bruit de `conda run`)
 - **Statut** : WONTFIX (env)
@@ -121,7 +130,7 @@
 
 1. ✅ **E02** (code-bug) — FIXED.
 2. **E00** — USER : reboot de l'app Streamlit Cloud (prod down).
-3. **E03** (warning thème) — compléter les couleurs sidebar dans `config.toml`.
+3. ✅ **E03** (warning thème) — WONTFIX (quirk interne Streamlit 1.51, cosmétique).
 4. **E04** (déprécation matplotlib) — décision deps avec le user.
 5. **E01 / E06** — actions USER (rotation clé Alpaca / clé OpenAI).
 6. **E05** — rien (bruit env).
