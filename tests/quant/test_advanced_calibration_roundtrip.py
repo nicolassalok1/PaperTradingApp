@@ -61,3 +61,48 @@ def test_merton_roundtrip_recovers_surface():
     iv_model = np.asarray(res.iv_model, dtype=float)
     assert np.isfinite(iv_model[mask]).all()
     assert res.metrics["mae"] < 3e-2  # global 4-param fit + FFT/IV discretisation
+
+
+def _smooth_smile_market(S0=100.0, r=0.02, q=0.0):
+    M, T = np.meshgrid(_M, _T)
+    iv = 0.2 + 0.1 * (M - 1.0) ** 2 + 0.03 * (T - 0.25)
+    return SurfaceGrid(S0=S0, r=r, q=q, m_grid=_M, t_grid=_T, iv_market=iv, mask=np.isfinite(iv))
+
+
+def test_rbergomi_calibration_is_robust():
+    from app.model.volatility_models.rbergomi.calibrator_mc_surrogate import (
+        RBergomiMCSurrogateCalibrator,
+    )
+
+    market = _smooth_smile_market()
+    cons = {"mc_cfg": {"n_paths": 300, "n_steps": 12, "n_design": 4, "n_surrogate_candidates": 16}}
+    res = RBergomiMCSurrogateCalibrator().calibrate(
+        market, constraints=cons, settings=CalibratorSettings(seed=0)
+    )
+    assert res.success is True
+    iv_model = np.asarray(res.iv_model, dtype=float)
+    assert iv_model.shape == (len(_T), len(_M))
+    assert np.isfinite(iv_model).any()
+    assert all(np.isfinite(float(v)) for v in res.metrics.values())
+    bounds = {"H": (0.02, 0.49), "eta": (0.05, 5.0), "rho": (-0.999, 0.999), "xi0": (1e-4, 1.5)}
+    for k, (lo, hi) in bounds.items():
+        assert lo <= float(res.params[k]) <= hi
+
+
+def test_volterra_calibration_is_robust():
+    from app.model.volatility_models.volterra.calibrator_mc import VolterraSDECalibrator
+
+    market = _smooth_smile_market()
+    cons = {"mc_cfg": {"n_paths": 300, "n_steps": 12, "n_design": 4}}
+    res = VolterraSDECalibrator().calibrate(
+        market, constraints=cons, settings=CalibratorSettings(seed=0)
+    )
+    assert res.success is True
+    iv_model = np.asarray(res.iv_model, dtype=float)
+    assert iv_model.shape == (len(_T), len(_M))
+    assert np.isfinite(iv_model).any()
+    assert all(np.isfinite(float(v)) for v in res.metrics.values())
+    bounds = {"kappa": (0.0, 10.0), "theta": (1e-4, 1.5), "xi": (1e-3, 5.0),
+              "rho": (-0.999, 0.999), "v0": (1e-4, 1.5)}
+    for k, (lo, hi) in bounds.items():
+        assert lo <= float(res.params[k]) <= hi
