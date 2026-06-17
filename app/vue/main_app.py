@@ -213,6 +213,11 @@ def _arrow_safe_df(df):
     if not isinstance(df, pd.DataFrame):
         return df
     df_safe = df.copy()
+    # Streamlit/Arrow warns when column names are of mixed type and silently coerces
+    # them to str ("...not roundtrip correctly"). Normalise here (display-only copy)
+    # so the table converts cleanly and quietly.
+    if len({type(c) for c in df_safe.columns}) > 1:
+        df_safe.columns = [str(c) for c in df_safe.columns]
     for col in df_safe.columns:
         if df_safe[col].dtype == object:
             df_safe[col] = df_safe[col].apply(
