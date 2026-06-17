@@ -215,9 +215,16 @@ def render_tab() -> None:
         badge="Overview",
     )
 
-    summary = ctrl.get_account_summary()
-    drawdown = ctrl.get_drawdowns()
-    risk = ctrl.get_live_risk_snapshot()
+    # Degrade gracefully on Alpaca data failure (e.g. revoked credentials, which the
+    # engine's offline fallback does not catch), like the other Alpaca tabs — a clean
+    # message instead of a raw red traceback box bubbling up to the top-level handler.
+    try:
+        summary = ctrl.get_account_summary()
+        drawdown = ctrl.get_drawdowns()
+        risk = ctrl.get_live_risk_snapshot()
+    except Exception as exc:
+        st.error(f"Unable to load account: {exc}")
+        return
 
     _render_account_overview(summary, drawdown, risk)
     st.divider()

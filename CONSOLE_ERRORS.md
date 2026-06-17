@@ -1,0 +1,169 @@
+# CONSOLE_ERRORS.md — Runtime console-error hunt
+
+> Suivi de la traque des erreurs/warnings au runtime de l'app Streamlit `PaperTradingApp`.
+>
+> **Capture locale (Phase 0)** : Streamlit headless dans l'env conda `papertrading` avec
+> `PYTHONWARNINGS=default` (`scripts/capture_console.ps1`), sortie → `logs/console_runtime.log`.
+> Navigation + console navigateur + boîtes rouges via Playwright. Les 8 onglets top-level
+> utilisent `st.tabs`, qui **rend le code de tous les onglets à chaque exécution** : un seul
+> chargement exerce tout le code de rendu (Dashboard, Portefeuille & Risque, Trading + sous-
+> onglets Spot/Ordres/Options, Hedging, Yield Curve, Calibration, Options ×6 modèles ×6
+> panneaux stratégie, Bots).
+>
+> **Capture prod** : log de déploiement Streamlit Cloud (`logs-...-2026-06-17T06_31_32.285Z.txt`).
+>
+> **Résultat** : prod KO au boot (E00). En local : 0 traceback serveur, 1 boîte rouge (Dashboard,
+> E02→FIXED), + warnings (E03 thème, E04 matplotlib, E05 conda).
+
+## État temporaire à restaurer en fin de traque
+- [x] `.streamlit/config.toml` `[logger] level` = `"error"` (déjà restauré par l'utilisateur).
+- [ ] `scripts/capture_console.ps1` + `CONSOLE_ERRORS.md` : garder (utiles) ou retirer selon décision.
+
+---
+
+## E00 — [PROD DOWN] Le déploiement Streamlit Cloud ne démarre plus (cascade KeyError d'import)
+- **Statut** : NEEDS ACTION (reboot) — **pas un bug du code commité**
+- **Sévérité** : BLOCKER (prod KO, aucun onglet ne charge)
+- **Catégorie** : déploiement / runtime cloud (hot-reload)
+- **Où** : `alpaca-paper-trading.streamlit.app` (branche `main`, commit `68e04df`).
+- **Message** : 36× `ImportError: cannot import name 'main' from 'app.vue.main_app'`
+  + cascade `KeyError: 'app.utils' / 'app.model' / 'app.vue' / 'app.model.options.core.greeks'
+  / 'app.model.options.core.shared' / 'app.utils.trading_guard'` levés dans
+  `importlib._bootstrap._load_unlocked:701` (aucune frame de code app).
+- **Repro** : sur le cloud seulement, déclenché juste après `🔄 Updated app!` (05:54).
+  **Ne se reproduit PAS en local** : import à froid de `68e04df` = `IMPORT OK`.
+- **Cause racine** : hot-reload Streamlit Cloud — l'app tournait un **ancien commit
+  pré-fiabilisation** ; le pull du nouveau code (qui déplace/ajoute/supprime des modules :
+  `options/core/{greeks,shared}`, `utils/trading_guard`, split options) s'est fait **sans
+  redémarrer le process Python**. `sys.modules` mélange ancien layout caché + nouvelle
+  structure → `KeyError` sur les modules déplacés → `app.vue.main_app` n'achève pas son
+  import → `main` jamais défini. Confirmé : **0 manip `sys.modules`/`importlib.reload`**,
+  **0 `ModuleNotFoundError`** (deps cloud complètes), import à froid local OK.
+- **Fix** : **USER** — rebooter l'app (Streamlit Cloud → *Manage app → Reboot*, idéalement
+  *Clear cache* puis *Reboot*). Prévention : après un refacto qui déplace des modules, rebooter
+  plutôt que se fier au hot-reload.
+- **Réserve** : non reproductible en py3.11 localement (indispo). Si après reboot propre l'app
+  replante, monter un env py3.11 et traquer un vrai import circulaire. Le reboot tranche.
+- **Vérif** : après reboot, l'app charge ; seule subsiste la bannière Alpaca `unauthorized` (E01).
+
+## E01 — Alpaca API « unauthorized » sur tous les appels
+- **Statut** : NEEDS CONFIG
+- **Sévérité** : ERROR (bloque fonctionnellement les features Alpaca)
+- **Catégorie** : config/secrets
+- **Où** : bannière de statut + onglets Dashboard, Portefeuille & Risque, Trading, Hedging,
+  Alpaca Spot/Ordres/Options.
+- **Message** : `APIError: {"message": "unauthorized."}`
+- **Cause racine** : `.env` contient `APCA_API_KEY_ID` (26 c) + `APCA_API_SECRET_KEY` (44 c)
+  **présents mais rejetés** → clé révoquée/invalide (rotation Alpaca en attente, cf. commit
+  `68e04df`). Pas un bug code : le code charge bien les clés, la clé est invalide.
+- **Fix** : USER — régénérer une paire de clés paper Alpaca, remplacer dans `.env`. Pas de code.
+
+## E02 — L'onglet Dashboard affiche un traceback brut (boîte rouge) sur échec Alpaca
+- **Statut** : FIXED
+- **Sévérité** : ERROR
+- **Catégorie** : code-bug (robustesse / gestion d'erreur incohérente)
+- **Où** : `app/vue/tabs/tab_dashboard_v2.py` → `render_tab()`.
+- **Message** : `APIError unauthorized` rendu en boîte rouge + `st.error("Onglet '📊 Dashboard'
+  non rendu : ...")`.
+- **Cause racine** : `render_tab` appelait `get_account_summary()` / `get_drawdowns()` /
+  `get_live_risk_snapshot()` **sans `try/except`**, alors que tous les autres onglets Alpaca
+  attrapent l'erreur et affichent `st.error("Unable to load ...: {exc}")`. L'`offline fallback`
+  de l'engine ne se déclenche que sur clé vide/"dummy", pas sur clé **révoquée** → chemin LIVE
+  → `APIError` remonte au handler défensif de `main_app._render_tab` → `st.exception` (rouge).
+- **Fix** : wrapper les 3 appels eager dans `try/except Exception` → `st.error("Unable to load
+  account: {exc}")` + `return`, par parité avec `tab_alpaca_spot` / `tab_alpaca_orders`.
+  Engine non touché (surfacer l'erreur d'auth est le comportement honnête établi).
+- **Vérif** : test de régression `tests/test_dashboard_v2_graceful.py` (`@pytest.mark.unit`) —
+  monkeypatch `get_account_summary` → raise ; asserte `render_tab` ne lève pas + `st.error`
+  contient « Unable to load account » + `st.exception` jamais appelée. 22 tests verts (1 nouveau
+  + 21 smoke). E2E : recharger l'app avec clé révoquée → message propre, **plus de boîte rouge**.
+
+## E03 — Console navigateur : couleurs de thème sidebar invalides (vides)
+- **Statut** : WONTFIX (quirk upstream Streamlit 1.51, justifié)
+- **Sévérité** : WARNING (cosmétique — console navigateur uniquement, 0 impact user/fonctionnel)
+- **Catégorie** : dépendance (thème frontend Streamlit 1.51)
+- **Message** (3 distincts, ré-émis à chaque rerun) :
+  `Invalid color passed for widgetBackgroundColor / widgetBorderColor / skeletonBackgroundColor
+  in theme.sidebar: ""`
+- **Cause racine** : `widgetBackgroundColor` / `widgetBorderColor` / `skeletonBackgroundColor`
+  sont des **tokens internes dérivés** de Streamlit, **pas des clés configurables** (absents
+  de la doc des options `[theme]`/`[theme.sidebar]`). Streamlit 1.51 dérive ces tokens pour la
+  sidebar à partir de valeurs vides → le frontend émet le warning. Le défaut est **interne à
+  Streamlit**, indépendant de la config app.
+- **Tenté & infirmé** : ajout d'un bloc `[theme.sidebar]` (backgroundColor/secondaryBackgroundColor,
+  via doc context7) → **warnings inchangés** (toujours 21 = 7×3). Reverté (no-op). Ces tokens
+  ne sont pas atteignables par config, et un warning console frontend ne peut pas être filtré
+  côté app.
+- **Fix** : aucun côté app. Disparaîtra à un futur upgrade Streamlit. À ré-vérifier après bump.
+
+## E04 — DeprecationWarning matplotlib (API pyparsing) ×3, à l'import
+- **Statut** : WONTFIX (env) — bump matplotlib **optionnel**
+- **Sévérité** : WARNING (masqué par défaut)
+- **Catégorie** : dépendance/déprécation
+- **Message** : `matplotlib/_fontconfig_pattern.py:88 'parseString' deprecated`,
+  `:92 'resetCache' deprecated`, `_mathtext.py:45 'enablePackrat' deprecated`.
+- **Cause racine** : matplotlib (utilisé dans `model/options/engines/{pricing,tree}.py`,
+  `model/yieldcurve/engine.py` + vues) appelle l'ancienne API pyparsing. **Code app non
+  concerné** — interne à matplotlib.
+- **Important** : ce sont des `DeprecationWarning`, **masqués par défaut** en Python. Ils
+  n'apparaissent **qu'avec `PYTHONWARNINGS=default`** (ma capture) — **invisibles en run
+  normal et sur le cloud**. Aucun impact user.
+- **Fix** : aucun requis. Optionnel si on veut des logs CI propres : bump matplotlib vers une
+  version compatible pyparsing récent (impact deps à valider — prudence vu le boot cloud).
+
+## E05 — PendingDeprecationWarning conda (bruit de `conda run`)
+- **Statut** : WONTFIX (env)
+- **Sévérité** : WARNING (cosmétique)
+- **Catégorie** : env/outillage
+- **Cause racine** : émis par `conda run` (plugins conda), pas l'app. Disparaît dans un env activé.
+
+## E06 — `OPENAI_API_KEY` vide (latent, pas une erreur runtime actuelle)
+- **Statut** : NEEDS CONFIG (si Bots/ChatGPT utilisés)
+- **Sévérité** : WARNING (latent)
+- **Catégorie** : config/secrets
+- **Où** : onglet Bots (gate OpenAI derrière des actions ; rendu sans boîte rouge).
+- **Fix** : renseigner la clé si bots voulus ; sinon ignorer.
+
+## E07 — Yahoo Finance 429 (crumb) → 401 (options) sur le cloud
+- **Statut** : WONTFIX (externe) — déjà géré gracieusement
+- **Sévérité** : WARNING (réseau)
+- **Catégorie** : réseau/API externe
+- **Où** : prod cloud — `app/model/market_data/market_data.py` (`_refresh_yahoo_crumb` l.596,
+  `_fetch_yahoo_options_json` l.634).
+- **Message** : `[yahoo-crumb] fetch failed: 429 Too Many Requests` (getcrumb) puis
+  `[yahoo-options] fetch failed for AAPL: 401 Unauthorized`.
+- **Cause racine** : Yahoo Finance **rate-limite (429)** l'endpoint `getcrumb` — fréquent depuis
+  les **IP partagées de Streamlit Cloud**. Sans crumb valide, l'appel options renvoie 401. Le 401
+  est une **conséquence** du 429, pas un bug. Le code attrape déjà (force-refresh crumb, retry,
+  `logging.warning`, retourne `{}` → l'app dégrade). **Pas un bug code.**
+- **Fix** : aucun requis. Améliorations optionnelles : cache crumb + backoff sur 429,
+  `st.cache_data` sur la chaîne d'options, ou baisser le niveau de log (root → named logger).
+  Le throttling Yahoo depuis le cloud restera de toute façon.
+
+## E08 — Streamlit : « DataFrame has column names of mixed type » (UserWarning)
+- **Statut** : FIXED
+- **Sévérité** : WARNING (cosmétique — la table s'affiche, noms de colonnes coercés en str)
+- **Catégorie** : code-bug (affichage/données)
+- **Où** : `streamlit/dataframe_util.py:829` à la conversion Arrow d'un `st.dataframe`.
+- **Message** : `UserWarning: The DataFrame has column names of mixed type. They will be
+  converted to strings and not roundtrip correctly.`
+- **Cause racine** : un DataFrame avec des **noms de colonnes de types mixtes** (str + int/float)
+  atteint la conversion Arrow. `main_app._arrow_safe_df` (chokepoint d'affichage qui wrappe
+  `st.dataframe`) coerçait les *valeurs* objets mais **pas les *noms* de colonnes**.
+- **Fix** : étendre `_arrow_safe_df` — si les types des noms de colonnes sont hétérogènes,
+  les coercer en str sur la **copie d'affichage** (sans muter le DataFrame appelant). Global,
+  display-only, cohérent avec le pattern existant. Test `tests/test_arrow_safe_df.py`.
+- **Réserve** : couvre le chemin `st.dataframe` (wrappé). Si le warning persiste, c'est qu'un
+  df est affiché via une méthode non-wrappée (`st.table`/`st.write`) — patcher au cas par cas.
+- **Vérif** : 24 tests verts (2 E08 + E02 + smoke).
+
+---
+
+## Ordre de traitement (Phase 2)
+
+1. ✅ **E02** (code-bug) — FIXED.
+2. **E00** — USER : reboot de l'app Streamlit Cloud (prod down).
+3. ✅ **E03** (warning thème) — WONTFIX (quirk interne Streamlit 1.51, cosmétique).
+4. **E04** (déprécation matplotlib) — décision deps avec le user.
+5. **E01 / E06** — actions USER (rotation clé Alpaca / clé OpenAI).
+6. **E05** — rien (bruit env).
