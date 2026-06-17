@@ -13,7 +13,7 @@ Ordre strict — chaque étape est un gate vérifiable. **Le smoke test offline 
 - **Snapshot de caractérisation minimal du comportement public de `controller_bridge`** capturé **avant** toute modif qui le touche (y compris la migration ConfigProvider).
 
 ### 1. Sécurité & hygiène → vérif : aucun secret versionné/loggé/dans prompts/dans cassettes ; lecture locale via env/st.secrets gitignoré, jamais affichée ; gitleaks clean
-- Régénérer la clé Alpaca paper (compromise car lue pendant l'audit).
+- TODO 2026-06-17 : régénérer les identifiants Alpaca paper actuellement enregistrés dans Streamlit Cloud, puis redémarrer l'app et vérifier que l'erreur `unauthorized` disparaît. Ne jamais versionner ni journaliser les nouvelles valeurs.
 - **`ConfigProvider` indépendant de Streamlit** (utils/config pur) ; la **vue injecte** la valeur. Pas de `st.secrets` dans `utils`.
 - `.env.example` sans secret ; `.env` + `.streamlit/secrets.toml` + `logs/` + artefacts debug gitignorés.
 - **Logging structuré rédigé minimal** introduit dès cette couche config/adapters (jamais de secret en clair dans les logs).
