@@ -124,6 +124,39 @@
 - **Où** : onglet Bots (gate OpenAI derrière des actions ; rendu sans boîte rouge).
 - **Fix** : renseigner la clé si bots voulus ; sinon ignorer.
 
+## E07 — Yahoo Finance 429 (crumb) → 401 (options) sur le cloud
+- **Statut** : WONTFIX (externe) — déjà géré gracieusement
+- **Sévérité** : WARNING (réseau)
+- **Catégorie** : réseau/API externe
+- **Où** : prod cloud — `app/model/market_data/market_data.py` (`_refresh_yahoo_crumb` l.596,
+  `_fetch_yahoo_options_json` l.634).
+- **Message** : `[yahoo-crumb] fetch failed: 429 Too Many Requests` (getcrumb) puis
+  `[yahoo-options] fetch failed for AAPL: 401 Unauthorized`.
+- **Cause racine** : Yahoo Finance **rate-limite (429)** l'endpoint `getcrumb` — fréquent depuis
+  les **IP partagées de Streamlit Cloud**. Sans crumb valide, l'appel options renvoie 401. Le 401
+  est une **conséquence** du 429, pas un bug. Le code attrape déjà (force-refresh crumb, retry,
+  `logging.warning`, retourne `{}` → l'app dégrade). **Pas un bug code.**
+- **Fix** : aucun requis. Améliorations optionnelles : cache crumb + backoff sur 429,
+  `st.cache_data` sur la chaîne d'options, ou baisser le niveau de log (root → named logger).
+  Le throttling Yahoo depuis le cloud restera de toute façon.
+
+## E08 — Streamlit : « DataFrame has column names of mixed type » (UserWarning)
+- **Statut** : FIXED
+- **Sévérité** : WARNING (cosmétique — la table s'affiche, noms de colonnes coercés en str)
+- **Catégorie** : code-bug (affichage/données)
+- **Où** : `streamlit/dataframe_util.py:829` à la conversion Arrow d'un `st.dataframe`.
+- **Message** : `UserWarning: The DataFrame has column names of mixed type. They will be
+  converted to strings and not roundtrip correctly.`
+- **Cause racine** : un DataFrame avec des **noms de colonnes de types mixtes** (str + int/float)
+  atteint la conversion Arrow. `main_app._arrow_safe_df` (chokepoint d'affichage qui wrappe
+  `st.dataframe`) coerçait les *valeurs* objets mais **pas les *noms* de colonnes**.
+- **Fix** : étendre `_arrow_safe_df` — si les types des noms de colonnes sont hétérogènes,
+  les coercer en str sur la **copie d'affichage** (sans muter le DataFrame appelant). Global,
+  display-only, cohérent avec le pattern existant. Test `tests/test_arrow_safe_df.py`.
+- **Réserve** : couvre le chemin `st.dataframe` (wrappé). Si le warning persiste, c'est qu'un
+  df est affiché via une méthode non-wrappée (`st.table`/`st.write`) — patcher au cas par cas.
+- **Vérif** : 24 tests verts (2 E08 + E02 + smoke).
+
 ---
 
 ## Ordre de traitement (Phase 2)
