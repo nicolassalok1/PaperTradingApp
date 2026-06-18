@@ -77,7 +77,8 @@ def apply_degeneracy_guard(result: "SurfaceCalibrationResult") -> "SurfaceCalibr
 
     if all_nan or metrics_bad:
         result.success = False
-        result.message = f"Calibration dégénérée: surface modèle non finie (NaN). [{result.message}]"
+        reason = "surface modèle non finie (NaN)" if all_nan else "métriques non finies"
+        result.message = f"Calibration dégénérée: {reason}. [{result.message}]"
     return result
 
 

@@ -51,6 +51,7 @@ def test_guard_flips_non_finite_metrics_to_failure():
     )
     apply_degeneracy_guard(res)
     assert res.success is False
+    assert "métriques non finies" in res.message  # accurate reason, not "surface NaN"
 
 
 def test_guard_keeps_partial_nan_success():
