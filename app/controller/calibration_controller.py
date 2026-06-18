@@ -847,7 +847,7 @@ class CalibrationController:
         New unified calibration runner used by the Advanced Calibration tab.
         All numerics live in the model layer; the controller only orchestrates.
         """
-        from app.model.calibration.base_calibrator import CalibratorSettings, SurfaceGrid
+        from app.model.calibration.base_calibrator import CalibratorSettings, SurfaceGrid, apply_degeneracy_guard
         from app.model.volatility_models.sabr.calibrator import SABRAnalyticCalibrator
         from app.model.volatility_models.jump_diffusion.calibrator import MertonJumpDiffusionCalibrator
         from app.model.volatility_models.heston.calibrator_legacy import HestonLegacyLeastSquaresCalibrator
@@ -953,6 +953,8 @@ class CalibrationController:
             result = calibrator.calibrate(surface, constraints=constraints, settings=settings)
         except Exception as exc:
             return {"success": False, "message": f"Erreur calibration: {exc}", "details": {}}
+
+        apply_degeneracy_guard(result)
 
         return self._json_safe(
             {

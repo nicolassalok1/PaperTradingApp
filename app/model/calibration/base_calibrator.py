@@ -49,6 +49,39 @@ class SurfaceCalibrationResult:
     details: Dict[str, Any] | None = None
 
 
+def apply_degeneracy_guard(result: "SurfaceCalibrationResult") -> "SurfaceCalibrationResult":
+    """Flip a falsely-successful calibration to an explicit failure.
+
+    A model that returns success=True while producing an entirely non-finite
+    (all-NaN/inf) IV surface, or non-finite error metrics, is degenerate: the UI
+    would show blank heatmaps while claiming success. Detect that and set
+    success=False with a clear message. Mutates and returns `result`.
+
+    Does NOT flag a partially-NaN surface (e.g. SABR with unobserved maturities)
+    as long as at least one model cell is finite and the metrics are finite.
+    """
+    if not result.success:
+        return result
+
+    iv = result.iv_model
+    iv_arr = np.asarray(iv, dtype=float) if iv is not None else None
+    all_nan = iv_arr is None or iv_arr.size == 0 or not np.isfinite(iv_arr).any()
+
+    metrics = result.metrics or {}
+    metric_vals = [
+        float(v)
+        for k, v in metrics.items()
+        if k != "n" and isinstance(v, (int, float))
+    ]
+    metrics_bad = bool(metric_vals) and any(not np.isfinite(v) for v in metric_vals)
+
+    if all_nan or metrics_bad:
+        result.success = False
+        reason = "surface modèle non finie (NaN)" if all_nan else "métriques non finies"
+        result.message = f"Calibration dégénérée: {reason}. [{result.message}]"
+    return result
+
+
 class BaseSurfaceCalibrator(ABC):
     """
     Unified calibration interface (model layer).

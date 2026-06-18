@@ -28,6 +28,10 @@ from app.vue.components.surface_ui import (
 
 TAB_LABEL = "🧪 Calibration avancée"
 
+# Models still hidden behind the "en cours d'implémentation" placeholder.
+# All advanced models are functional + tested, so this is now empty.
+_IN_PROGRESS_MODELS: set[str] = set()
+
 _CHAIN_STATE_KEY = "adv_calib_alpaca_chain_df"
 _CHAIN_TICKER_KEY = "adv_calib_alpaca_chain_ticker"
 _TICKERS_STATE_KEY = "adv_calib_alpaca_underlyings"
@@ -398,7 +402,7 @@ def render_tab() -> None:
     tab_labels = [override_labels.get(k, key_to_spec.get(k, {}).get("label", k)) for k in model_keys]
     tabs = st.tabs(tab_labels)
 
-    in_progress_models = {"rheston", "rbergomi", "volterra", "merton_jump_diffusion", "sabr"}
+    in_progress_models = _IN_PROGRESS_MODELS
 
     for model_key, tab_label, tab in zip(model_keys, tab_labels, tabs):
         def _k(base: str) -> str:
@@ -463,12 +467,18 @@ def render_tab() -> None:
                 hours = mins / 60.0
                 return f"{hours:.1f} h"
 
-            per_eval = 0.05
-            if model_key in {"rheston", "rbergomi", "volterra"}:
-                per_eval *= 5.0
-            eta_seconds = per_eval * float(max_nfev) * float(max(1, n_starts))
-            eta_label = _eta_human(eta_seconds)
-            st.caption(f"ETA estimée: ~{eta_label} (heuristique; dépend du modèle et des données).")
+            if model_key in {"rbergomi", "volterra"}:
+                st.caption(
+                    "ETA: pilotée par la config Monte-Carlo interne (n_paths/n_design), "
+                    "indépendante des réglages nfev/starts. Compter quelques secondes."
+                )
+            else:
+                per_eval = 0.05
+                if model_key == "rheston":
+                    per_eval *= 5.0
+                eta_seconds = per_eval * float(max_nfev) * float(max(1, n_starts))
+                eta_label = _eta_human(eta_seconds)
+                st.caption(f"ETA estimée: ~{eta_label} (heuristique; dépend du modèle et des données).")
 
             can_run = isinstance(calib_df, pd.DataFrame) and not calib_df.empty
             run_key = _k("adv_calib_run_btn")
