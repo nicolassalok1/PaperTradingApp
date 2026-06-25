@@ -94,6 +94,9 @@ def test_controller_bridge_imports_offline():
 
 
 @pytest.mark.smoke
-def test_all_eleven_tabs_present():
-    # Locks the "11/11 tabs" invariant established by the audit.
-    assert len(_tab_modules()) == 11, _tab_modules()
+def test_all_twelve_tabs_present():
+    # Locks the tab-count invariant. 11 from the original audit + the
+    # "🧪 Exercices" tab (tab_exercices) added with the Portfolio Allocation exercise.
+    mods = _tab_modules()
+    assert len(mods) == 12, mods
+    assert "app.vue.tabs.tab_exercices" in mods, mods

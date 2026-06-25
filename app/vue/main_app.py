@@ -47,6 +47,9 @@ TAB_GROUPS = {
         "🧪 Calibration avancée",
         "📈 Options",
     ],
+    "🎓 Exercices": [
+        "🧪 Exercices",
+    ],
     "🧰 Outils": [
         "🤖 Bots",
     ],
@@ -61,6 +64,7 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     "tab_hedging_systems": "🛡️ Hedging Systems",
     "tab_yieldcurve": "🧮 Yield Curve",
     "tab_advanced_calibration": "🧪 Calibration avancée",
+    "tab_exercices": "🧪 Exercices",
     "tab_bots": "🤖 Bots",
     # Internal trading sub-tabs (kept inside 💹 Trading only)
     "tab_alpaca_spot": "Alpaca Spot",
