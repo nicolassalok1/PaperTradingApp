@@ -5,8 +5,11 @@ Accepts the option JSON schema used in options_book.json/custom options.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Dict, Tuple
+
+_GREEK_NAMES = ("delta", "gamma", "vega", "theta", "rho")
 
 
 def _norm_cdf(x: float) -> float:
@@ -44,17 +47,26 @@ def compute_vanilla_greeks(option: Dict, spot: float) -> Dict[str, float]:
             days = (expiry - datetime.date.today()).days
             T = max(days, 0) / 365.0
         except Exception:
-            T = 0.5
+            logging.warning(
+                "[greeks] unreadable expiration %r — reporting zero greeks",
+                option.get("expiration"),
+            )
+            T = 0.0
     if T <= 0:
-        T = 0.5
+        # An expired contract has no optionality left. Never fabricate a maturity:
+        # a made-up T would report vega/gamma on a position that no longer exists.
+        return dict.fromkeys(_GREEK_NAMES, 0.0)
 
     d1, d2 = _bs_d1_d2(spot, K, T, r, q, sigma)
-    sign = 1.0 if opt_type == "call" else -1.0
     nd1 = _norm_pdf(d1)
-    Nd1 = _norm_cdf(sign * d1)
-    Nd2 = _norm_cdf(sign * d2)
 
-    delta = math.exp(-q * T) * (Nd1 if opt_type == "call" else Nd1 - 1)
+    # delta_call = e^{-qT} N(d1) ; delta_put = -e^{-qT} N(-d1).
+    # N(-d1) - 1 == -N(d1) only at the money, hence the historical put bug.
+    delta = (
+        math.exp(-q * T) * _norm_cdf(d1)
+        if opt_type == "call"
+        else -math.exp(-q * T) * _norm_cdf(-d1)
+    )
     gamma = (
         math.exp(-q * T) * nd1 / (spot * sigma * math.sqrt(T))
         if spot > 0 and sigma > 0 and T > 0
