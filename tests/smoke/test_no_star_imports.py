@@ -35,22 +35,12 @@ def _module_name(path: Path) -> str:
     return ".".join(parts)
 
 
-# app.vue.components.options.ui_main imports app.vue.pages.shared_ui, and app/vue/pages/
-# does not exist — the module cannot be imported at all, and nothing in the repo imports
-# it. Proven dead code, removed under D4; excluded here so this guard stays meaningful
-# instead of red for an unrelated reason.
-_UNIMPORTABLE = {"app.vue.components.options.ui_main"}
-
-
 def _options_modules() -> list[str]:
     out = []
     for py in sorted(OPTIONS_PKG.rglob("*.py")):
         if "__pycache__" in py.parts:
             continue
-        name = _module_name(py)
-        if name in _UNIMPORTABLE:
-            continue
-        out.append(name)
+        out.append(_module_name(py))
     return out
 
 
