@@ -20,15 +20,22 @@ def _bsm_price(S0, K, r, q, T, sigma, option_type="call"):
 def price_forward_start(S0, r, q, T_start, T_end, sigma, option_type="call"):
     if T_end <= T_start:
         return 0.0
+    # Rubinstein: the strike is fixed at T_start to the spot observed then, so by
+    # scaling the value is S0*exp(-q*T_start) times an at-the-money vanilla over the
+    # remaining maturity tau. Both legs are discounted, and the (r-q) drift belongs
+    # in d1 — dropping either is invisible at r = q = 0 and wrong everywhere else.
     tau = float(T_end) - float(T_start)
-    forward = float(S0) * math.exp((float(r) - float(q)) * float(T_start))
-    d1 = (0.5 * float(sigma) ** 2 * tau) / (float(sigma) * math.sqrt(tau))
-    d2 = d1 - float(sigma) * math.sqrt(tau)
+    sigma = float(sigma)
+    root = sigma * math.sqrt(tau)
+    d1 = (float(r) - float(q) + 0.5 * sigma * sigma) * tau / root
+    d2 = d1 - root
 
-    disc = math.exp(-float(r) * tau)
+    prefactor = float(S0) * math.exp(-float(q) * float(T_start))
+    disc_r = math.exp(-float(r) * tau)
+    disc_q = math.exp(-float(q) * tau)
     if str(option_type).lower().startswith("c"):
-        return float(forward * _norm_cdf(d1) - forward * _norm_cdf(d2) * disc)
-    return float(forward * _norm_cdf(-d2) * disc - forward * _norm_cdf(-d1))
+        return float(prefactor * (disc_q * _norm_cdf(d1) - disc_r * _norm_cdf(d2)))
+    return float(prefactor * (disc_r * _norm_cdf(-d2) - disc_q * _norm_cdf(-d1)))
 
 
 def price_straddle(S0, K, r, q, T, sigma):
