@@ -160,41 +160,41 @@ def price_bermudan_lsmc(
     seed: int = 42,
 ):
     """
-    LongstaffÃ¢â‚¬â€œSchwartz Monte Carlo pricing for a Bermudan option
-    under risk-neutral GBM (BlackÃ¢â‚¬â€œScholes dynamics).
-    """
-    S, dt = simulate_gbm_paths(S0, r, q, sigma, T, M, N_paths, seed=seed)
-    disc = np.exp(-r * dt)
+    Longstaff-Schwartz Monte Carlo pricing for a Bermudan option
+    under risk-neutral GBM (Black-Scholes dynamics).
 
-    if cpflag == "c":
-        Y = np.maximum(S - K, 0.0)
-    elif cpflag == "p":
-        Y = np.maximum(K - S, 0.0)
-    else:
+    Thin wrapper over `mc_engine.price_mc_lsmc`, which owns the backward
+    recursion. What this signature adds is the schedule expressed as a step
+    count: the `n_ex_dates - 1` early exercise opportunities are evenly spread
+    over steps 1..M-1, maturity being the last of the `n_ex_dates` dates. It
+    returns the bare price where the engine returns a dict.
+    """
+    # Local import: mc_engine imports simulate_gbm_paths from this module.
+    from app.model.options.mc_engine import price_mc_lsmc
+
+    if cpflag not in ("c", "p"):
         raise ValueError("cpflag must be 'c' or 'p'")
 
-    C = Y[-1, :].copy()
     ex_indices = np.linspace(1, M - 1, max(1, n_ex_dates - 1), dtype=int)
-    ex_set = set(ex_indices.tolist())
+    # Steps below 1 are not exercise opportunities: the backward recursion stops
+    # at step 1, and t=0 is not an exercise date.
+    exercise_dates = [float(j) * T / M for j in sorted(set(ex_indices.tolist())) if j >= 1]
 
-    for j in range(M - 1, 0, -1):
-        C *= disc
-        if j in ex_set:
-            S_j = S[j, :]
-            Y_j = Y[j, :]
-            itm = Y_j > 0.0
-            if np.any(itm):
-                X = np.vstack([S_j[itm] ** k for k in range(degree + 1)]).T
-                y_reg = C[itm]
-                beta, *_ = np.linalg.lstsq(X, y_reg, rcond=None)
-                X_all = np.vstack([S_j**k for k in range(degree + 1)]).T
-                C_hat = X_all @ beta
-                exercise = (Y_j > C_hat) & itm
-                C[exercise] = Y_j[exercise]
-
-    C *= disc
-    price = np.mean(C)
-    return float(price)
+    out = price_mc_lsmc(
+        S0=S0,
+        K=K,
+        T=T,
+        sigma=sigma,
+        option_type="call" if cpflag == "c" else "put",
+        exercise_dates=exercise_dates,
+        r=r,
+        q=q,
+        n_steps=M,
+        n_paths=N_paths,
+        seed=seed,
+        degree=degree,
+    )
+    return float(out["price"])
 
 
 def longstaff_schwartz_price(option: Option, process, n_paths: int, n_steps: int) -> float:
