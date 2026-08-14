@@ -1076,6 +1076,71 @@ def payoff_lookback_fixed(
     return max(max_path - strike, 0.0)
 
 
+def price_lookback_fixed(
+    S: float,
+    extremum: float,
+    K: float,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    option_type: str = "call",
+) -> float:
+    """
+    Fixed-strike lookback, Conze-Viswanathan closed form.
+
+    A call pays max(M - K, 0) with M the running maximum, a put max(K - m, 0) with m
+    the running minimum; `extremum` is whichever has been observed so far, so a fresh
+    contract passes S itself. Two regimes per side, depending on whether the strike
+    has already been crossed by the running extremum.
+    """
+    S = float(S)
+    extremum = float(extremum)
+    K = float(K)
+    sigma = float(sigma)
+    T = float(T)
+    is_call = str(option_type).lower().startswith("c")
+    intrinsic = max(extremum - K, 0.0) if is_call else max(K - extremum, 0.0)
+    if S <= 0 or extremum <= 0 or K <= 0 or sigma <= 0 or T <= 0:
+        return intrinsic
+
+    b = float(r) - float(q)
+    if abs(b) < 1e-6:
+        # sigma^2/(2b) is singular at b = 0 and the bracket vanishes at the same rate.
+        b = 1e-6
+    root = sigma * math.sqrt(T)
+    disc_r = math.exp(-float(r) * T)
+    disc_q = math.exp(-float(q) * T)
+    coef = (sigma * sigma) / (2.0 * b)
+    drift_shift = (2.0 * b / sigma) * math.sqrt(T)
+
+    def _tail(ref: float, d1: float) -> float:
+        """The common sigma^2/(2b) correction term, evaluated against `ref`."""
+        power = (S / ref) ** (-2.0 * b / (sigma * sigma))
+        if is_call:
+            return coef * S * disc_r * (
+                -power * _norm_cdf(d1 - drift_shift) + math.exp(b * T) * _norm_cdf(d1)
+            )
+        return coef * S * disc_r * (
+            power * _norm_cdf(-d1 + drift_shift) - math.exp(b * T) * _norm_cdf(-d1)
+        )
+
+    if is_call:
+        # Below the running max the option is already in the money for (M - K).
+        ref = K if K > extremum else extremum
+        d1 = (math.log(S / ref) + (b + 0.5 * sigma * sigma) * T) / root
+        d2 = d1 - root
+        base = S * disc_q * _norm_cdf(d1) - ref * disc_r * _norm_cdf(d2)
+        floor = 0.0 if K > extremum else disc_r * (extremum - K)
+        return float(floor + base + _tail(ref, d1))
+
+    ref = K if K < extremum else extremum
+    d1 = (math.log(S / ref) + (b + 0.5 * sigma * sigma) * T) / root
+    base = -S * disc_q * _norm_cdf(-d1) + ref * disc_r * _norm_cdf(-d1 + root)
+    floor = 0.0 if K < extremum else disc_r * (K - extremum)
+    return float(floor + base + _tail(ref, d1))
+
+
 def view_lookback_fixed(
     spot_ref: float,
     min_path: float,
@@ -1086,13 +1151,26 @@ def view_lookback_fixed(
     T: float = DEFAULT_T,
     **kwargs,
 ):
+    option_type = kwargs.get("option_type", "call")
+    extremum = max_path if str(option_type).lower().startswith("c") else min_path
     premium = float(
-        payoff_lookback_fixed(
-            min_path, max_path, strike, option_type=kwargs.get("option_type", "call")
+        price_lookback_fixed(
+            spot_ref,
+            extremum,
+            strike,
+            r=float(kwargs.get("r", DEFAULT_R)),
+            q=float(kwargs.get("q", DEFAULT_Q)),
+            sigma=float(kwargs.get("sigma", DEFAULT_SIGMA)),
+            T=float(T),
+            option_type=option_type,
         )
     )
+    # The payoff of a fixed-strike lookback depends on the path extremum, not on the
+    # terminal spot, so a flat line IS the correct diagram — but it must be the PAYOFF,
+    # not the premium, otherwise the P&L collapses to zero at every spot.
+    payoff_value = float(payoff_lookback_fixed(min_path, max_path, strike, option_type=option_type))
     s_grid = np.linspace(spot_ref * (1.0 - span), spot_ref * (1.0 + span), n)
-    payoff_grid = np.full_like(s_grid, premium)
+    payoff_grid = np.full_like(s_grid, payoff_value)
     pnl_grid = payoff_grid - premium
     return {
         "s_grid": s_grid,

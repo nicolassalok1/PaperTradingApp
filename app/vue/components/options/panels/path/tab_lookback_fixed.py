@@ -6,8 +6,11 @@ from app.vue.components.options.controller_bridge import (
     current_spot,
     current_ticker,
     ensure_close_history,
+    get_common_div_yield,
     get_common_maturity_value,
+    get_common_sigma_value,
     get_option_context,
+    get_rate_for_ttm,
     mark_full_width,
     plt,
     render_figures_grid,
@@ -84,6 +87,9 @@ def render_tab_lookback_fixed():
         option_type=option_type_lbf,
         span=span_lbf,
         T=float(T_lbf),
+        r=float(get_rate_for_ttm(T_lbf)),
+        q=float(get_common_div_yield()),
+        sigma=float(get_common_sigma_value()),
     )
     premium = float(view_dyn.get("premium", 0.0))
     s_grid = view_dyn["s_grid"]
