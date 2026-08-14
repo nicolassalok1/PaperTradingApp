@@ -817,11 +817,30 @@ def price_asian_arith_approx(
     q: float = DEFAULT_Q,
     option_type: str = "call",
 ) -> float:
-    # Turnbull-Wakeman-esque approximation using adjusted sigma and strike
-    sigma_adj = sigma / math.sqrt(3.0)
+    # Turnbull-Wakeman / Levy: match the first two moments of the CONTINUOUS
+    # arithmetic average, then price a Black-Scholes call on that lognormal proxy.
+    # (sigma/sqrt(3) alone is the GEOMETRIC average's volatility — using it here
+    # made the arithmetic Asian identical to the geometric one, which violates AM-GM.)
+    if S <= 0 or K <= 0 or sigma <= 0 or T <= 0:
+        return 0.0
+    b = r - q
+    v2 = sigma * sigma
+    if abs(b) < 1e-8:
+        m1 = float(S)
+        m2 = 2.0 * S * S * (math.exp(v2 * T) - 1.0 - v2 * T) / (v2 * v2 * T * T)
+    else:
+        m1 = S * (math.exp(b * T) - 1.0) / (b * T)
+        m2 = 2.0 * S * S * math.exp((2.0 * b + v2) * T) / (
+            (b + v2) * (2.0 * b + v2) * T * T
+        ) + (2.0 * S * S / (b * T * T)) * (
+            1.0 / (2.0 * b + v2) - math.exp(b * T) / (b + v2)
+        )
+    sigma_a = math.sqrt(max(math.log(m2 / (m1 * m1)), 0.0) / T)
+    # Feed the matched forward m1 = S*exp(b_a*T) through the q argument.
+    q_eff = r - math.log(m1 / S) / T
     if option_type == "put":
-        return bs_price_put(S, K, r=r, q=q, sigma=sigma_adj, T=T)
-    return bs_price_call(S, K, r=r, q=q, sigma=sigma_adj, T=T)
+        return bs_price_put(S, K, r=r, q=q_eff, sigma=sigma_a, T=T)
+    return bs_price_call(S, K, r=r, q=q_eff, sigma=sigma_a, T=T)
 
 
 def view_asian_arith(
@@ -863,10 +882,18 @@ def price_asian_geom(
     q: float = DEFAULT_Q,
     option_type: str = "call",
 ) -> float:
+    # Kemna-Vorst: the continuous geometric average of a GBM is lognormal with
+    # volatility sigma/sqrt(3) AND drift b_G = (r - q - sigma^2/6)/2. Adjusting the
+    # volatility alone leaves the forward at S*exp((r-q)T) instead of S*exp(b_G*T),
+    # which overprices the call even when r = q = 0 (there b_G = -sigma^2/12).
+    if S <= 0 or K <= 0 or sigma <= 0 or T <= 0:
+        return 0.0
     sigma_g = sigma / math.sqrt(3.0)
+    b_g = 0.5 * (r - q - sigma * sigma / 6.0)
+    q_eff = r - b_g  # bs_price_* then uses forward S*exp(b_g*T) and discount exp(-rT)
     if option_type == "put":
-        return bs_price_put(S, K, r=r, q=q, sigma=sigma_g, T=T)
-    return bs_price_call(S, K, r=r, q=q, sigma=sigma_g, T=T)
+        return bs_price_put(S, K, r=r, q=q_eff, sigma=sigma_g, T=T)
+    return bs_price_call(S, K, r=r, q=q_eff, sigma=sigma_g, T=T)
 
 
 def view_asian_geom(
