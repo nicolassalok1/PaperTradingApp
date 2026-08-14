@@ -11,7 +11,7 @@ from typing import Any, Callable, Iterable
 
 import pandas as pd
 from app.utils.secrets import get_secret
-from app.utils.trading_guard import enforce_paper_endpoint
+from app.utils.trading_guard import enforce_paper_endpoint, is_paper_endpoint
 
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.live import StockDataStream
@@ -52,7 +52,7 @@ class AlpacaSpotService:
 
     def __init__(self, keys: AlpacaKeys | None = None) -> None:
         self.keys = keys or AlpacaKeys.from_env()
-        is_paper = "paper" in (self.keys.base_url or "").lower()
+        is_paper = is_paper_endpoint(self.keys.base_url)
         self.trading_client = TradingClient(
             self.keys.api_key,
             self.keys.api_secret,
