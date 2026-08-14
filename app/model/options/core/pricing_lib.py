@@ -734,14 +734,38 @@ def payoff_quanto(spot, strike: float, option_type: str = "call", fx_rate: float
 
 
 def price_quanto_bs(S: float, K: float, fx_rate: float = 1.0, **kwargs) -> float:
-    # Simplified: price vanilla then convert with fixed FX rate
+    """
+    Quanto: a foreign-denominated asset paid in domestic currency at a FIXED rate.
+
+    Converting a vanilla at a fixed rate is NOT a quanto. What defines the product is
+    the drift the fixed conversion induces under the domestic risk-neutral measure:
+
+        mu_S = r_foreign - q - rho * sigma_S * sigma_FX
+
+    so the price moves with the spot/FX correlation. Discounting stays domestic.
+
+    Optional keyword arguments, consistent with the rest of this module:
+        rho        spot/FX correlation            (default 0.0)
+        sigma_fx   FX volatility                  (default 0.0)
+        r_foreign  foreign risk-free rate         (default: the domestic rate)
+    The defaults collapse to fx_rate * vanilla Black-Scholes, i.e. the previous
+    behaviour, so no existing caller changes value.
+    """
+    r_d = float(kwargs.get("r", DEFAULT_R))
+    q = float(kwargs.get("q", DEFAULT_Q))
+    sigma = float(kwargs.get("sigma", DEFAULT_SIGMA))
+    T = float(kwargs.get("T", DEFAULT_T))
+    rho = float(kwargs.get("rho", 0.0))
+    sigma_fx = float(kwargs.get("sigma_fx", 0.0))
+    r_foreign = kwargs.get("r_foreign")
+    r_f = r_d if r_foreign is None else float(r_foreign)
+
+    mu = r_f - q - rho * sigma * sigma_fx
+    q_eff = r_d - mu  # feed the quanto forward S*exp(mu*T) through the yield argument
+
     if kwargs.get("option_type", "call") == "put":
-        return fx_rate * bs_price_put(
-            S, K, **{k: v for k, v in kwargs.items() if k in {"r", "q", "sigma", "T"}}
-        )
-    return fx_rate * bs_price_call(
-        S, K, **{k: v for k, v in kwargs.items() if k in {"r", "q", "sigma", "T"}}
-    )
+        return fx_rate * bs_price_put(S, K, r=r_d, q=q_eff, sigma=sigma, T=T)
+    return fx_rate * bs_price_call(S, K, r=r_d, q=q_eff, sigma=sigma, T=T)
 
 
 def view_quanto(

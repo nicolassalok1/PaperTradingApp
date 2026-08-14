@@ -59,6 +59,24 @@ def render_tab_quanto():
         st.caption(f"IV récupérée (cache) ≈ {iv_quanto:.4f}")
     else:
         st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
+    sigma_fx_quanto = st.slider(
+        "σ FX (volatilité du taux de change)",
+        min_value=0.0,
+        max_value=0.5,
+        value=0.0,
+        step=0.01,
+        key=_k("quanto_sigma_fx"),
+        help="À 0, le quanto se réduit à une vanille convertie : la corrélation n'a aucun effet.",
+    )
+    rho_quanto = st.slider(
+        "ρ (corrélation spot / FX)",
+        min_value=-1.0,
+        max_value=1.0,
+        value=0.0,
+        step=0.05,
+        key=_k("quanto_rho"),
+        help="Ajustement quanto du drift : mu = r_f − q − ρ·σ·σ_FX.",
+    )
     view_dyn = view_quanto(
         float(spot_base),
         strike,
@@ -68,6 +86,8 @@ def render_tab_quanto():
         sigma=float(sigma_quanto),
         T=float(T_quanto),
         option_type=opt_type,
+        rho=float(rho_quanto),
+        sigma_fx=float(sigma_fx_quanto),
     )
     premium = float(view_dyn.get("premium", 0.0))
     s_grid = view_dyn["s_grid"]
