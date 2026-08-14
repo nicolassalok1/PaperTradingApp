@@ -46,8 +46,8 @@ Le sous-module Options est organisé en sous-domaines :
 
 ### 2.2. Autres domaines
 
-- `app/model/trading/` : exécution, systèmes de trading, logs.
-- `app/model/portfolio/` : positions, valorisation, statistiques, forwards, règlements.
+- `app/model/trading/` : exécution, systèmes de trading, logs, achat/vente.
+- `app/model/portfolio/` : positions, valorisation, forwards, règlements.
 - `app/model/yieldcurve/` : construction de courbe, engine de taux, utils de taux, services de courbe.
 - `app/model/hedger/` : agents de couverture (delta-hedger, DQN, modèles de hedging), services d’orchestration de la couverture.
 - `app/model/dashboard/` : cache et services d’agrégation pour le dashboard.

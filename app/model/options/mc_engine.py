@@ -61,11 +61,11 @@ def price_mc_european(
     return {"price": price, "stderr": stderr}
 
 
-def _regress_continuation(values: np.ndarray, states: np.ndarray) -> np.ndarray:
+def _regress_continuation(values: np.ndarray, states: np.ndarray, degree: int = 2) -> np.ndarray:
     """
-    Fit continuation value using polynomial basis [1, S, S^2].
+    Fit continuation value using polynomial basis [1, S, ..., S^degree].
     """
-    X = np.vstack([np.ones_like(states), states, states**2]).T
+    X = np.vstack([states**k for k in range(degree + 1)]).T
     coeffs, *_ = np.linalg.lstsq(X, values, rcond=None)
     return X @ coeffs
 
@@ -82,10 +82,12 @@ def price_mc_lsmc(
     n_steps: int = 252,
     n_paths: int = 20000,
     seed: int = 42,
+    degree: int = 2,
 ) -> dict:
     """
     Longstaff-Schwartz Monte Carlo pricer for American/Bermudan/European options.
     exercise_dates: iterable of exercise times in years (ascending).
+    degree: order of the polynomial basis the continuation value is regressed on.
     """
     opt = option_type.lower()
     is_call = opt.startswith("c")
@@ -127,7 +129,7 @@ def price_mc_lsmc(
         discounted = cashflows * np.exp(-r * (exercise_steps - idx) * dt)
         # Longstaff-Schwartz fits the continuation value on the in-the-money
         # paths only; regressing on all paths biases the exercise boundary.
-        cont_est = _regress_continuation(discounted[in_money], state[in_money])
+        cont_est = _regress_continuation(discounted[in_money], state[in_money], degree)
         exercise_mask = immediate[in_money] > cont_est
         # update cashflows where exercise happens
         update_indices = np.where(in_money)[0][exercise_mask]
