@@ -22,6 +22,7 @@ from app.model.market_data.service import fetch_spot_price as _fetch_stooq_spot
 from app.utils.paths import CACHE_CSV_DIR, CACHE_OHLC_DIR, CACHE_YAHOO_OPTION_CHAINS_DIR
 from app.utils.secrets import get_secret
 from app.utils.symbol_mapper import map_to_stooq
+from app.utils.trading_guard import enforce_paper_endpoint
 
 try:  # optional dependency
     from alpaca_trade_api import REST as AlpacaREST
@@ -44,7 +45,7 @@ _YAHOO_OPTIONS_CRUMB: str | None = None
 def _alpaca_credentials() -> Tuple[str | None, str | None, str]:
     key = get_secret("APCA_API_KEY_ID")
     secret = get_secret("APCA_API_SECRET_KEY")
-    base = get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
+    base = enforce_paper_endpoint(get_secret("APCA_API_BASE_URL"))
     return key, secret, base
 
 

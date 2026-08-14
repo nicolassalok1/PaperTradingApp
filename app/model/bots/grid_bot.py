@@ -6,6 +6,7 @@ from typing import Any
 from app.model.alpaca_orders.service import AlpacaOrdersService
 from app.model.market_data.market_data import fetch_spot_price
 from app.utils.secrets import get_secret
+from app.utils.trading_guard import enforce_paper_endpoint, is_paper_endpoint
 
 from .storage import GridBotConfig
 
@@ -17,10 +18,6 @@ def _safe_float(x: Any) -> float | None:
         return float(x)
     except Exception:
         return None
-
-
-def _is_paper_base_url(base_url: str | None) -> bool:
-    return "paper" in (base_url or "").lower()
 
 
 def _try_orders_service() -> tuple[AlpacaOrdersService | None, str]:
@@ -94,7 +91,7 @@ def run_grid_bot_once(
 
     Safety defaults:
     - No submission unless allow_submit=True AND config.enabled=True AND config.dry_run=False
-    - Refuses live trading unless allow_live=True (base_url does not contain 'paper')
+    - Refuses live trading unless allow_live=True (base_url is not the Alpaca paper host)
     """
     cfg = config.normalized()
     errors: list[str] = []
@@ -136,8 +133,13 @@ def run_grid_bot_once(
     submitted: list[dict[str, Any]] = []
     simulated: list[dict[str, Any]] = []
 
-    base_url = get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
-    is_paper = _is_paper_base_url(base_url)
+    # Central guard: exact-hostname check, so a URL that merely *contains* "paper"
+    # (userinfo/query/fragment/look-alike host) is never classified as paper.
+    try:
+        base_url = enforce_paper_endpoint(get_secret("APCA_API_BASE_URL"), allow_live=allow_live)
+        is_paper = is_paper_endpoint(base_url)
+    except RuntimeError:
+        is_paper = False
     if not is_paper and not allow_live:
         if allow_submit and cfg.enabled and not cfg.dry_run and to_submit:
             errors.append("Refusing to submit orders: APCA_API_BASE_URL does not look like paper trading.")
