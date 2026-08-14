@@ -179,13 +179,9 @@ def price_straddle_bs(
     sigma_put: float | None = None,
 ) -> float:
     """Straddle BS pricing with optional distinct call/put vols."""
-    sigma_c = DEFAULT_SIGMA if sigma_call is None else sigma_call
-    sigma_p = DEFAULT_SIGMA if sigma_put is None else sigma_put
-    # Fallback: if specific vols absent, use the common sigma argument.
-    if sigma_call is None:
-        sigma_c = sigma
-    if sigma_put is None:
-        sigma_p = sigma
+    # Same idiom as price_strangle_bs: a leg falls back to the common `sigma`.
+    sigma_c = sigma if sigma_call is None else sigma_call
+    sigma_p = sigma if sigma_put is None else sigma_put
     return bs_price_put(S, strike, r=r, q=q, sigma=sigma_p, T=T) + bs_price_call(
         S, strike, r=r, q=q, sigma=sigma_c, T=T
     )
