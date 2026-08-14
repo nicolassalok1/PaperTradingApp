@@ -693,12 +693,37 @@ def payoff_chooser(spot, strike: float):
     return np.abs(s - strike)
 
 
-def price_chooser_bs(S: float, K: float, **kwargs) -> float:
-    return price_straddle_bs(S, K, **kwargs)
+def price_chooser_bs(S: float, K: float, t1: float, **kwargs) -> float:
+    """
+    Simple chooser (Rubinstein 1991): at the choice date `t1` the holder keeps EITHER
+    the call or the put, both struck at K and expiring at T. Only the chosen leg
+    survives — a straddle keeps both, so a straddle is an upper bound, not the price.
+
+    Put-call parity at t1 gives
+        max(C, P) = C + (P - C)^+ = C + exp(-q*(T-t1)) * (K*exp(-(r-q)*(T-t1)) - S_t1)^+
+    i.e. a call struck K maturing T, plus exp(-q*(T-t1)) puts struck
+    K*exp(-(r-q)*(T-t1)) maturing t1. At t1 = T it collapses to the straddle.
+
+    `t1` is required on purpose: a chooser without a choice date is under-specified,
+    and guessing one would silently return a different product's price.
+    """
+    T = float(kwargs.get("T", DEFAULT_T))
+    r = float(kwargs.get("r", DEFAULT_R))
+    q = float(kwargs.get("q", DEFAULT_Q))
+    sigma = float(kwargs.get("sigma", DEFAULT_SIGMA))
+    t1 = float(t1)
+    if not 0.0 < t1 <= T:
+        raise ValueError(
+            f"chooser choice date must satisfy 0 < t1 <= T (got t1={t1!r}, T={T!r})"
+        )
+    tau = T - t1
+    call_leg = bs_price_call(S, K, r=r, q=q, sigma=sigma, T=T)
+    put_leg = bs_price_put(S, K * math.exp(-(r - q) * tau), r=r, q=q, sigma=sigma, T=t1)
+    return call_leg + math.exp(-q * tau) * put_leg
 
 
-def view_chooser(s0: float, strike: float, span: float = 0.5, n: int = 300, **kwargs):
-    premium = price_chooser_bs(s0, strike, **kwargs)
+def view_chooser(s0: float, strike: float, t1: float, span: float = 0.5, n: int = 300, **kwargs):
+    premium = price_chooser_bs(s0, strike, t1, **kwargs)
     return _build_view(payoff_chooser, premium, s0, (strike,), (), span, n)
 
 
