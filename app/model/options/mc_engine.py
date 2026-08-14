@@ -94,7 +94,6 @@ def price_mc_lsmc(
         times = [T]
 
     paths, dt = simulate_paths(S0, r, q, sigma, T, n_steps, n_paths, seed=seed)
-    discount = math.exp(-r * dt)
     intrinsic = call_payoff if is_call else put_payoff
 
     # Map exercise dates to step indices
@@ -105,27 +104,51 @@ def price_mc_lsmc(
             step_indices.append(idx)
     step_indices = sorted(step_indices)
 
-    cashflows = intrinsic(paths[-1], K)
-    exercise_flags = np.zeros_like(cashflows, dtype=bool)
+    # Maturity is always exercisable — it is the terminal payoff the backward
+    # recursion starts from. Every listed date STRICTLY before it is a genuine
+    # early-exercise opportunity, including the last one when the caller's
+    # schedule does not reach T.
+    early_indices = [i for i in step_indices if i < n_steps]
 
-    for idx in reversed(step_indices[:-1]):  # exclude maturity handled by init cashflows
+    # Per path: the cashflow currently retained, and the step at which it is paid.
+    cashflows = intrinsic(paths[-1], K)
+    exercise_steps = np.full(cashflows.shape, n_steps, dtype=np.int64)
+    exercise_flags = np.zeros(cashflows.shape, dtype=bool)
+
+    for idx in reversed(early_indices):
         state = paths[idx]
         immediate = intrinsic(state, K)
         in_money = immediate > 0
         if not np.any(in_money):
             continue
-        cont_est = _regress_continuation(cashflows * (discount ** (n_steps - idx)), state)[in_money]
+        # Discount each path's cashflow from ITS OWN exercise step back to `idx`:
+        # the gap is a number of TIME STEPS, not a number of loop iterations
+        # (two consecutive exercise dates can be dozens of steps apart).
+        discounted = cashflows * np.exp(-r * (exercise_steps - idx) * dt)
+        # Longstaff-Schwartz fits the continuation value on the in-the-money
+        # paths only; regressing on all paths biases the exercise boundary.
+        cont_est = _regress_continuation(discounted[in_money], state[in_money])
         exercise_mask = immediate[in_money] > cont_est
         # update cashflows where exercise happens
         update_indices = np.where(in_money)[0][exercise_mask]
         cashflows[update_indices] = immediate[update_indices]
+        exercise_steps[update_indices] = idx
         exercise_flags[update_indices] = True
-        # discount remaining cashflows for non-exercised paths one step
-        cashflows *= discount
 
-    price = float(np.mean(cashflows) * (discount ** 0))  # already discounted per step
-    stderr = float(np.std(cashflows, ddof=1) / math.sqrt(len(cashflows)))
+    discounted_cashflows = cashflows * np.exp(-r * exercise_steps * dt)
+    price = float(np.mean(discounted_cashflows))
+    stderr = float(np.std(discounted_cashflows, ddof=1) / math.sqrt(len(discounted_cashflows)))
     early_ex_ratio = float(np.mean(exercise_flags)) if len(exercise_flags) else 0.0
+
+    # A schedule that covers EVERY simulated step is a continuously exercisable
+    # (American) contract: it is exercisable now too, so its value can never sit
+    # below immediate exercise (no-arbitrage floor). A Bermudan schedule keeps a
+    # pure continuation value, which legitimately may be below the intrinsic.
+    if len(step_indices) >= n_steps > 1:
+        immediate_now = float(intrinsic(np.asarray([float(S0)], dtype=float), K)[0])
+        if immediate_now > price:
+            price = immediate_now
+            early_ex_ratio = 1.0
 
     return {"price": price, "stderr": stderr, "early_exercise_ratio": early_ex_ratio}
 
