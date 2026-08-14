@@ -68,6 +68,9 @@ def render_tab_lookback():
         span=span_lb,
         k_ref=float(strike_lb),
         T=float(T_lb),
+        r=float(get_rate_for_ttm(T_lb)),
+        q=float(get_common_div_yield()),
+        sigma=float(get_common_sigma_value()),
     )
     premium = float(view_dyn.get("premium", 0.0))
     price_display = abs(premium)

@@ -976,6 +976,64 @@ def payoff_lookback_floating(spot, min_path: float, max_path: float, option_type
     return np.maximum(s - min_path, 0.0)
 
 
+def price_lookback_floating(
+    S: float,
+    extremum: float,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    option_type: str = "call",
+) -> float:
+    """
+    Floating-strike lookback, Goldman-Sosin-Gatto closed form.
+
+    A call pays S_T - min over the life, a put pays max - S_T; `extremum` is the running
+    minimum (call) or maximum (put) observed so far, so a fresh contract passes S itself.
+
+    The value is ALWAYS strictly above the intrinsic while time remains — reporting the
+    intrinsic as the premium (the previous behaviour) prices away the entire optionality.
+    """
+    S = float(S)
+    extremum = float(extremum)
+    sigma = float(sigma)
+    T = float(T)
+    is_call = str(option_type).lower().startswith("c")
+    intrinsic = (S - extremum) if is_call else (extremum - S)
+    if S <= 0 or extremum <= 0 or sigma <= 0 or T <= 0:
+        return max(intrinsic, 0.0)
+
+    b = float(r) - float(q)
+    if abs(b) < 1e-6:
+        # sigma^2/(2b) is singular at b = 0; the bracket vanishes at the same rate, so a
+        # sign-preserving nudge keeps the product finite without changing it materially.
+        b = 1e-6
+    root = sigma * math.sqrt(T)
+    disc_r = math.exp(-float(r) * T)
+    disc_q = math.exp(-float(q) * T)
+    ratio = S / extremum
+    power = ratio ** (-2.0 * b / (sigma * sigma))
+    coef = (sigma * sigma) / (2.0 * b)
+
+    a1 = (math.log(ratio) + (b + 0.5 * sigma * sigma) * T) / root
+    a2 = a1 - root
+    if is_call:
+        return float(
+            S * disc_q * _norm_cdf(a1)
+            - extremum * disc_r * _norm_cdf(a2)
+            + coef * S * disc_r
+            * (power * _norm_cdf(-a1 + (2.0 * b / sigma) * math.sqrt(T))
+               - math.exp(b * T) * _norm_cdf(-a1))
+        )
+    return float(
+        extremum * disc_r * _norm_cdf(-a2)
+        - S * disc_q * _norm_cdf(-a1)
+        + coef * S * disc_r
+        * (-power * _norm_cdf(a1 - (2.0 * b / sigma) * math.sqrt(T))
+           + math.exp(b * T) * _norm_cdf(a1))
+    )
+
+
 def view_lookback(
     spot_ref: float,
     min_path: float,
@@ -986,9 +1044,17 @@ def view_lookback(
     k_ref: float | None = None,
     **kwargs,
 ):
+    option_type = kwargs.get("option_type", "call")
+    extremum = min_path if str(option_type).lower().startswith("c") else max_path
     premium = float(
-        payoff_lookback_floating(
-            spot_ref, min_path, max_path, option_type=kwargs.get("option_type", "call")
+        price_lookback_floating(
+            spot_ref,
+            extremum,
+            r=float(kwargs.get("r", DEFAULT_R)),
+            q=float(kwargs.get("q", DEFAULT_Q)),
+            sigma=float(kwargs.get("sigma", DEFAULT_SIGMA)),
+            T=float(T),
+            option_type=option_type,
         )
     )
     s_grid = np.linspace(spot_ref * (1.0 - span), spot_ref * (1.0 + span), n)
