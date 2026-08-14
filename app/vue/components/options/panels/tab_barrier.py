@@ -2,7 +2,13 @@ import streamlit as st
 from app.vue.components.options.panels.barrier.tab_grp_barrier import render_tab_grp_barrier
 from app.vue.components.options.panels.barrier.tab_digital import render_tab_digital
 from app.vue.components.options.panels.barrier.tab_asset_on import render_tab_asset_on
-from app.vue.components.options.controller_bridge import *
+from app.vue.components.options.controller_bridge import (
+    common_spot_value,
+    current_spot,
+    current_ticker,
+    ensure_close_history,
+    get_option_context,
+)
 
 
 def render_panel_barrier():

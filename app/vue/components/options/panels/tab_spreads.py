@@ -7,7 +7,13 @@ from app.vue.components.options.panels.spreads.tab_butterfly import render_tab_b
 from app.vue.components.options.panels.spreads.tab_condor import render_tab_condor
 from app.vue.components.options.panels.spreads.tab_iron_bfly import render_tab_iron_bfly
 from app.vue.components.options.panels.spreads.tab_iron_condor import render_tab_iron_condor
-from app.vue.components.options.controller_bridge import *
+from app.vue.components.options.controller_bridge import (
+    common_spot_value,
+    current_spot,
+    current_ticker,
+    ensure_close_history,
+    get_option_context,
+)
 
 
 def render_panel_spreads():
