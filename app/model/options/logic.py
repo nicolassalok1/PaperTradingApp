@@ -33,6 +33,7 @@ from app.model.options.exotic.american.pricing import (
 from app.model.options.exotic.lookback.lookback_call import lookback_call_option
 from app.utils.paths import CACHE_ALPACA_OPTION_CHAINS_DIR, CACHE_CSV_DIR, CACHE_OHLC_DIR
 from app.utils.secrets import get_secret
+from app.utils.trading_guard import enforce_paper_endpoint
 
 CLOSING_CACHE_FILE = CACHE_CSV_DIR / "closing_cache.csv"
 
@@ -44,7 +45,7 @@ def _load_alpaca_credentials():
     """Load Alpaca creds from env or app secrets."""
     key = get_secret("APCA_API_KEY_ID")
     secret = get_secret("APCA_API_SECRET_KEY")
-    base = get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
+    base = enforce_paper_endpoint(get_secret("APCA_API_BASE_URL"))
     return key, secret, base
 
 

@@ -21,6 +21,7 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 
 from app.utils.secrets import get_secret
+from app.utils.trading_guard import enforce_paper_endpoint, is_paper_endpoint
 
 
 def _to_dict(obj: Any) -> Dict[str, Any]:
@@ -132,7 +133,7 @@ class DashboardV2Client:
     def __init__(self) -> None:
         api_key = get_secret("APCA_API_KEY_ID")
         api_secret = get_secret("APCA_API_SECRET_KEY")
-        base_url = get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets"
+        base_url = enforce_paper_endpoint(get_secret("APCA_API_BASE_URL"))
 
         self.offline = False
         def _invalid(k: str | None) -> bool:
@@ -145,7 +146,7 @@ class DashboardV2Client:
             self.backend = FakeOfflineDashboardClient()
             return
 
-        is_paper = "paper" in (base_url or "").lower()
+        is_paper = is_paper_endpoint(base_url)
         self.trading = TradingClient(
             api_key,
             api_secret,

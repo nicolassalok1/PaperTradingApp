@@ -11,6 +11,7 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 from app.utils.secrets import get_secret
+from app.utils.trading_guard import enforce_paper_endpoint, is_paper_endpoint
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import GetOrdersRequest
@@ -30,7 +31,7 @@ class AlpacaKeys:
     def from_env(cls) -> "AlpacaKeys":
         api_key = (get_secret("APCA_API_KEY_ID") or "").strip()
         api_secret = (get_secret("APCA_API_SECRET_KEY") or "").strip()
-        base_url = (get_secret("APCA_API_BASE_URL") or "https://paper-api.alpaca.markets").strip()
+        base_url = enforce_paper_endpoint(get_secret("APCA_API_BASE_URL"))
         if (not api_key or not api_secret) or api_key.lower().startswith("dummy") or api_secret.lower().startswith("dummy"):
             raise EnvironmentError("APCA_API_KEY_ID and APCA_API_SECRET_KEY must be set")
         return cls(api_key=api_key, api_secret=api_secret, base_url=base_url)
@@ -47,7 +48,7 @@ class RiskEngine:
             self.data_client = None
             return
 
-        is_paper = "paper" in (self.keys.base_url or "").lower()
+        is_paper = is_paper_endpoint(self.keys.base_url)
         self.trading_client = TradingClient(
             self.keys.api_key,
             self.keys.api_secret,
