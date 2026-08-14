@@ -2,7 +2,13 @@ import streamlit as st
 from app.vue.components.options.panels.exotics.tab_quanto import render_tab_quanto
 from app.vue.components.options.panels.exotics.tab_rainbow import render_tab_rainbow
 from app.vue.components.options.panels.exotics.tab_chooser import render_tab_chooser
-from app.vue.components.options.controller_bridge import *
+from app.vue.components.options.controller_bridge import (
+    common_spot_value,
+    current_spot,
+    current_ticker,
+    ensure_close_history,
+    get_option_context,
+)
 
 
 def render_panel_exotics():

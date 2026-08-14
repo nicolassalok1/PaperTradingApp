@@ -2,7 +2,13 @@ import streamlit as st
 from app.vue.components.options.panels.vanilla.tab_american import render_tab_american
 from app.vue.components.options.panels.vanilla.tab_bermudan import render_tab_bermudan
 from app.vue.components.options.panels.vanilla.tab_european import render_tab_european
-from app.vue.components.options.controller_bridge import *
+from app.vue.components.options.controller_bridge import (
+    common_spot_value,
+    current_spot,
+    current_ticker,
+    ensure_close_history,
+    get_option_context,
+)
 
 
 def render_panel_vanilla():

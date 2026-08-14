@@ -7,7 +7,13 @@ from app.vue.components.options.panels.path.tab_lookback import render_tab_lookb
 from app.vue.components.options.panels.path.tab_lookback_fixed import render_tab_lookback_fixed
 from app.vue.components.options.panels.path.tab_forward_start import render_tab_forward_start
 from app.vue.components.options.panels.path.tab_cliquet import render_tab_cliquet
-from app.vue.components.options.controller_bridge import *
+from app.vue.components.options.controller_bridge import (
+    common_spot_value,
+    current_spot,
+    current_ticker,
+    ensure_close_history,
+    get_option_context,
+)
 
 
 def render_panel_path():

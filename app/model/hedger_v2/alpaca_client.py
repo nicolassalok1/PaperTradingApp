@@ -22,7 +22,7 @@ except Exception:
 
 from app.utils.paths import CACHE_OHLC_DIR
 from app.utils.secrets import get_secret
-from app.utils.trading_guard import enforce_paper_endpoint
+from app.utils.trading_guard import enforce_paper_endpoint, is_paper_endpoint
 
 
 def _to_dict(obj: Any) -> Dict[str, Any]:
@@ -60,7 +60,7 @@ class AlpacaHedgerClient:
             self.trading = None
             self.data = None
         else:
-            is_paper = "paper" in (base_url or "").lower()
+            is_paper = is_paper_endpoint(base_url)
             self.trading = TradingClient(
                 api_key,
                 api_secret,

@@ -1,7 +1,24 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from app.vue.components.options.controller_bridge import *
+from app.vue.components.options.controller_bridge import (
+    _choose_option_select,
+    _get_cached_iv_for,
+    _k,
+    build_close_with_strike_fig,
+    current_spot,
+    current_ticker,
+    ensure_close_history,
+    get_common_div_yield,
+    get_common_maturity_value,
+    get_common_sigma_value,
+    get_option_context,
+    get_rate_for_ttm,
+    option_char,
+    plt,
+    render_figures_grid,
+    view_chooser,
+)
 
 
 def render_tab_chooser():
@@ -41,6 +58,15 @@ def render_tab_chooser():
         step=0.05,
         key=_k("chooser_T"),
     )
+    t1_chooser = st.slider(
+        "Date de choix t₁ (années)",
+        min_value=0.01,
+        max_value=float(T_chooser),
+        value=float(min(0.5 * T_chooser, T_chooser)),
+        step=0.01,
+        key=_k("chooser_t1"),
+        help="Date à laquelle le détenteur choisit call ou put. t₁ = T équivaut à un straddle.",
+    )
     iv_chooser = _get_cached_iv_for(
         strike, T_chooser, "call" if option_char_selected == "c" else "put"
     )
@@ -56,6 +82,7 @@ def render_tab_chooser():
     view_dyn = view_chooser(
         float(spot_base),
         strike,
+        float(t1_chooser),
         r=float(get_rate_for_ttm(T_chooser)),
         q=float(get_common_div_yield()),
         sigma=float(sigma_chooser),

@@ -2,7 +2,6 @@ import numpy as np
 import streamlit as st
 from app.vue.components.options.layout import compute_button, option_panel, params_expander
 from app.vue.components.options.pricing import price_bermuda_crr
-from app.vue.components.options.controller_bridge import *
 
 
 def render():

@@ -1,7 +1,13 @@
 import streamlit as st
 from app.vue.components.options.panels.calendar.tab_calendar import render_tab_calendar
 from app.vue.components.options.panels.calendar.tab_diagonal import render_tab_diagonal
-from app.vue.components.options.controller_bridge import *
+from app.vue.components.options.controller_bridge import (
+    common_spot_value,
+    current_spot,
+    current_ticker,
+    ensure_close_history,
+    get_option_context,
+)
 
 
 def render_panel_calendar():

@@ -12,7 +12,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 import numpy as np
 import pandas as pd
 from app.utils.secrets import get_secret
-from app.utils.trading_guard import enforce_paper_endpoint
+from app.utils.trading_guard import enforce_paper_endpoint, is_paper_endpoint
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, TimeInForce
@@ -42,7 +42,7 @@ class AlpacaPortfolioClient:
             self.data = None
             return
 
-        is_paper = "paper" in (self.base_url or "").lower()
+        is_paper = is_paper_endpoint(self.base_url)
         self.trading = TradingClient(
             self.api_key,
             self.api_secret,

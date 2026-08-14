@@ -1,7 +1,21 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from app.vue.components.options.controller_bridge import *
+from app.vue.components.options.controller_bridge import (
+    _k,
+    current_spot,
+    current_ticker,
+    ensure_close_history,
+    get_common_div_yield,
+    get_common_maturity_value,
+    get_common_sigma_value,
+    get_option_context,
+    get_rate_for_ttm,
+    mark_full_width,
+    plt,
+    render_figures_grid,
+    view_lookback,
+)
 
 
 def render_tab_lookback():
@@ -68,6 +82,9 @@ def render_tab_lookback():
         span=span_lb,
         k_ref=float(strike_lb),
         T=float(T_lb),
+        r=float(get_rate_for_ttm(T_lb)),
+        q=float(get_common_div_yield()),
+        sigma=float(get_common_sigma_value()),
     )
     premium = float(view_dyn.get("premium", 0.0))
     price_display = abs(premium)

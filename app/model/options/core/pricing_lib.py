@@ -693,12 +693,37 @@ def payoff_chooser(spot, strike: float):
     return np.abs(s - strike)
 
 
-def price_chooser_bs(S: float, K: float, **kwargs) -> float:
-    return price_straddle_bs(S, K, **kwargs)
+def price_chooser_bs(S: float, K: float, t1: float, **kwargs) -> float:
+    """
+    Simple chooser (Rubinstein 1991): at the choice date `t1` the holder keeps EITHER
+    the call or the put, both struck at K and expiring at T. Only the chosen leg
+    survives — a straddle keeps both, so a straddle is an upper bound, not the price.
+
+    Put-call parity at t1 gives
+        max(C, P) = C + (P - C)^+ = C + exp(-q*(T-t1)) * (K*exp(-(r-q)*(T-t1)) - S_t1)^+
+    i.e. a call struck K maturing T, plus exp(-q*(T-t1)) puts struck
+    K*exp(-(r-q)*(T-t1)) maturing t1. At t1 = T it collapses to the straddle.
+
+    `t1` is required on purpose: a chooser without a choice date is under-specified,
+    and guessing one would silently return a different product's price.
+    """
+    T = float(kwargs.get("T", DEFAULT_T))
+    r = float(kwargs.get("r", DEFAULT_R))
+    q = float(kwargs.get("q", DEFAULT_Q))
+    sigma = float(kwargs.get("sigma", DEFAULT_SIGMA))
+    t1 = float(t1)
+    if not 0.0 < t1 <= T:
+        raise ValueError(
+            f"chooser choice date must satisfy 0 < t1 <= T (got t1={t1!r}, T={T!r})"
+        )
+    tau = T - t1
+    call_leg = bs_price_call(S, K, r=r, q=q, sigma=sigma, T=T)
+    put_leg = bs_price_put(S, K * math.exp(-(r - q) * tau), r=r, q=q, sigma=sigma, T=t1)
+    return call_leg + math.exp(-q * tau) * put_leg
 
 
-def view_chooser(s0: float, strike: float, span: float = 0.5, n: int = 300, **kwargs):
-    premium = price_chooser_bs(s0, strike, **kwargs)
+def view_chooser(s0: float, strike: float, t1: float, span: float = 0.5, n: int = 300, **kwargs):
+    premium = price_chooser_bs(s0, strike, t1, **kwargs)
     return _build_view(payoff_chooser, premium, s0, (strike,), (), span, n)
 
 
@@ -709,14 +734,38 @@ def payoff_quanto(spot, strike: float, option_type: str = "call", fx_rate: float
 
 
 def price_quanto_bs(S: float, K: float, fx_rate: float = 1.0, **kwargs) -> float:
-    # Simplified: price vanilla then convert with fixed FX rate
+    """
+    Quanto: a foreign-denominated asset paid in domestic currency at a FIXED rate.
+
+    Converting a vanilla at a fixed rate is NOT a quanto. What defines the product is
+    the drift the fixed conversion induces under the domestic risk-neutral measure:
+
+        mu_S = r_foreign - q - rho * sigma_S * sigma_FX
+
+    so the price moves with the spot/FX correlation. Discounting stays domestic.
+
+    Optional keyword arguments, consistent with the rest of this module:
+        rho        spot/FX correlation            (default 0.0)
+        sigma_fx   FX volatility                  (default 0.0)
+        r_foreign  foreign risk-free rate         (default: the domestic rate)
+    The defaults collapse to fx_rate * vanilla Black-Scholes, i.e. the previous
+    behaviour, so no existing caller changes value.
+    """
+    r_d = float(kwargs.get("r", DEFAULT_R))
+    q = float(kwargs.get("q", DEFAULT_Q))
+    sigma = float(kwargs.get("sigma", DEFAULT_SIGMA))
+    T = float(kwargs.get("T", DEFAULT_T))
+    rho = float(kwargs.get("rho", 0.0))
+    sigma_fx = float(kwargs.get("sigma_fx", 0.0))
+    r_foreign = kwargs.get("r_foreign")
+    r_f = r_d if r_foreign is None else float(r_foreign)
+
+    mu = r_f - q - rho * sigma * sigma_fx
+    q_eff = r_d - mu  # feed the quanto forward S*exp(mu*T) through the yield argument
+
     if kwargs.get("option_type", "call") == "put":
-        return fx_rate * bs_price_put(
-            S, K, **{k: v for k, v in kwargs.items() if k in {"r", "q", "sigma", "T"}}
-        )
-    return fx_rate * bs_price_call(
-        S, K, **{k: v for k, v in kwargs.items() if k in {"r", "q", "sigma", "T"}}
-    )
+        return fx_rate * bs_price_put(S, K, r=r_d, q=q_eff, sigma=sigma, T=T)
+    return fx_rate * bs_price_call(S, K, r=r_d, q=q_eff, sigma=sigma, T=T)
 
 
 def view_quanto(
@@ -817,11 +866,30 @@ def price_asian_arith_approx(
     q: float = DEFAULT_Q,
     option_type: str = "call",
 ) -> float:
-    # Turnbull-Wakeman-esque approximation using adjusted sigma and strike
-    sigma_adj = sigma / math.sqrt(3.0)
+    # Turnbull-Wakeman / Levy: match the first two moments of the CONTINUOUS
+    # arithmetic average, then price a Black-Scholes call on that lognormal proxy.
+    # (sigma/sqrt(3) alone is the GEOMETRIC average's volatility — using it here
+    # made the arithmetic Asian identical to the geometric one, which violates AM-GM.)
+    if S <= 0 or K <= 0 or sigma <= 0 or T <= 0:
+        return 0.0
+    b = r - q
+    v2 = sigma * sigma
+    if abs(b) < 1e-8:
+        m1 = float(S)
+        m2 = 2.0 * S * S * (math.exp(v2 * T) - 1.0 - v2 * T) / (v2 * v2 * T * T)
+    else:
+        m1 = S * (math.exp(b * T) - 1.0) / (b * T)
+        m2 = 2.0 * S * S * math.exp((2.0 * b + v2) * T) / (
+            (b + v2) * (2.0 * b + v2) * T * T
+        ) + (2.0 * S * S / (b * T * T)) * (
+            1.0 / (2.0 * b + v2) - math.exp(b * T) / (b + v2)
+        )
+    sigma_a = math.sqrt(max(math.log(m2 / (m1 * m1)), 0.0) / T)
+    # Feed the matched forward m1 = S*exp(b_a*T) through the q argument.
+    q_eff = r - math.log(m1 / S) / T
     if option_type == "put":
-        return bs_price_put(S, K, r=r, q=q, sigma=sigma_adj, T=T)
-    return bs_price_call(S, K, r=r, q=q, sigma=sigma_adj, T=T)
+        return bs_price_put(S, K, r=r, q=q_eff, sigma=sigma_a, T=T)
+    return bs_price_call(S, K, r=r, q=q_eff, sigma=sigma_a, T=T)
 
 
 def view_asian_arith(
@@ -863,10 +931,18 @@ def price_asian_geom(
     q: float = DEFAULT_Q,
     option_type: str = "call",
 ) -> float:
+    # Kemna-Vorst: the continuous geometric average of a GBM is lognormal with
+    # volatility sigma/sqrt(3) AND drift b_G = (r - q - sigma^2/6)/2. Adjusting the
+    # volatility alone leaves the forward at S*exp((r-q)T) instead of S*exp(b_G*T),
+    # which overprices the call even when r = q = 0 (there b_G = -sigma^2/12).
+    if S <= 0 or K <= 0 or sigma <= 0 or T <= 0:
+        return 0.0
     sigma_g = sigma / math.sqrt(3.0)
+    b_g = 0.5 * (r - q - sigma * sigma / 6.0)
+    q_eff = r - b_g  # bs_price_* then uses forward S*exp(b_g*T) and discount exp(-rT)
     if option_type == "put":
-        return bs_price_put(S, K, r=r, q=q, sigma=sigma_g, T=T)
-    return bs_price_call(S, K, r=r, q=q, sigma=sigma_g, T=T)
+        return bs_price_put(S, K, r=r, q=q_eff, sigma=sigma_g, T=T)
+    return bs_price_call(S, K, r=r, q=q_eff, sigma=sigma_g, T=T)
 
 
 def view_asian_geom(
@@ -900,6 +976,64 @@ def payoff_lookback_floating(spot, min_path: float, max_path: float, option_type
     return np.maximum(s - min_path, 0.0)
 
 
+def price_lookback_floating(
+    S: float,
+    extremum: float,
+    r: float = DEFAULT_R,
+    q: float = DEFAULT_Q,
+    sigma: float = DEFAULT_SIGMA,
+    T: float = DEFAULT_T,
+    option_type: str = "call",
+) -> float:
+    """
+    Floating-strike lookback, Goldman-Sosin-Gatto closed form.
+
+    A call pays S_T - min over the life, a put pays max - S_T; `extremum` is the running
+    minimum (call) or maximum (put) observed so far, so a fresh contract passes S itself.
+
+    The value is ALWAYS strictly above the intrinsic while time remains — reporting the
+    intrinsic as the premium (the previous behaviour) prices away the entire optionality.
+    """
+    S = float(S)
+    extremum = float(extremum)
+    sigma = float(sigma)
+    T = float(T)
+    is_call = str(option_type).lower().startswith("c")
+    intrinsic = (S - extremum) if is_call else (extremum - S)
+    if S <= 0 or extremum <= 0 or sigma <= 0 or T <= 0:
+        return max(intrinsic, 0.0)
+
+    b = float(r) - float(q)
+    if abs(b) < 1e-6:
+        # sigma^2/(2b) is singular at b = 0; the bracket vanishes at the same rate, so a
+        # sign-preserving nudge keeps the product finite without changing it materially.
+        b = 1e-6
+    root = sigma * math.sqrt(T)
+    disc_r = math.exp(-float(r) * T)
+    disc_q = math.exp(-float(q) * T)
+    ratio = S / extremum
+    power = ratio ** (-2.0 * b / (sigma * sigma))
+    coef = (sigma * sigma) / (2.0 * b)
+
+    a1 = (math.log(ratio) + (b + 0.5 * sigma * sigma) * T) / root
+    a2 = a1 - root
+    if is_call:
+        return float(
+            S * disc_q * _norm_cdf(a1)
+            - extremum * disc_r * _norm_cdf(a2)
+            + coef * S * disc_r
+            * (power * _norm_cdf(-a1 + (2.0 * b / sigma) * math.sqrt(T))
+               - math.exp(b * T) * _norm_cdf(-a1))
+        )
+    return float(
+        extremum * disc_r * _norm_cdf(-a2)
+        - S * disc_q * _norm_cdf(-a1)
+        + coef * S * disc_r
+        * (-power * _norm_cdf(a1 - (2.0 * b / sigma) * math.sqrt(T))
+           + math.exp(b * T) * _norm_cdf(a1))
+    )
+
+
 def view_lookback(
     spot_ref: float,
     min_path: float,
@@ -910,9 +1044,17 @@ def view_lookback(
     k_ref: float | None = None,
     **kwargs,
 ):
+    option_type = kwargs.get("option_type", "call")
+    extremum = min_path if str(option_type).lower().startswith("c") else max_path
     premium = float(
-        payoff_lookback_floating(
-            spot_ref, min_path, max_path, option_type=kwargs.get("option_type", "call")
+        price_lookback_floating(
+            spot_ref,
+            extremum,
+            r=float(kwargs.get("r", DEFAULT_R)),
+            q=float(kwargs.get("q", DEFAULT_Q)),
+            sigma=float(kwargs.get("sigma", DEFAULT_SIGMA)),
+            T=float(T),
+            option_type=option_type,
         )
     )
     s_grid = np.linspace(spot_ref * (1.0 - span), spot_ref * (1.0 + span), n)
