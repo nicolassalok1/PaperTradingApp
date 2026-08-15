@@ -3,7 +3,8 @@ Recompute the global portfolio_value and persist it to data/dashboard_vars.json.
 
 The calculation uses:
   - spot_portfolio.json: sum of (side-sign * quantity * latest price from dashboard_vars.prices)
-  - forwards_portfolio.json: sum of (side-sign * quantity * forward_price)
+  - forwards_portfolio.json: sum of (side-sign * quantity * (mark - forward_price)),
+    i.e. what settling each forward would pay, not its notional
 
 If no price is available for a spot symbol, it contributes 0.
 Other keys in dashboard_vars.json are preserved.

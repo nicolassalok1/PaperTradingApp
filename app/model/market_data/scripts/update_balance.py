@@ -1,13 +1,13 @@
 """
-Settle matured forwards by updating portfolio and balance via core buy/sell flows.
+Settle matured forwards against the cash balance.
 
-For each forward in forwards_portfolio.json with maturity <= today:
-  - If side == "long": buy the quantity at the forward price.
-  - If side == "short": sell the quantity at the forward price.
-The balance is adjusted by the payoff using the asset price at maturity (hist close fallback).
-Processed forwards are removed from the forwards portfolio.
+For each forward in forwards_portfolio.json with maturity <= today, the balance is
+adjusted by the payoff — (settlement price - forward price) x quantity for a long,
+the opposite for a short — using the last close on or before maturity, falling back
+to the live quote. Processed forwards are removed from the forwards portfolio.
 
-All trades are logged with source="forwards".
+All settlements are logged with source="forwards". No position is opened or closed:
+the earlier description of this script driving buy/sell flows was never accurate.
 """
 
 from app.model.portfolio.settlement import check_and_settle_forward, process_matured_forwards

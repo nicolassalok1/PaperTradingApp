@@ -10,7 +10,7 @@ from typing import Dict
 import pandas as pd
 
 from app.model.portfolio.forwards import load_forwards, save_forwards
-from app.model.trading.buy_sell import append_trade_log
+from app.model.trading.logs import append_trade_log
 from app.model.market_data.realtime import get_data
 from app.model.market_data.history import load_or_fetch_closing_history
 from app.model.dashboard.cache import load_dashboard_cache, save_dashboard_cache

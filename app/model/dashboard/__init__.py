@@ -1,63 +1,14 @@
-from app.model.dashboard.cache import (  # noqa: F401
-    DASHBOARD_VARS_FILE,
-    dashboard_cache_last_refresh,
-    load_dashboard_cache,
-    refresh_dashboard_cache,
-    reset_dashboard,
-    save_dashboard_cache,
-)
-from app.model.dashboard.service import (  # noqa: F401
-    auto_execute_trading_levels,
-    chatgpt_response,
-    collect_dashboard_tickers,
-    compute_forward_pnl,
-    compute_spot_pnl,
-    dashboard_price,
-    fetch_spot_price,
-    load_expired_options,
-    load_forwards_data,
-    load_options,
-    load_portfolio,
-    load_sell_systems,
-    load_trades_log,
-    load_ts_exec_log,
-    log_trade,
-    refresh_all_spots_pipeline,
-    refresh_spot_prices_with_systems,
-    save_expired_options,
-    save_forwards_data,
-    save_options,
-    save_portfolio,
-    save_equities,
-)
+"""Dashboard model package.
 
-__all__ = [
-    "DASHBOARD_VARS_FILE",
-    "dashboard_cache_last_refresh",
-    "load_dashboard_cache",
-    "refresh_dashboard_cache",
-    "reset_dashboard",
-    "save_dashboard_cache",
-    "auto_execute_trading_levels",
-    "chatgpt_response",
-    "collect_dashboard_tickers",
-    "compute_forward_pnl",
-    "compute_spot_pnl",
-    "dashboard_price",
-    "fetch_spot_price",
-    "load_expired_options",
-    "load_forwards_data",
-    "load_options",
-    "load_portfolio",
-    "load_sell_systems",
-    "load_trades_log",
-    "load_ts_exec_log",
-    "log_trade",
-    "refresh_all_spots_pipeline",
-    "refresh_spot_prices_with_systems",
-    "save_expired_options",
-    "save_forwards_data",
-    "save_options",
-    "save_portfolio",
-    "save_equities",
-]
+Deliberately empty of re-exports. This module used to pull `dashboard.service`
+into every import of `dashboard.cache`, which had two costs:
+
+  - a circular import that broke `market_data/scripts/update_balance.py` outright
+    (`settlement -> buy_sell -> dashboard.cache -> here -> service -> settlement`,
+    the last hop landing on a partially initialised module);
+  - a whole superseded generation kept alive on paper, since anything importing
+    `dashboard.cache` made ~900 lines of unreachable code appear loaded at runtime
+    and therefore un-provable as dead.
+
+Import the submodule you need — `from app.model.dashboard.cache import ...`.
+"""
