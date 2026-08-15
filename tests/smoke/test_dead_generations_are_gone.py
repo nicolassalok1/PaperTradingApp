@@ -49,6 +49,19 @@ REMOVED_MODULES = [
     "app.model.volatility_models.jump_diffusion.model_bates",
     # Duplicate of the live app/vue/components/options/ui_helpers.py.
     "app.vue.components.ui_helpers",
+    # E5 — the JSON-portfolio generation, superseded by the Alpaca path in
+    # app/controller/trading_controller.py. It looked live only because
+    # `dashboard/__init__.py` re-exported `service`, so importing `dashboard.cache`
+    # pulled the whole subtree into sys.modules. With that re-export gone, the two
+    # CLI roots load 33 app modules and none of these is among them.
+    "app.model.dashboard.service",
+    "app.model.dashboard.utils",
+    "app.model.portfolio.positions",
+    "app.model.trading.execution",
+    "app.model.trading.systems",
+    "app.model.trading.buy_sell",
+    "app.model.backtesting.engine",
+    "app.model.backtesting.signals",
 ]
 
 
@@ -58,6 +71,12 @@ CLI_ONLY_DEPENDENCIES = [
     "app.model.portfolio.settlement",      # app/model/market_data/scripts/update_balance.py
     "app.model.portfolio.valuation",       # .../update_portfolio_value.py
     "app.model.market_data.cache_refresh",  # .../update_spots.py
+    # Survivors of E5: everything the two CLI roots still reach inside the
+    # JSON-portfolio cluster. `trading.logs` also absorbed `append_trade_log`, the
+    # single function `trading.buy_sell` still had a caller for.
+    "app.model.portfolio.forwards",        # via portfolio.settlement
+    "app.model.trading.logs",              # via portfolio.settlement
+    "app.model.dashboard.cache",           # via portfolio.settlement
 ]
 
 
@@ -70,10 +89,20 @@ SURVIVING_COUNTERPARTS = [
 ]
 
 
+def _spec_or_none(modname):
+    """`find_spec` returns None for a missing module, but raises once the parent
+    package is gone too — which is what E5 did to `app.model.backtesting`. Both
+    mean the same thing here, and the raising case means it more strongly."""
+    try:
+        return importlib.util.find_spec(modname)
+    except ModuleNotFoundError:
+        return None
+
+
 @pytest.mark.parametrize("modname", REMOVED_MODULES)
 def test_stale_generation_is_gone(modname):
     """Pins the deletion: a superseded module must not silently reappear."""
-    assert importlib.util.find_spec(modname) is None, f"{modname} is back"
+    assert _spec_or_none(modname) is None, f"{modname} is back"
 
 
 @pytest.mark.parametrize("modname", CLI_ONLY_DEPENDENCIES + SURVIVING_COUNTERPARTS)
