@@ -108,16 +108,14 @@ def test_portfolio_value_signs_the_spot_legs_by_side(store):
     assert valuation_mod.recompute_portfolio_value() == pytest.approx(80.0)
 
 
-def test_portfolio_value_marks_a_forward_leg_at_spot(store):
-    """A forward leg is carried at quantity x spot, i.e. at full notional.
+def test_a_forward_leg_is_worth_what_settling_it_would_pay(store):
+    """Carried at (mark - forward_price) x qty, not at notional.
 
-    Worth flagging rather than blessing: the dormant `dashboard.service.
-    compute_forward_pnl` values the same leg at (spot - forward_price) x qty.
-    The two disagree, and only the rule asserted here is ever executed. Pinned so
-    that a future arbitration between the two is a deliberate change, not a
-    silent drift.
+    The notional reading would count the underlying as owned outright before the
+    strike is paid, and would contradict `settlement`, which credits only the
+    price difference at maturity.
     """
-    # 3 CCC forward long, spot 9.00 -> 3 x 9.00 = 27.00
+    # 3 CCC forward long, struck at 8.00, marked at 9.00 -> (9 - 8) x 3 = 3.00
     _write(store.vars, {"prices": {"CCC": 9.0}})
     _write(store.spot, {})
     _write(
@@ -125,11 +123,12 @@ def test_portfolio_value_marks_a_forward_leg_at_spot(store):
         {"f1": {"symbol": "CCC", "quantity": 3, "side": "long", "forward_price": 8.0}},
     )
 
-    assert valuation_mod.recompute_portfolio_value() == pytest.approx(27.0)
+    assert valuation_mod.recompute_portfolio_value() == pytest.approx(3.0)
 
 
-def test_forward_leg_falls_back_to_its_own_price_when_spot_is_missing(store):
-    # No spot quote for CCC -> fall back to forward_price 8.00: 3 x 8.00 = 24.00
+def test_an_unquoted_forward_leg_is_worth_nothing(store):
+    # No mark for CCC -> the leg falls back to its own strike, so it is worth
+    # (8 - 8) x 3 = 0.00 rather than contributing a full 24.00 of notional.
     _write(store.vars, {"prices": {}})
     _write(store.spot, {})
     _write(
@@ -137,11 +136,11 @@ def test_forward_leg_falls_back_to_its_own_price_when_spot_is_missing(store):
         {"f1": {"symbol": "CCC", "quantity": 3, "side": "long", "forward_price": 8.0}},
     )
 
-    assert valuation_mod.recompute_portfolio_value() == pytest.approx(24.0)
+    assert valuation_mod.recompute_portfolio_value() == pytest.approx(0.0)
 
 
-def test_short_forward_leg_is_carried_negative(store):
-    # 3 CCC forward short, spot 9.00 -> -27.00
+def test_a_short_forward_leg_takes_the_opposite_sign(store):
+    # Same 1.00 move against a short of 3 -> -(9 - 8) x 3 = -3.00
     _write(store.vars, {"prices": {"CCC": 9.0}})
     _write(store.spot, {})
     _write(
@@ -149,7 +148,7 @@ def test_short_forward_leg_is_carried_negative(store):
         {"f1": {"symbol": "CCC", "quantity": 3, "side": "short", "forward_price": 8.0}},
     )
 
-    assert valuation_mod.recompute_portfolio_value() == pytest.approx(-27.0)
+    assert valuation_mod.recompute_portfolio_value() == pytest.approx(-3.0)
 
 
 def test_a_position_with_no_quote_contributes_nothing(store):
@@ -385,6 +384,45 @@ def test_process_drops_the_settled_forward_and_keeps_the_rest(store, no_market):
     assert list(remaining) == ["later"]
     assert remaining["later"]["symbol"] == "BBB"
     assert _read(store.vars)["balance"] == pytest.approx(1020.0)
+
+
+def test_settling_a_forward_moves_equity_without_creating_or_destroying_any(
+    store, no_market
+):
+    """The invariant that ties the two CLI roots together.
+
+    `update_balance.py` settles a matured forward into `balance`;
+    `update_portfolio_value.py` rebuilds `portfolio_value` from the remaining book.
+    Settlement moves value between those two buckets — it must not change their
+    sum. Stated with the settlement price equal to the last mark, so that the only
+    thing under test is the bookkeeping and not a price move between the two runs.
+
+    Nothing here is derived from the code: the invariant comes from what a
+    settlement *is*.
+    """
+    no_market.setattr(settlement_mod, "get_data", lambda symbol: {"price": 110.0})
+    _write(store.vars, {"balance": 1000.0, "prices": {"AAA": 110.0}})
+    _write(store.spot, {})
+    _write(
+        store.forwards,
+        {
+            "due": {
+                "symbol": "AAA",
+                "quantity": 2,
+                "side": "long",
+                "forward_price": 100.0,
+                "maturity": "2020-01-01",
+            }
+        },
+    )
+
+    equity_before = _read(store.vars)["balance"] + valuation_mod.recompute_portfolio_value()
+
+    settlement_mod.process_matured_forwards()
+
+    equity_after = _read(store.vars)["balance"] + valuation_mod.recompute_portfolio_value()
+
+    assert equity_after == pytest.approx(equity_before)
 
 
 def test_nothing_due_leaves_the_book_untouched(store, no_market):

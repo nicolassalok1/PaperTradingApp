@@ -126,6 +126,17 @@ def _spot_value(prices: dict) -> float:
 
 
 def _forwards_value(prices: dict) -> float:
+    """Value the open forward book at what settling it would actually pay.
+
+    A forward is carried at (mark - forward_price) x quantity, signed by side —
+    not at its notional. Carrying it at quantity x spot would count the underlying
+    as owned outright while the strike has not been paid, and it would contradict
+    `portfolio.settlement`, which credits only (spot - forward_price) x quantity to
+    `balance` at maturity: settling would then drop `balance + portfolio_value` by
+    forward_price x quantity out of nowhere.
+
+    With no mark available the leg is worth zero, not its notional.
+    """
     forwards = load_json_file(FORWARDS_FILE, {})
     total = 0.0
     if isinstance(forwards, dict):
@@ -139,7 +150,7 @@ def _forwards_value(prices: dict) -> float:
             price_ref = spot_price if spot_price > 0 else fwd_price
             side = str(entry.get("side", "long")).lower()
             sign = 1.0 if side == "long" else -1.0
-            total += sign * qty * price_ref
+            total += sign * qty * (price_ref - fwd_price)
     return total
 
 
