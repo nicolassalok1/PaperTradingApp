@@ -28,8 +28,12 @@ from app.controller.options_controller import floor_n
 _choose_option_select = opt_ui._choose_option_select
 _render_option_text = opt_ui._render_option_text
 render_method_explainer = opt_ui.render_method_explainer
-_get_cached_iv_for = oc._get_cached_iv_for
+# The ui_helpers wrapper injects the loaded IV surface (opt_iv_surface_df) and the
+# shared ticker before delegating to the controller; the bare controller lookup has
+# neither and always resolves to None.
+_get_cached_iv_for = opt_ui._get_cached_iv_for
 _render_heatmaps_for_current_option = opt_ui._render_heatmaps_for_current_option
+sigma_from_cache_or_default = opt_ui.sigma_from_cache_or_default
 # Legacy globals (kept for backward compatibility with older UI modules).
 common_spot_value = opt_ui.common_spot_value
 common_maturity_value = opt_ui.common_maturity_value
@@ -158,6 +162,7 @@ __all__ = [
     "render_method_explainer",
     "_get_cached_iv_for",
     "_render_heatmaps_for_current_option",
+    "sigma_from_cache_or_default",
     "common_spot_value",
     "common_maturity_value",
     "common_rate_value",

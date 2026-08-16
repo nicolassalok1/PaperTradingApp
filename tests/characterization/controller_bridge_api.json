@@ -76,7 +76,7 @@
     "_render_heatmaps_for_current_option": "(label: 'str', call_matrix: 'np.ndarray', put_matrix: 'np.ndarray', x_values, y_values, option_char: 'str')",
     "_render_option_text": "(title: 'str', key: 'str | None' = None) -> 'None'",
     "build_close_with_strike_fig": "(close_series, ticker: 'str', strike: 'float | None')",
-    "build_crr_tree": "(option=None, r: 'float' = 0.0, sigma: 'float' = 0.0, n_steps: 'int' = 1)",
+    "build_crr_tree": "(option=None, r: 'float' = 0.0, sigma: 'float' = 0.0, n_steps: 'int' = 1, q: 'float' = 0.0)",
     "clear_closing_history_cache": "(ticker: 'str', *, period: 'str' = '2y', interval: 'str' = '1d') -> 'None'",
     "compute_price_mc": "(option_dict, mc_model: 'str' = 'bs', n_paths: 'int' = 10000, n_steps: 'int' = 252)",
     "current_spot": "(ctx: 'dict') -> 'float'",

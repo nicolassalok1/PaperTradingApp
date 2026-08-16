@@ -4,7 +4,7 @@ import numpy as np
 from app.vue.components.options.controller_bridge import (
     _get_cached_iv_for,
     _k,
-    common_spot_value,
+    current_spot,
     ensure_close_history,
     get_common_div_yield,
     get_common_maturity_value,
@@ -31,7 +31,7 @@ def render_tab_iron_condor():
     hist_tkr = ticker
 
     # --- Bootstrap du contexte Spreads/Wings ---
-    common_spot_value = float(st.session_state.get("common_spot_value", S0 if S0 is not None else 100.0))
+    common_spot_value = float(current_spot(ctx))
 
     hist_tkr = resolve_common_underlying()
     spot_anchor = float(S0 if S0 is not None else common_spot_value)

@@ -7,7 +7,6 @@ from app.vue.components.options.controller_bridge import (
     common_maturity_value,
     common_rate_value,
     common_sigma_value,
-    common_spot_value,
     current_spot,
     current_ticker,
     ensure_close_history,
@@ -35,7 +34,6 @@ def render_tab_grp_barrier():
     # --------------------------------
     # Fallback defaults for anciennes globals (avoids NameError)
     option_char = st.session_state.get("option_char", "c")
-    common_spot_value = float(st.session_state.get("common_spot_value", S0))
     common_maturity_value = float(st.session_state.get("common_maturity_value", 1.0))
     common_rate_value = float(st.session_state.get("common_rate_value", 0.01))
     common_sigma_value = float(st.session_state.get("common_sigma_value", 0.2))
@@ -60,7 +58,7 @@ def render_tab_grp_barrier():
             "Barrière",
             min_value=0.5 * strike_anchor_bar,
             max_value=1.8 * strike_anchor_bar,
-            value=float(strike_anchor_bar),
+            value=float(1.2 * strike_anchor_bar),  # on the spot, the default up-and-out is dead at t=0
             step=0.5,
             key=_k("barrier_all_level"),
         )

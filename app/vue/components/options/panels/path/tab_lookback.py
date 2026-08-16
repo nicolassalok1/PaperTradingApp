@@ -14,6 +14,7 @@ from app.vue.components.options.controller_bridge import (
     mark_full_width,
     plt,
     render_figures_grid,
+    sigma_from_cache_or_default,
     view_lookback,
 )
 
@@ -74,6 +75,7 @@ def render_tab_lookback():
             key=_k("lb_T"),
         )
 
+    sigma_lb = sigma_from_cache_or_default(float(strike_lb), float(T_lb), option_type_lb)
     view_dyn = view_lookback(
         S0,
         min_lb,
@@ -84,7 +86,7 @@ def render_tab_lookback():
         T=float(T_lb),
         r=float(get_rate_for_ttm(T_lb)),
         q=float(get_common_div_yield()),
-        sigma=float(get_common_sigma_value()),
+        sigma=float(sigma_lb),
     )
     premium = float(view_dyn.get("premium", 0.0))
     price_display = abs(premium)

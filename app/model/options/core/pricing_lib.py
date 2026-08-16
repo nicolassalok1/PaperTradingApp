@@ -795,15 +795,18 @@ def price_rainbow_mc(
     rho: float = 0.0,
     n_paths: int = 20_000,
     option_type: str = "call",
+    seed: int | None = 42,
 ) -> float:
     """
     Monte Carlo pricing for a 2-asset rainbow (max(S1,S2) - K)^+ or (K - max)^+.
     Correlation rho is applied between the two asset Brownian motions.
+    Seeded like the other MC pricers, so the premium does not move between reruns.
     """
     dt = T
     sqrt_dt = math.sqrt(dt)
-    z1 = np.random.randn(n_paths)
-    z2 = rho * z1 + math.sqrt(max(0.0, 1.0 - rho**2)) * np.random.randn(n_paths)
+    rng = np.random.default_rng(seed)
+    z1 = rng.standard_normal(n_paths)
+    z2 = rho * z1 + math.sqrt(max(0.0, 1.0 - rho**2)) * rng.standard_normal(n_paths)
     s1_T = S1 * np.exp((r - q - 0.5 * sigma1**2) * dt + sigma1 * sqrt_dt * z1)
     s2_T = S2 * np.exp((r - q - 0.5 * sigma2**2) * dt + sigma2 * sqrt_dt * z2)
     best = np.maximum(s1_T, s2_T)
@@ -835,6 +838,7 @@ def view_rainbow(s0: float, s0b: float, strike: float, span: float = 0.5, n: int
         rho=kwargs.get("rho", 0.0),
         n_paths=int(kwargs.get("n_paths", 20_000)),
         option_type=opt_type,
+        seed=kwargs.get("seed", 42),
     )
     pnl_grid = payoff_grid - premium
     bes = _find_breakevens_from_grid(s_grid, pnl_grid)
