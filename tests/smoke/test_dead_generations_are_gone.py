@@ -62,6 +62,27 @@ REMOVED_MODULES = [
     "app.model.trading.buy_sell",
     "app.model.backtesting.engine",
     "app.model.backtesting.signals",
+    # G2 — a second, "compute button" generation of the option panels
+    # (components/options/{spreads,vanilla,path,exotic,barrier,calendars}/,
+    # layout/pricing/shared, selector/options_text/payoff_viewer, and the 7-line
+    # panels/tab_* shims). Imported by nothing: the router reaches panels/** only,
+    # and importing every tab module loads none of these. HANDOFF (session 2)
+    # called them live; they were only ever loaded by the smoke walker that
+    # imports every file under components/options.
+    "app.vue.components.options.layout",
+    "app.vue.components.options.pricing",
+    "app.vue.components.options.shared",
+    "app.vue.components.options.spreads.straddle",
+    "app.vue.components.options.vanilla.american",
+    "app.vue.components.options.path.asian",
+    "app.vue.components.options.exotic.quanto",
+    "app.vue.components.options.barrier.vanilla_barrier",
+    "app.vue.components.options.calendars.calendar",
+    "app.vue.components.options.panels.tab_vertical_spread",
+    "app.vue.components.options.panels.tab_straddle",
+    "app.vue.components.selector",
+    "app.vue.components.options_text",
+    "app.vue.components.payoff_viewer",
 ]
 
 
@@ -84,6 +105,12 @@ CLI_ONLY_DEPENDENCIES = [
 SURVIVING_COUNTERPARTS = [
     "app.model.yieldcurve.rates_utils",
     "app.vue.components.options.ui_helpers",
+    # G2 — the live option panels sit under panels/**, one level down.
+    "app.vue.components.options.router",
+    "app.vue.components.options.panels.tab_calendar",
+    "app.vue.components.options.panels.spreads.tab_straddle",
+    "app.vue.components.options.panels.vanilla.tab_american",
+    "app.vue.components.options.panels.exotics.tab_quanto",
     "app.model.volatility_models.jump_diffusion.calibrator",
     "app.model.volatility_models.jump_diffusion.cf",
 ]
