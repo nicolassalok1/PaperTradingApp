@@ -17,6 +17,7 @@ from app.vue.components.options.controller_bridge import (
     option_char,
     plt,
     render_figures_grid,
+    sigma_from_cache_or_default,
     view_cliquet,
 )
 
@@ -63,6 +64,9 @@ def render_tab_cliquet():
         key=_k("cliquet_T"),
     )
 
+    sigma_clq = sigma_from_cache_or_default(
+        float(strike_clq), float(T_clq), "call" if clq_char == "c" else "put"
+    )
     view_dyn = view_cliquet(
         S0,
         floor=floor_val,
@@ -70,7 +74,7 @@ def render_tab_cliquet():
         T=float(T_clq),
         r=float(get_rate_for_ttm(T_clq)),
         q=float(get_common_div_yield()),
-        sigma=float(get_common_sigma_value()),
+        sigma=float(sigma_clq),
         n_periods=12,
         n_paths=4000,
         k_ref=float(strike_clq),

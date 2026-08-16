@@ -379,9 +379,10 @@ def render_tab() -> None:
 
     q_val = float(div_chain) if div_chain is not None else float(st.session_state.get("d_common", 0.0))
 
-    st.session_state["common_spot_value"] = float(s0_default)
-    st.session_state["common_rate_value"] = float(r_val)
-    st.session_state["d_common"] = float(q_val)
+    # These stay local: every top-level tab renders on every rerun, and this tab
+    # comes before Options in TAB_GROUPS, so writing the shared common_* keys here
+    # would reset whatever the user typed in the Options global parameters on each
+    # rerun. They are exported on "Envoyer IV modèle vers Options" only.
 
     st.markdown("### Paramètres du sous-jacent (auto)")
     col1, col2, col3 = st.columns(3)

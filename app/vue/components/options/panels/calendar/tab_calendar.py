@@ -5,7 +5,7 @@ import numpy as np
 from app.vue.components.options.controller_bridge import (
     _get_cached_iv_for,
     _k,
-    common_spot_value,
+    current_spot,
     datetime,
     ensure_close_history,
     get_common_div_yield,
@@ -33,7 +33,7 @@ def render_tab_calendar():
     hist_tkr = ticker
 
     # --- Bootstrap du contexte Calendar/Diagonal ---
-    common_spot_value = float(st.session_state.get("common_spot_value", 100.0))
+    common_spot_value = float(current_spot(ctx))
 
     S0 = float(common_spot_value)
     hist_tkr, close_series = load_shared_close_series(S0)

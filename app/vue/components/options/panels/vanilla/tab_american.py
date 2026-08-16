@@ -71,6 +71,10 @@ def render_tab_american():
     else:
         st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
 
+    # Price on the same 252-step CRR grid as the Bermudan panel (an American call
+    # on a 50-step tree showed below its European value); the drawn tree stays at
+    # 50 steps for readability.
+    steps_price = 252
     steps_tree = 50
     view_dyn = view_american(
         float(spot_base),
@@ -80,7 +84,7 @@ def render_tab_american():
         q=float(get_common_div_yield()),
         sigma=float(sigma_am),
         T=float(T_am),
-        steps=steps_tree,
+        steps=steps_price,
     )
     premium = float(view_dyn.get("premium", 0.0))
     s_grid = view_dyn["s_grid"]
@@ -113,9 +117,14 @@ def render_tab_american():
 
     option_obj = _CrrOption(S0, strike, T_am, opt_char == "c")
     spot_tree, value_tree = build_crr_tree(
-        option_obj, r=float(get_rate_for_ttm(T_am)), sigma=float(sigma_am), n_steps=steps_tree
+        option_obj,
+        r=float(get_rate_for_ttm(T_am)),
+        sigma=float(sigma_am),
+        n_steps=steps_tree,
+        q=float(get_common_div_yield()),
     )
     fig_tree = plot_crr_tree(spot_tree, value_tree)
+    st.caption(f"Arbre CRR illustratif ({steps_tree} pas) — prix calculé sur {steps_price} pas.")
 
     close_fig = build_close_with_strike_fig(close_series, hist_tkr, strike)
     render_figures_grid([close_fig, fig_pay, fig_tree])

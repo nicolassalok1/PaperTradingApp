@@ -62,12 +62,12 @@ st.markdown = lambda *args, **kwargs: None
 
 # Import panel modules
 def test_imports():
-    import app.vue.components.options.panels.tab_straddle
-    import app.vue.components.options.panels.tab_strangle
-    import app.vue.components.options.panels.tab_butterfly
-    import app.vue.components.options.panels.tab_vertical_spread
-    import app.vue.components.options.panels.tab_condor
-    import app.vue.components.options.panels.tab_calendar
+    import app.vue.components.options.panels.spreads.tab_straddle
+    import app.vue.components.options.panels.spreads.tab_strangle
+    import app.vue.components.options.panels.spreads.tab_butterfly
+    import app.vue.components.options.panels.spreads.tab_call_spread
+    import app.vue.components.options.panels.spreads.tab_condor
+    import app.vue.components.options.panels.calendar.tab_calendar
     return "imports OK"
 
 safe("imports", test_imports)
@@ -81,33 +81,33 @@ def test_panel_render(modname, funcname):
 
 
 safe("straddle_panel", lambda: test_panel_render(
-    "app.vue.components.options.panels.tab_straddle",
-    "render_straddle_panel"
+    "app.vue.components.options.panels.spreads.tab_straddle",
+    "render_tab_straddle"
 ))
 
 safe("strangle_panel", lambda: test_panel_render(
-    "app.vue.components.options.panels.tab_strangle",
-    "render_strangle_panel"
+    "app.vue.components.options.panels.spreads.tab_strangle",
+    "render_tab_strangle"
 ))
 
 safe("butterfly_panel", lambda: test_panel_render(
-    "app.vue.components.options.panels.tab_butterfly",
-    "render_butterfly_panel"
+    "app.vue.components.options.panels.spreads.tab_butterfly",
+    "render_tab_butterfly"
 ))
 
 safe("vertical_spread", lambda: test_panel_render(
-    "app.vue.components.options.panels.tab_vertical_spread",
-    "render_vertical_spread_panel"
+    "app.vue.components.options.panels.spreads.tab_call_spread",
+    "render_tab_call_spread"
 ))
 
 safe("condor_panel", lambda: test_panel_render(
-    "app.vue.components.options.panels.tab_condor",
-    "render_condor_panel"
+    "app.vue.components.options.panels.spreads.tab_condor",
+    "render_tab_condor"
 ))
 
 safe("calendar_panel", lambda: test_panel_render(
-    "app.vue.components.options.panels.tab_calendar",
-    "render_calendar_panel"
+    "app.vue.components.options.panels.calendar.tab_calendar",
+    "render_tab_calendar"
 ))
 
 

@@ -14,6 +14,7 @@ from app.vue.components.options.controller_bridge import (
     mark_full_width,
     plt,
     render_figures_grid,
+    sigma_from_cache_or_default,
     view_lookback_fixed,
 )
 
@@ -79,6 +80,7 @@ def render_tab_lookback_fixed():
             key=_k("lbf_T"),
         )
 
+    sigma_lbf = sigma_from_cache_or_default(float(strike_lbf), float(T_lbf), option_type_lbf)
     view_dyn = view_lookback_fixed(
         S0,
         min_lbf,
@@ -89,7 +91,7 @@ def render_tab_lookback_fixed():
         T=float(T_lbf),
         r=float(get_rate_for_ttm(T_lbf)),
         q=float(get_common_div_yield()),
-        sigma=float(get_common_sigma_value()),
+        sigma=float(sigma_lbf),
     )
     premium = float(view_dyn.get("premium", 0.0))
     s_grid = view_dyn["s_grid"]

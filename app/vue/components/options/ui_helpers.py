@@ -60,6 +60,24 @@ def _get_cached_iv_for(*args, **kwargs):
         return None
 
 
+def sigma_from_cache_or_default(strike: float, T: float, option_type: str) -> float:
+    """
+    The sigma every panel prices with: the cached IV for (K, T, type) when one is
+    available, else the global sigma — and the matching caption. Same idiom the
+    other panels spell out inline; kept here so the path-dependent panels do not
+    silently price on a different vol than their neighbours.
+    """
+    iv = _get_cached_iv_for(strike, T, option_type)
+    if iv is not None and np.isfinite(iv) and iv > 0:
+        st.caption(f"IV récupérée (cache) ≈ {float(iv):.4f}")
+        return float(iv)
+    st.caption("IV non trouvée dans le cache, usage de σ par défaut.")
+    try:
+        return float(st.session_state.get("common_sigma_value", 0.2))
+    except Exception:
+        return 0.2
+
+
 def _render_heatmaps_for_current_option(
     label: str,
     call_matrix: np.ndarray,
@@ -122,6 +140,7 @@ __all__ = [
     "render_method_explainer",
     "_get_cached_iv_for",
     "_render_heatmaps_for_current_option",
+    "sigma_from_cache_or_default",
     "common_spot_value",
     "common_maturity_value",
     "common_rate_value",

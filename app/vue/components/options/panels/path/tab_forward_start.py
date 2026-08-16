@@ -16,6 +16,7 @@ from app.vue.components.options.controller_bridge import (
     option_char,
     plt,
     render_figures_grid,
+    sigma_from_cache_or_default,
     view_forward_start,
 )
 
@@ -80,13 +81,14 @@ def render_tab_forward_start():
     fig_ts.autofmt_xdate()
     mark_full_width(fig_ts)
     figs.append(fig_ts)
+    sigma_fs = sigma_from_cache_or_default(float(strike_forward), float(T_fs), opt_type)
     view_dyn = view_forward_start(
         S0,
         spot_start,
         m=m_factor,
         r=float(get_rate_for_ttm(T_fs)),
         q=float(get_common_div_yield()),
-        sigma=float(get_common_sigma_value()),
+        sigma=float(sigma_fs),
         T=float(T_fs),
         option_type=opt_type,
     )
