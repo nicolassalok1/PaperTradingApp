@@ -218,11 +218,11 @@ def calibrate_heston_least_squares(
             )
             res[i] = (float(model_px) - float(px_mkt[i])) / float(scale[i])
 
-        # Feller condition penalty (soft)
+        # Feller condition penalty (soft). Always one extra residual (0 when satisfied):
+        # least_squares needs a fixed-length residual vector, and appending only on
+        # violation made the length flip mid-optimisation -> broadcast error, run aborted.
         feller_gap = float(max(0.0, sigma * sigma - 2.0 * kappa * theta))
-        if feller_gap > 0:
-            res = np.concatenate([res, np.array([feller_gap], dtype=float)])
-        return res
+        return np.concatenate([res, np.array([feller_gap], dtype=float)])
 
     def _coerce_x0(x0_val: Any) -> np.ndarray | None:
         if x0_val is None:

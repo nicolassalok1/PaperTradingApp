@@ -106,4 +106,35 @@ def load_iv_from_csv(path: str | Path) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-__all__ = ["fetch_iv_surface", "_build_iv_surface_from_yahoo", "interpolate_surface", "load_iv_from_csv"]
+def list_cached_iv_surface_tickers(cache_dir: Path | None = None) -> List[str]:
+    """
+    Tickers for which a Yahoo IV surface is already on disk (loadable offline).
+
+    Two file families live in the cache: `iv_surface_yahoo_<SYM>.csv` (built surface)
+    and `yahoo_chain_<SYM>_Y<years>_E<n>.csv` (raw chain, one per max_years setting).
+    Yahoo publishes no catalogue of optionable underlyings, so this is the only
+    "surfaces available" list that can be answered without a network call.
+    """
+    root = Path(cache_dir) if cache_dir is not None else CACHE_YAHOO_OPTION_CHAINS_DIR
+    if not root.exists():
+        return []
+    found: set[str] = set()
+    for path in root.glob("iv_surface_yahoo_*.csv"):
+        sym = path.stem[len("iv_surface_yahoo_"):]
+        if sym:
+            found.add(sym.strip().upper())
+    for path in root.glob("yahoo_chain_*_Y*_E*.csv"):
+        body = path.stem[len("yahoo_chain_"):]
+        sym = body.rsplit("_Y", 1)[0] if "_Y" in body else ""
+        if sym:
+            found.add(sym.strip().upper())
+    return sorted(found)
+
+
+__all__ = [
+    "fetch_iv_surface",
+    "_build_iv_surface_from_yahoo",
+    "interpolate_surface",
+    "list_cached_iv_surface_tickers",
+    "load_iv_from_csv",
+]
