@@ -45,7 +45,10 @@ from app.model.calibration.types import (
     CalibrationResult,
     MarketSurfaceSource,
 )
-from app.model.options.data.iv_surface import fetch_iv_surface as _fetch_iv_surface
+from app.model.options.data.iv_surface import (
+    fetch_iv_surface as _fetch_iv_surface,
+    list_cached_iv_surface_tickers as _list_cached_iv_surface_tickers,
+)
 from app.model.options.logic import download_options_alpaca as _download_options_alpaca
 from app.model.calibration.implied_vol import bs_call_price as _bs_call_price
 from app.model.calibration.loss_surface import compute_bs_vega_grid, iv_error_metrics_weighted
@@ -213,6 +216,18 @@ class CalibrationController:
         Kept in the controller to avoid the view importing model modules directly.
         """
         return _fetch_iv_surface(ticker, max_maturity_years=float(max_maturity_years))
+
+    def default_calibration_grid(self) -> tuple[list[float], list[float]]:
+        """(moneyness nodes, maturity nodes) every surface is put on before fitting."""
+        m_grid, t_grid = default_grid()
+        return [float(m) for m in m_grid], [float(t) for t in t_grid]
+
+    def list_cached_yahoo_surface_tickers(self) -> list[str]:
+        """Tickers whose Yahoo IV surface is already on disk (loadable offline)."""
+        try:
+            return list(_list_cached_iv_surface_tickers())
+        except Exception:
+            return []
 
     def list_saved_calibrations(self, limit: int = 200) -> Dict[str, Any]:
         try:
@@ -913,29 +928,42 @@ class CalibrationController:
             mask=np.asarray(mask, dtype=bool),
         )
 
+        nn_unavailable_msg: str | None = None
         if model_key == "heston_v1":
             try:
-                return self._json_safe(
-                    self.run_heston_global_calibration(
-                        {
-                            "df": market_df,
-                            "S0": float(surface.S0),
-                            "r": float(surface.r),
-                            "q": float(surface.q),
-                            "m_grid": surface.m_grid,
-                            "t_grid": surface.t_grid,
-                            "constraints": constraints,
-                            "fit_to_observed_only": fit_to_observed_only,
-                            "max_nfev": max_nfev,
-                            "n_starts": n_starts,
-                            "seed": seed,
-                            "ticker": data.get("ticker"),
-                            "refine": True,
-                        }
-                    )
+                heston_res = self.run_heston_global_calibration(
+                    {
+                        "df": market_df,
+                        "S0": float(surface.S0),
+                        "r": float(surface.r),
+                        "q": float(surface.q),
+                        "m_grid": surface.m_grid,
+                        "t_grid": surface.t_grid,
+                        "constraints": constraints,
+                        "fit_to_observed_only": fit_to_observed_only,
+                        "max_nfev": max_nfev,
+                        "n_starts": n_starts,
+                        "seed": seed,
+                        "u_max": data.get("u_max"),
+                        "n_integration": data.get("n_integration"),
+                        "ticker": data.get("ticker"),
+                        "refine": True,
+                    }
                 )
             except Exception as exc:
                 return {"success": False, "message": f"Erreur calibration Heston: {exc}", "details": {}}
+            details = heston_res.get("details") if isinstance(heston_res, dict) else None
+            nn_failed = (
+                isinstance(heston_res, dict)
+                and not heston_res.get("success")
+                and isinstance(details, dict)
+                and "pred" in details
+            )
+            if not nn_failed:
+                return self._json_safe(heston_res)
+            # The NN warm start could not run (torch or weights missing): fall back to the
+            # torch-free least-squares Heston calibrator below instead of giving up.
+            nn_unavailable_msg = str(heston_res.get("message") or "NN indisponible")
 
         calibrator_map = {
             "heston_v1": HestonLegacyLeastSquaresCalibrator(),
@@ -956,10 +984,14 @@ class CalibrationController:
 
         apply_degeneracy_guard(result)
 
+        message = str(result.message)
+        if nn_unavailable_msg and result.success:
+            message = f"{message} — repli moindres carrés ({nn_unavailable_msg})"
+
         return self._json_safe(
             {
                 "success": bool(result.success),
-                "message": str(result.message),
+                "message": message,
                 "model": str(result.model),
                 "method": str(result.method),
                 "params": result.params,

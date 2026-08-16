@@ -122,19 +122,23 @@ def default_grid() -> Tuple[np.ndarray, np.ndarray]:
 
 
 def _interpolate_grid(points: np.ndarray, values: np.ndarray, m_grid: np.ndarray, t_grid: np.ndarray):
-    iv_grid = np.full((len(t_grid), len(m_grid)), np.nan, dtype=float)
-    mask = np.zeros_like(iv_grid, dtype=bool)
-
-    # nearest mapping for mask + seed
+    # Nearest-node snapping decides which nodes count as *observed* (Yahoo expiries and
+    # strikes never sit exactly on the grid, so a tolerance is needed). It must NOT decide
+    # the node's *value*: an observation can be snapped from far away — a 1.9-year put onto
+    # the 1-year slot, a 0.4-moneyness wing onto the 0.8 edge — and last-write-wins would
+    # hand exactly those corrupted nodes to the calibrators. Values come from interpolating
+    # the scattered observations at the node; the snapped value is only a last-resort seed.
+    seeded = np.full((len(t_grid), len(m_grid)), np.nan, dtype=float)
+    mask = np.zeros_like(seeded, dtype=bool)
     for (m, t), iv in zip(points, values):
         i_t = int(np.abs(t_grid - t).argmin())
         i_m = int(np.abs(m_grid - m).argmin())
-        iv_grid[i_t, i_m] = iv
+        seeded[i_t, i_m] = iv
         mask[i_t, i_m] = True
 
     if len(values) == 0:
-        iv_grid[:] = 0.2
-        return iv_grid, mask
+        return np.full_like(seeded, 0.2), mask
+    iv_grid = np.full_like(seeded, np.nan)
 
     if griddata is not None and len(values) >= 3:
         try:
@@ -153,11 +157,11 @@ def _interpolate_grid(points: np.ndarray, values: np.ndarray, m_grid: np.ndarray
         except Exception:
             pass
 
-    if not np.isfinite(interp).any():
+    # Priority: linear interpolation > nearest observation > snapped seed > median.
+    iv_grid = np.where(np.isfinite(interp), interp, seeded)
+    if not np.isfinite(iv_grid).all():
         median_iv = float(np.nanmedian(values))
-        interp = np.full_like(iv_grid, median_iv)
-
-    iv_grid = np.where(np.isfinite(iv_grid), iv_grid, interp)
+        iv_grid = np.where(np.isfinite(iv_grid), iv_grid, median_iv)
     return iv_grid.astype(float), mask
 
 

@@ -113,9 +113,9 @@ def render_price_surface_grid(
         return
 
     cs = colorscale
-    zmin = None
-    zmax = None
-    zmid = None
+    # go.Surface has no zmin/zmax/zmid (those are Heatmap properties); the colour axis of a
+    # Surface is cmin/cmax/cmid. Passing zmin raised ValueError -> no price surface ever drew.
+    color_kwargs: dict = {}
     if "erreur" in str(title).lower() or "error" in str(title).lower():
         finite = px[np.isfinite(px)]
         vmax = float(np.nanmax(np.abs(finite))) if finite.size else 1.0
@@ -124,9 +124,7 @@ def render_price_surface_grid(
             [0.5, "#0b0b0b"],  # zero -> dark
             [1.0, "#f7e3d4"],  # positive large -> light
         ]
-        zmin = -vmax
-        zmax = vmax
-        zmid = 0.0
+        color_kwargs = {"cmin": -vmax, "cmax": vmax, "cmid": 0.0}
 
     fig = go.Figure(
         data=[
@@ -138,9 +136,7 @@ def render_price_surface_grid(
                 colorbar=dict(title="Prix"),
                 showscale=True,
                 opacity=0.9,
-                zmin=zmin,
-                zmax=zmax,
-                zmid=zmid,
+                **color_kwargs,
             )
         ]
     )
