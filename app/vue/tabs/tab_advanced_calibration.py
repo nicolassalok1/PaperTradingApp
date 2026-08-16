@@ -40,10 +40,12 @@ _YAHOO_SURFACE_TICKER_KEY = "adv_calib_yahoo_surface_ticker"
 _YAHOO_SURFACE_MAX_YEARS_KEY = "adv_calib_yahoo_surface_max_years"
 _LAST_RESULT_KEY = "last_advanced_calibration_result"
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _OPTIONABLE_TICKERS_CSV = Path(
     os.getenv("ALPACA_OPTIONABLE_TICKERS_PATH", "data/alpaca_optionable_tickers.csv")
 )
-_YAHOO_CHAINS_DIR = Path("cache/YahooOptionChains")
+if not _OPTIONABLE_TICKERS_CSV.is_absolute():
+    _OPTIONABLE_TICKERS_CSV = _REPO_ROOT / _OPTIONABLE_TICKERS_CSV
 
 
 def _parse_json_dict(raw: str) -> Dict[str, Any] | None:
@@ -81,26 +83,6 @@ def _get_chain_from_state() -> pd.DataFrame | None:
     if isinstance(df, pd.DataFrame) and not df.empty:
         return df
     return None
-
-
-def _load_chain_meta(ticker: str | None) -> dict[str, Any]:
-    if not ticker:
-        return {}
-    safe = str(ticker).strip().upper()
-    if not safe:
-        return {}
-    try:
-        if not _YAHOO_CHAINS_DIR.exists():
-            return {}
-        matches = sorted(_YAHOO_CHAINS_DIR.glob(f"yahoo_chain_{safe}_*.json"))
-        if not matches:
-            matches = sorted(_YAHOO_CHAINS_DIR.glob(f"yahoo_chain_{safe}*.json"))
-        if not matches:
-            return {}
-        with open(matches[-1], "r", encoding="utf-8") as fh:
-            return json.load(fh) or {}
-    except Exception:
-        return {}
 
 
 def render_tab() -> None:
@@ -165,12 +147,44 @@ def render_tab() -> None:
         )
         col_ticker, col_years, col_load = st.columns([2, 2, 1])
         with col_ticker:
-            ticker_raw = st.text_input(
-                "Ticker",
-                value=str(default_ticker),
-                placeholder="ex: AAPL",
-                key="adv_calib_yahoo_ticker_input",
+            # Yahoo publishes no catalogue of the surfaces it can serve, so the pick-list is
+            # built locally: surfaces already downloaded (loadable offline) first, then the
+            # optionable US universe scanned into data/alpaca_optionable_tickers.csv. Anything
+            # else (e.g. ^SPX) can still be typed in.
+            cached_tickers = ctrl.list_cached_yahoo_surface_tickers()
+            cached_set = set(cached_tickers)
+            universe = _load_optionable_tickers()
+            ticker_options = cached_tickers + [t for t in universe if t not in cached_set]
+            default_ticker = str(default_ticker).strip().upper()
+            if default_ticker and default_ticker not in ticker_options:
+                ticker_options.insert(len(cached_tickers), default_ticker)
+            sel_kwargs = (
+                {"index": ticker_options.index(default_ticker)}
+                if "adv_calib_yahoo_ticker_input" not in st.session_state and default_ticker in ticker_options
+                else {}
             )
+            ticker_raw = st.selectbox(
+                "Ticker",
+                options=ticker_options,
+                key="adv_calib_yahoo_ticker_input",
+                accept_new_options=True,
+                format_func=lambda s: f"{s} ★ surface en cache" if s in cached_set else s,
+                help=(
+                    "Surfaces IV chargeables depuis Yahoo Finance : ★ = déjà en cache local "
+                    "(hors-ligne OK), puis l'univers des sous-jacents optionables US. "
+                    "Saisie libre acceptée pour un ticker hors liste."
+                ),
+                **sel_kwargs,
+            )
+            if universe:
+                st.caption(
+                    f"{len(universe):,} sous-jacents optionables · {len(cached_tickers)} surface(s) en cache"
+                )
+            else:
+                st.caption(
+                    "Univers optionable introuvable (`data/alpaca_optionable_tickers.csv`, "
+                    "à régénérer via `scripts/build_optionable_universe.py`) — saisie libre."
+                )
         with col_years:
             try:
                 max_years_default = float(st.session_state.get("adv_calib_yahoo_max_years", 2.0))
@@ -205,15 +219,11 @@ def render_tab() -> None:
                     st.session_state[_YAHOO_SURFACE_STATE_KEY] = surface_df
                     st.session_state[_YAHOO_SURFACE_TICKER_KEY] = ticker
                     st.session_state[_YAHOO_SURFACE_MAX_YEARS_KEY] = float(max_years)
-                    s0_guess = median_s0(surface_df)
-                    if s0_guess:
-                        st.session_state["common_spot_value"] = float(s0_guess)
                     st.success(f"Surface Yahoo chargée ({len(surface_df):,} lignes).")
             except Exception as exc:
+                # Like the empty-result path: keep whatever surface was loaded before (the
+                # ticker/max_years match below already hides one that no longer applies).
                 st.error(f"Yahoo indisponible: {exc}")
-                st.session_state[_YAHOO_SURFACE_STATE_KEY] = None
-                st.session_state[_YAHOO_SURFACE_TICKER_KEY] = None
-                st.session_state[_YAHOO_SURFACE_MAX_YEARS_KEY] = None
 
         cache_matches = (
             isinstance(cached_df, pd.DataFrame)
@@ -345,25 +355,24 @@ def render_tab() -> None:
         st.caption("Axes: K, TTM (années), IV (données brutes, surface lissée).")
         render_market_surface_3d(canon_df, key="adv_calib_market_surface")
 
-    chain_meta = _load_chain_meta(surface_ticker or ticker)
-    spot_chain = chain_meta.get("spot")
-    div_chain = chain_meta.get("div")
-    max_chain_years = chain_meta.get("max_maturity_years")
-
+    # S0 is the spot the surface was built with (its own S0 column, written at fetch time).
+    # The chain JSON in cache/YahooOptionChains is not consulted: it was picked by file name
+    # (the largest max_years ever downloaded, any age) and its `div` is always 0.
     s0_default = (
-        (float(spot_chain) if spot_chain is not None else None)
-        or median_s0(calib_df)
+        median_s0(calib_df)
         or median_s0(canon_df)
         or float(st.session_state.get("common_spot_value", 100.0))
     )
     S0 = float(s0_default)
 
-    # Risk-free rate from yield curve at max maturity (slider or chain)
+    # Risk-free rate from the yield curve at the maturity of the surface actually loaded.
     t_ref_for_r = float(max_years)
     try:
-        if max_chain_years is not None:
-            t_ref_for_r = max(float(t_ref_for_r), float(max_chain_years))
+        if isinstance(calib_df, pd.DataFrame) and not calib_df.empty:
+            t_ref_for_r = float(pd.to_numeric(calib_df["T"], errors="coerce").max())
     except Exception:
+        t_ref_for_r = float(max_years)
+    if not np.isfinite(t_ref_for_r) or t_ref_for_r <= 0:
         t_ref_for_r = float(max_years)
 
     try:
@@ -377,7 +386,7 @@ def render_tab() -> None:
     except Exception:
         r_val = float(st.session_state.get("common_rate_value", 0.02))
 
-    q_val = float(div_chain) if div_chain is not None else float(st.session_state.get("d_common", 0.0))
+    q_val = float(st.session_state.get("d_common", 0.0))
 
     # These stay local: every top-level tab renders on every rerun, and this tab
     # comes before Options in TAB_GROUPS, so writing the shared common_* keys here
@@ -389,9 +398,19 @@ def render_tab() -> None:
     with col1:
         st.metric("S0 (spot)", f"{float(s0_default):.4f}")
     with col2:
-        st.metric(f"r(T={t_ref_for_r}) via Yield Curve ({currency})", f"{float(r_val):.4f}")
+        st.metric(f"r(T={t_ref_for_r:.2f}) via Yield Curve ({currency})", f"{float(r_val):.4f}")
     with col3:
         st.metric("Dividende q", f"{float(q_val):.4f}")
+
+    try:
+        m_nodes, t_nodes = ctrl.default_calibration_grid()
+        st.caption(
+            f"Grille de calibration : moneyness {min(m_nodes):.2f}–{max(m_nodes):.2f}, "
+            f"maturités {min(t_nodes):.2f}–{max(t_nodes):.2f} an(s). Les points de la surface hors "
+            "grille (ailes, maturités plus longues) servent à l'interpolation, pas au fit."
+        )
+    except Exception:
+        pass
 
     fit_to_observed_only = True
     max_nfev = 60
@@ -582,6 +601,9 @@ def render_tab() -> None:
                     df_model_surface = grid_to_surface_df(
                         S0=S0_res, m_grid=m_grid_res, t_grid=t_grid_res, iv_grid=iv_model_res, opt_type="call"
                     )
+                    # A model IV surface is one sigma(K, T) for calls and puts alike; a
+                    # `type` column would make Options hide it whenever "Put" is selected.
+                    df_model_surface = df_model_surface.drop(columns=["type"], errors="ignore")
                     st.session_state["calib_model_surface_df"] = df_model_surface
                     st.session_state["calib_model_surface_meta"] = {
                         "ticker": result.get("ticker"),
@@ -612,12 +634,6 @@ def render_tab() -> None:
                             atm_iv = float(iv_model_res[i_t, j_atm])
                             if np.isfinite(atm_iv) and atm_iv > 0:
                                 st.session_state["common_sigma_value"] = atm_iv
-                            try:
-                                st.session_state["opt_iv_surface_max_years"] = float(
-                                    min(2.0, max(0.25, float(np.max(t_grid_res))))
-                                )
-                            except Exception:
-                                pass
                     except Exception:
                         pass
 
