@@ -65,42 +65,11 @@ def test_hostile_urls_do_not_resolve_to_the_paper_host(url):
 
 
 # --------------------------------------------------------------------------- #
-# C3.1 grid_bot — submits real orders, must refuse a non-paper endpoint.        #
+# C3.1 was grid_bot (app/model/bots/), retired with the "🤖 Bots" tab (H1). It was
+# the only order-SUBMITTING site among these; the remaining ones build a client.
+# The structural sweep at the bottom of this file is what keeps a new submitter
+# from appearing unguarded.
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("url", HOSTILE_URLS)
-def test_grid_bot_refuses_hostile_base_url(monkeypatch, url):
-    from app.model.bots import grid_bot
-    from app.model.bots.storage import GridBotConfig
-
-    _set_live_like_env(monkeypatch, url)
-    # Keep the run offline and deterministic: the grid only needs a reference price.
-    monkeypatch.setattr(grid_bot, "fetch_spot_price", lambda symbol: 100.0, raising=True)
-
-    cfg = GridBotConfig(symbol="AAPL", enabled=True, qty=1.0, n_levels=3, step_pct=0.05,
-                        dry_run=False)
-    report = grid_bot.run_grid_bot_once(cfg, allow_submit=True, allow_live=False)
-
-    assert report.to_submit_prices, "test setup: the grid must have orders to submit"
-    assert any("Refusing to submit orders" in e for e in report.errors), report.errors
-    assert report.submitted_orders == []
-
-
-def test_grid_bot_accepts_the_real_paper_endpoint(monkeypatch):
-    """Control: the same run against the true paper endpoint raises no refusal."""
-    from app.model.bots import grid_bot
-    from app.model.bots.storage import GridBotConfig
-
-    _set_live_like_env(monkeypatch, f"https://{PAPER_HOST}")
-    monkeypatch.setattr(grid_bot, "fetch_spot_price", lambda symbol: 100.0, raising=True)
-    # Stay fully offline: only the paper/live classification is under test here.
-    monkeypatch.setattr(grid_bot, "_try_orders_service", lambda: (None, "offline"), raising=True)
-
-    cfg = GridBotConfig(symbol="AAPL", enabled=True, qty=1.0, n_levels=3, step_pct=0.05,
-                        dry_run=False)
-    report = grid_bot.run_grid_bot_once(cfg, allow_submit=True, allow_live=False)
-
-    assert not any("Refusing to submit orders" in e for e in report.errors), report.errors
-
 
 # --------------------------------------------------------------------------- #
 # C3.2 risk_management — builds a TradingClient.                                #
