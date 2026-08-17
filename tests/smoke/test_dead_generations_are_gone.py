@@ -83,6 +83,21 @@ REMOVED_MODULES = [
     "app.vue.components.selector",
     "app.vue.components.options_text",
     "app.vue.components.payoff_viewer",
+    # H1 — the "🤖 Bots" and "🧪 Exercices" tabs, retired on Nicolas' call
+    # (2026-08-17): the whole vertical of each, view -> controller -> model. Both
+    # were reached only from their own tab module, so removing the two tabs left
+    # every module below with zero importers.
+    "app.vue.tabs.tab_bots",
+    "app.vue.tabs.tab_exercices",
+    "app.vue.components.exercises.portfolio_allocation",
+    "app.controller.bots_controller",
+    "app.controller.exercises_controller",
+    "app.model.bots.assistant",
+    "app.model.bots.grid_bot",
+    "app.model.bots.storage",
+    "app.model.bots.volatility",
+    "app.model.exercises.portfolio_allocation.engine",
+    "app.model.exercises.portfolio_allocation.yahoo_data",
 ]
 
 
@@ -113,6 +128,14 @@ SURVIVING_COUNTERPARTS = [
     "app.vue.components.options.panels.exotics.tab_quanto",
     "app.model.volatility_models.jump_diffusion.calibrator",
     "app.model.volatility_models.jump_diffusion.cf",
+    # H1 — `app.model.portfolio_allocation` is a DIFFERENT package from the deleted
+    # `app.model.exercises.portfolio_allocation`: it powers "🧭 Portefeuille & Risque"
+    # (eigen_portfolio_optimize, AlpacaPortfolioClient) and its paper guard is pinned
+    # in tests/quant/test_paper_flag_consistency.py. Same name, opposite fate.
+    "app.model.portfolio_allocation.engine",
+    # The ChatGPT wrapper the bots assistant called. Kept: generic infrastructure,
+    # still covered by tests/test_bots_hygiene.py (redaction + cost guard).
+    "app.model.ai.chatgpt",
 ]
 
 
@@ -135,6 +158,22 @@ def test_stale_generation_is_gone(modname):
 @pytest.mark.parametrize("modname", CLI_ONLY_DEPENDENCIES + SURVIVING_COUNTERPARTS)
 def test_module_reached_only_by_a_cli_entry_point_survives(modname):
     assert importlib.util.find_spec(modname) is not None, f"{modname} was over-deleted"
+
+
+RETIRED_TAB_LABELS = ["🤖 Bots", "🧪 Exercices"]
+
+
+@pytest.mark.parametrize("label", RETIRED_TAB_LABELS)
+def test_retired_tab_is_not_wired_anywhere(label):
+    """H1 — a tab survives three separate wirings in main_app: the TAB_GROUPS
+    ordering, the module->label override table, and (for Bots) an explicit
+    fallback registration. Missing one of them puts the tab back on screen or
+    crashes the boot."""
+    from app.vue import main_app
+
+    assert label not in [lbl for labels in main_app.TAB_GROUPS.values() for lbl in labels]
+    assert label not in main_app.DEFAULT_LABEL_OVERRIDES.values()
+    assert label not in main_app.autodiscover_tabs()
 
 
 def test_bates_characteristic_function_is_still_available():

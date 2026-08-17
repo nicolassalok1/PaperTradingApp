@@ -26,7 +26,6 @@ from app.vue.tabs.tab_dashboard_v2 import render_tab as render_dashboard_v2
 from app.vue.tabs.tab_trading import render_tab as render_trading
 from app.vue.tabs.tab_portfolio_and_risk import render_tab as render_portfolio_and_risk
 from app.vue.tabs.tab_hedging_systems import render_tab as render_hedging_systems
-from app.vue.tabs.tab_bots import render_tab as render_bots
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -47,12 +46,6 @@ TAB_GROUPS = {
         "🧪 Calibration avancée",
         "📈 Options",
     ],
-    "🎓 Exercices": [
-        "🧪 Exercices",
-    ],
-    "🧰 Outils": [
-        "🤖 Bots",
-    ],
 }
 
 # Explicit labels for tab modules (override TAB_LABEL when present)
@@ -64,8 +57,6 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     "tab_hedging_systems": "🛡️ Hedging Systems",
     "tab_yieldcurve": "🧮 Yield Curve",
     "tab_advanced_calibration": "🧪 Calibration avancée",
-    "tab_exercices": "🧪 Exercices",
-    "tab_bots": "🤖 Bots",
     # Internal trading sub-tabs (kept inside 💹 Trading only)
     "tab_alpaca_spot": "Alpaca Spot",
     "tab_alpaca_orders": "Advanced Orders",
@@ -160,8 +151,6 @@ if "🧭 Portefeuille & Risque" not in ALL_TABS:
     ALL_TABS["🧭 Portefeuille & Risque"] = render_portfolio_and_risk
 if "🛡️ Hedging Systems" not in ALL_TABS:
     ALL_TABS["🛡️ Hedging Systems"] = render_hedging_systems
-if "🤖 Bots" not in ALL_TABS:
-    ALL_TABS["🤖 Bots"] = render_bots
 
 
 def _configure_page() -> None:
