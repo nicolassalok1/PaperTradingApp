@@ -12,6 +12,8 @@ CACHE_CSV_DIR = ROOT_DIR / "cache"
 CACHE_OHLC_DIR = CACHE_CSV_DIR / "OHLC"
 CACHE_YAHOO_OPTION_CHAINS_DIR = CACHE_CSV_DIR / "YahooOptionChains"
 CACHE_ALPACA_OPTION_CHAINS_DIR = CACHE_CSV_DIR / "AlpacaOptionChains"
+# Daily ATM implied-vol observations recorded by the 🌡️ Vol Implicite tab
+CACHE_IV_HISTORY_DIR = CACHE_CSV_DIR / "IVHistory"
 
 # Ensure expected directories exist
 JSON_DIR.mkdir(parents=True, exist_ok=True)
@@ -19,3 +21,4 @@ CACHE_CSV_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_OHLC_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_YAHOO_OPTION_CHAINS_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_ALPACA_OPTION_CHAINS_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_IV_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
