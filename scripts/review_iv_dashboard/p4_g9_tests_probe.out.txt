@@ -1,0 +1,43 @@
+=== A. coverage of iv_dashboard modules under CI selection (-m 'unit or smoke') ===
+  tests/test_iv_dashboard_analytics.py::test_controller_rejects_empty_symbol
+  app\controller\iv_dashboard_controller.py      21      4      2      0    83%   18-19, 26-27
+  app\model\iv_dashboard\__init__.py              0      0      0      0   100%
+  app\model\iv_dashboard\analytics.py            98      9     36      7    88%   54, 84-85, 106-107, 196, 198, 215->220, 219, 220->230, 226
+  app\model\iv_dashboard\service.py             338    303    104      0     8%   45, 49-52, 63-120, 135-165, 173-180, 184-187, 191-205, 209-231, 248-280, 284-286, 290-305, 309-327, 347-449, 456-457, 462-483, 488-497, 516-590
+  app\vue\tabs\tab_iv_dashboard.py              213    180     40      0    13%   60, 77-83, 87-93, 97, 111-168, 175-257, 267-343, 347-393, 397-458, 465-467, 477-497, 504-545, 550
+  TOTAL                                         670    496    182      7    24%
+  39 passed, 14 warnings in 7.45s
+=== B. render guard marker selection + timing ===
+  collected under 'unit or smoke': NONE
+  collected under 'integration': ['tests/integration/test_iv_dashboard_render.py::test_tab_renders_seeded_payload_without_raising', 'tests/integration/test_iv_dashboard_render.py::test_tab_shows_three_charts_and_metrics', 'tests/integration/test_iv_dashboard_render.py::test_tab_empty_state_shows_placeholder']
+  collected under 'smoke' (integration dir): NONE
+  render test run: wall=3.42s rc=0
+    2.56s setup    tests/integration/test_iv_dashboard_render.py::test_tab_renders_seeded_payload_without_raising
+    3 passed in 2.60s
+  test_app_boot run: wall=6.05s rc=0 tail=3 passed in 5.51s
+=== C. tab_iv_dashboard.py coverage under the driver's two AppTest runs ===
+  driver rc=0 result=IVDASH_RESULT {"seeded": {"exceptions": [], "n_charts": 3, "n_metrics": 3}, "empty": {"exceptions": [], "has_info": true, "n_charts": 0}}
+  Name                               Stmts   Miss Branch BrPart  Cover   Missing
+  app\vue\tabs\tab_iv_dashboard.py     213     22     40     13    85%   78, 80, 82, 89-90, 92, 151-168, 249, 256->exit, 315->327, 328->340, 432, 466, 480->495, 540, 550
+  TOTAL                                213     22     40     13    85%
+  missing_lines=[78, 80, 82, 89, 90, 92, 151, 152, 153, 154, 155, 156, 157, 165, 166, 167, 168, 249, 432, 466, 540, 550]
+  missing_branches=[[77, 78], [79, 80], [81, 82], [91, 92], [150, 151], [152, 153], [152, 155], [213, 249], [256, -174], [315, 327], [328, 340], [431, 432], [465, 466], [480, 495], [533, 540]]
+  cited-by-finder lines present in missing set: [151, 152, 153, 154, 155, 156, 157, 165, 166, 167, 168, 249, 432, 466, 540] ; cited but COVERED: []
+=== D. realized-vol oracle arithmetic ===
+  actual=0.162869 test_expected(ddof0)=0.158745 rel_err=2.5978%
+  ddof1 closed form=0.162869 rel_err vs actual=-1.377e-14
+  ddof=1*sqrt(252) [impl]                value=0.162869 rel_vs_test_expected= 2.598%  passes rel=0.05: True
+  ddof=0*sqrt(252)                       value=0.158745 rel_vs_test_expected= 0.000%  passes rel=0.05: True
+  ddof=1*sqrt(256)                       value=0.164157 rel_vs_test_expected= 3.409%  passes rel=0.05: True
+  ddof=1*sqrt(260)                       value=0.165434 rel_vs_test_expected= 4.214%  passes rel=0.05: True
+  ddof=1*sqrt(365)                       value=0.196013 rel_vs_test_expected=23.477%  passes rel=0.05: False
+  simple returns ddof=1*sqrt(252)        value=0.162872 rel_vs_test_expected= 2.600%  passes rel=0.05: True
+  window=15 ddof=1*sqrt(252)             value=0.163951 rel_vs_test_expected= 3.280%  passes rel=0.05: True
+  window=19 ddof=1*sqrt(252)             value=0.162869 rel_vs_test_expected= 2.598%  passes rel=0.05: True
+  window=21 ddof=1*sqrt(252)             value=0.162481 rel_vs_test_expected= 2.353%  passes rel=0.05: True
+  window=25 ddof=1*sqrt(252)             value=0.161889 rel_vs_test_expected= 1.980%  passes rel=0.05: True
+  warm-up: len(rv)=29 leading NaNs=19 test slices iloc[:18] -> 18 rows checked; first non-NaN at iloc[19]
+  window=19 -> leading NaNs=18; current assertion iloc[:18].isna().all() = True
+  window=18 -> leading NaNs=17; current assertion iloc[:18].isna().all() = False
+  proposed fix: iloc[:19].isna().all()=True iloc[19:].notna().all()=True
+  proposed oracle |actual/exp_ddof1-1| = 1.38e-14 (<=1e-9: True)
