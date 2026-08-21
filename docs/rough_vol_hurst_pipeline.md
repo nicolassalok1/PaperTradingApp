@@ -1210,7 +1210,13 @@ The French label is explicit about what the returned number is *not*:
 s'est arrêté sur une surface plate ; elle ne mesure rien et n'est PAS l'initialisation (le simplexe
 se déplace même sans signal). Calibration en échec : ne pas consommer ce H.*"
 
-**Corollary for the reader: a cheap configuration honestly reporting `success=False` is not a bug.**
+**Corollary for the reader: `success=False` is not a bug — and it is not confined to cheap
+configurations.** The measured reference run on the committed fixture, at the FULL default budget
+(100 000 final paths, `grid_n_max = 384`), returns `success = False` with
+`FLAG_H_WEAKLY_IDENTIFIED`: `H0 = 0.1224` (CI95 `[0.1056, 0.1392]`), `H = 0.1344`, `eta = 1.154`,
+`rho = -0.757`, IV RMSE 0.374 vol pt. Four seeds agree (`H` in `[0.1338, 0.1366]`, all
+`NON CONCLUANTE`). That surface genuinely does not pin `H` to the precision the calibrator
+demands, and the pipeline says so rather than dressing `0.1344` up as a measurement.
 It is the pipeline saying the run does not identify $H$.
 
 ---
@@ -1508,7 +1514,8 @@ is resolved.
 **Why this matters at all.** `apply_degeneracy_guard` only trips on an all-NaN surface. A hard-coded
 `success = True` therefore shipped a meaningless $H$ to the Phase-5 controller **as a calibrated
 result**, in direct violation of the repo guardrail *never hard-code $H$ (or any calibrated
-parameter) as an output*. A cheap configuration reporting `success = False` is the pipeline working
+parameter) as an output*. A configuration reporting `success = False` — cheap **or** at the full
+default budget, as the measured reference run does — is the pipeline working
 correctly, not failing.
 
 ---

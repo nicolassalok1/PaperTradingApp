@@ -45,6 +45,8 @@ _PAYLOAD_KEY = "rough_vol_prepare_payload"
 #: Monte-Carlo presets. "Exploration" is cheap ON PURPOSE and will very often
 #: report `success=False` — that is the calibrator saying it does not have the
 #: budget to identify H, not a bug. The label says so.
+_DEFAULT_SKEW_WINDOW = (5.0 / 365.0, 0.25)
+
 _MC_PROFILES: Dict[str, Dict[str, Any]] = {
     "Exploration (rapide, peut ne pas identifier H)": {
         "n_design": 8,
@@ -55,7 +57,14 @@ _MC_PROFILES: Dict[str, Dict[str, Any]] = {
         "profile_points": 5,
         "valley_points": 5,
         "noise_replicates": 2,
-        "refinement_check": False,
+        # refinement_check stays ON. This profile HALVES the simulation grid to
+        # 192 -- below the 256 at which the pipeline docs measure a
+        # maturity-dependent skew deficit -- so it makes the log-Euler bias
+        # WORSE. Switching off the only mechanism that measures that bias, as
+        # this profile used to, meant the run was both more biased and silent
+        # about it: grid_bias came back None and the tab printed nothing.
+        "refinement_check": True,
+        "grid_bias_replicates": 2,
         "local_nfev_per_param": 20,
         "grid_n_max": 192,
     },
@@ -337,6 +346,15 @@ def _render_calibration(result: Dict[str, Any]) -> None:
         st.caption(str(report["h_comparison_fr"]))
     if report.get("grid_bias_message_fr"):
         st.caption(str(report["grid_bias_message_fr"]))
+    else:
+        # Silence here used to be indistinguishable from "no bias". It is not:
+        # it means the refinement check did not run, so the residual
+        # discretisation bias on (H, eta, rho) is UNKNOWN for this result.
+        st.warning(
+            "Biais de discrétisation résiduel NON MESURÉ pour ce résultat "
+            "(vérification par raffinement de grille désactivée). Le biais "
+            "n'est pas nul pour autant — il est simplement inconnu ici."
+        )
 
     metrics = result.get("metrics") or {}
     if metrics:
@@ -442,7 +460,36 @@ def render_tab() -> None:
                             value=0, step=1, key="rv_seed")
         )
 
-    window = [window_lo, window_hi] if window_hi > window_lo > 0.0 else None
+    # A PARTIALLY specified window must never be silently dropped. "T min" left
+    # at its default 0.0 is the most natural way to ask for "maturities up to X",
+    # and the old `window_hi > window_lo > 0.0` threw the whole request away: the
+    # pipeline then ran on the default (5/365, 0.25) and the tab displayed an H0
+    # the user had not asked for. Measured on the committed fixture (truth
+    # H = 0.12): the default window gives H0 = 0.12239 +/- 0.00858 on 6 expiries,
+    # while (5/365, 1.00) gives 0.11997 +/- 0.00177 on 10 -- a CI four times
+    # tighter. The model layer refuses a bad window loudly
+    # (estimate_hurst_from_skew raises on T_min <= 0); the view must not convert
+    # that refusal into silence.
+    window = None
+    window_note: str | None = None
+    if window_hi > 0.0 or window_lo > 0.0:
+        lo = window_lo if window_lo > 0.0 else _DEFAULT_SKEW_WINDOW[0]
+        hi = window_hi if window_hi > 0.0 else _DEFAULT_SKEW_WINDOW[1]
+        if hi > lo:
+            window = [lo, hi]
+            if window_lo <= 0.0 or window_hi <= 0.0:
+                window_note = (
+                    f"Fenêtre de skew complétée par les défauts : "
+                    f"[{lo:.4f}, {hi:.4f}] an(s)."
+                )
+        else:
+            window_note = (
+                f"Fenêtre de skew ignorée : T max ({window_hi:.4f}) doit être "
+                f"strictement supérieur à T min ({window_lo:.4f}). "
+                "Fenêtre par défaut utilisée."
+            )
+    if window_note:
+        st.warning(window_note)
     mc_cfg = dict(_MC_PROFILES.get(profile_label) or {})
 
     payload: Dict[str, Any] = {

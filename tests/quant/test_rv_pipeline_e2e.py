@@ -45,7 +45,9 @@ from __future__ import annotations
 import importlib
 import json
 import math
+import subprocess
 import sys
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -99,6 +101,23 @@ _TINY_CONFIG = JointMCConfig(
     refinement_check=False,
     local_nfev_per_param=3,
 )
+#: Same knobs as _TINY_CONFIG, as a plain mapping, so the offline-purity test can
+#: rebuild the config inside a FRESH interpreter without importing this module.
+_TINY_CONFIG_KWARGS = {
+    "grid_n_max": 64,
+    "n_design": 0,
+    "stage1_paths": 500,
+    "top_k": 1,
+    "stage2_paths": 500,
+    "profile_paths": 500,
+    "final_paths": 1_000,
+    "batch_paths": 1_000,
+    "profile_points": 3,
+    "valley_points": 3,
+    "noise_replicates": 2,
+    "refinement_check": False,
+    "local_nfev_per_param": 3,
+}
 _SEED = 20_260_821
 
 
@@ -460,11 +479,36 @@ def test_the_fixture_path_never_loads_the_market_data_module(source: Any) -> Non
     ``--fixture`` must be offline by construction, not merely by the suite's
     socket block: the networked module must not even be imported.
     """
-    name = "app.model.market_data.market_data"
-    already = name in sys.modules
-    cli.run_pipeline(source, seed=3, mc_config=_TINY_CONFIG)
-    if not already:
-        assert name not in sys.modules
+    # This MUST run in a fresh interpreter. Guarding the assertion with
+    # `if module not in sys.modules` made it inert in every real run: pytest
+    # imports every module under tests/quant at collection time, and
+    # test_rv_controller_wiring.py imports CalibrationController, which pulls
+    # market_data in. The guard could only ever fire when this file was run
+    # completely alone -- i.e. never, in the gate that matters.
+    code = textwrap.dedent(
+        f"""
+        import pathlib
+        import sys
+        import scripts.calibrate_rbergomi_hurst as cli
+        from app.model.volatility_models.rbergomi.calibrator_joint_mc import JointMCConfig
+        assert "app.model.market_data.market_data" not in sys.modules, "imported at import time"
+        src = cli.load_fixture(pathlib.Path({str(FIXTURE)!r}))
+        cli.run_pipeline(src, seed=3, mc_config=JointMCConfig(**{_TINY_CONFIG_KWARGS!r}))
+        leaked = [m for m in ("app.model.market_data.market_data", "requests", "urllib3")
+                  if m in sys.modules]
+        assert not leaked, "networked modules loaded on the --fixture path: " + repr(leaked)
+        print("OK")
+        """
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=900,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "OK" in proc.stdout
 
 
 def test_main_reports_a_bad_fixture_without_a_traceback(tmp_path, capsys) -> None:
