@@ -42,6 +42,24 @@ script.
 Determinism. With ``--fixture`` and a fixed ``--seed`` the whole run is
 reproducible: the market side has no RNG at all, and the Monte-Carlo side is
 seeded through ``CalibratorSettings(seed=...)`` and uses common random numbers.
+
+MEASURED REFERENCE RUN (2026-08-21, this machine, for calibration of expectations
+only - none of these numbers is a claim about any market)::
+
+    --fixture tests/fixtures/synthetic_rbergomi_chain.csv   (default budget,
+    100 000 final paths, grid_n_max = 384, seed 20260821)
+
+    market side (4.1 -> 4.9)  0.2 s     11 expiries, 162 OTM quotes, 11 K_var
+    joint calibration         127.7 s   158 objective evaluations
+    H0 = 0.1224 (CI95 [0.1056, 0.1392])   H = 0.1344, eta = 1.154, rho = -0.757
+    IV RMSE 0.374 vol pt      price RMSE 0.0652 (5.96 %)
+    verdict: success = False, FLAG_H_WEAKLY_IDENTIFIED
+
+That last line is the point: **even at the full default budget this surface does
+not pin ``H`` to the precision the calibrator demands**, and the run says so
+instead of dressing 0.1344 up as a measurement. Use ``--paths`` to trade time
+against Monte-Carlo noise; do not read a smaller ``--paths`` returning
+``success = False`` as a bug.
 """
 
 from __future__ import annotations

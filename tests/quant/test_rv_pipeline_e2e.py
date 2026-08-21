@@ -83,6 +83,22 @@ _MC_CONFIG = JointMCConfig(
     refinement_check=False,
     local_nfev_per_param=10,
 )
+#: Smaller still, for the tests that only need the pipeline to *reach* 4.10.
+_TINY_CONFIG = JointMCConfig(
+    grid_n_max=64,
+    n_design=0,
+    stage1_paths=500,
+    top_k=1,
+    stage2_paths=500,
+    profile_paths=500,
+    final_paths=1_000,
+    batch_paths=1_000,
+    profile_points=3,
+    valley_points=3,
+    noise_replicates=2,
+    refinement_check=False,
+    local_nfev_per_param=3,
+)
 _SEED = 20_260_821
 
 
@@ -446,25 +462,7 @@ def test_the_fixture_path_never_loads_the_market_data_module(source: Any) -> Non
     """
     name = "app.model.market_data.market_data"
     already = name in sys.modules
-    cli.run_pipeline(
-        source,
-        seed=3,
-        mc_config=JointMCConfig(
-            grid_n_max=64,
-            n_design=0,
-            stage1_paths=500,
-            top_k=1,
-            stage2_paths=500,
-            profile_paths=500,
-            final_paths=1_000,
-            batch_paths=1_000,
-            profile_points=3,
-            valley_points=3,
-            noise_replicates=2,
-            refinement_check=False,
-            local_nfev_per_param=3,
-        ),
-    )
+    cli.run_pipeline(source, seed=3, mc_config=_TINY_CONFIG)
     if not already:
         assert name not in sys.modules
 
@@ -511,36 +509,29 @@ def test_short_window_narrows_the_hurst_regression(source: Any, run: Any) -> Non
         source,
         short_window=cli.parse_short_window("7d,60d"),
         seed=_SEED,
-        mc_config=JointMCConfig(
-            grid_n_max=64,
-            n_design=0,
-            stage1_paths=500,
-            top_k=1,
-            stage2_paths=500,
-            profile_paths=500,
-            final_paths=1_000,
-            batch_paths=1_000,
-            profile_points=3,
-            valley_points=3,
-            noise_replicates=2,
-            refinement_check=False,
-            local_nfev_per_param=3,
-        ),
+        mc_config=_TINY_CONFIG,
     )
     assert narrow.hurst.window == pytest.approx((7.0 / 365.0, 60.0 / 365.0))
     assert narrow.hurst.n_expiries < run.hurst.n_expiries
     assert narrow.short_window == pytest.approx((7.0 / 365.0, 60.0 / 365.0))
 
 
-def test_figures_are_opt_in_and_render_headless(run: Any, source: Any, tmp_path) -> None:
+def test_figures_are_opt_in_and_render_headless(source: Any, tmp_path) -> None:
     """
-    The seven spec-9 figures, written only when a directory is asked for. This is
-    the ONLY test that touches matplotlib, and it forces the ``Agg`` backend
-    through the module's own lazy import.
+    The seven spec-9 figures, written only when ``--figures-dir`` asks for them.
+    This is the ONLY test that touches matplotlib, and it goes through the CLI's
+    own wiring so the ``Agg`` backend is forced by the module's lazy import.
     """
     pytest.importorskip("matplotlib")
     out_dir = tmp_path / "figs"
-    written = cli.save_diagnostic_figures(run.report, out_dir)
+    run = cli.run_pipeline(
+        source,
+        seed=5,
+        mc_config=_TINY_CONFIG,
+        figures_dir=out_dir,
+    )
+    written = run.figures
+    assert run.report["figures"] == written
     assert set(written) == {
         "iv_surface",
         "atm_skew",

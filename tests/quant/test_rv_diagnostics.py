@@ -558,6 +558,36 @@ def test_report_degrades_section_by_section_without_artifacts(result: _Result) -
     assert _type_offenders(bare) == []
 
 
+def test_a_result_with_no_quotes_yields_NaN_not_a_number() -> None:
+    """
+    A degenerate calibration must still produce a report, and every statistic in
+    it must be NaN. Silently returning ``0.0`` for "no error" would read as a
+    perfect fit.
+    """
+
+    class _EmptyQuotes:
+        quotes: tuple[Any, ...] = ()
+
+        def diagnostics(self) -> dict[str, Any]:
+            return {"n_quotes": 0}
+
+    class _Empty:
+        quotes = _EmptyQuotes()
+        success = False
+        message_fr = "Aucune cotation exploitable."
+        details: dict[str, Any] = {}
+
+    empty = build_calibration_diagnostics(_Empty())
+    assert not math.isfinite(empty["iv_error"]["rmse"])
+    assert not math.isfinite(empty["price_error"]["rmse"])
+    assert empty["iv_error"]["n"] == 0
+    assert empty["residuals"]["available"] is False
+    assert empty["atm_skew_term_structure"]["available"] is False
+    assert empty["atm_iv_term_structure"]["available"] is False
+    assert empty["per_maturity"] == []
+    assert _type_offenders(empty) == []
+
+
 def test_attach_diagnostics_writes_into_details_and_returns_the_report(
     result: _Result,
 ) -> None:
