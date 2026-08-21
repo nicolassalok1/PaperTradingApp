@@ -53,6 +53,28 @@ from app.model.options.logic import download_options_alpaca as _download_options
 from app.model.calibration.implied_vol import bs_call_price as _bs_call_price
 from app.model.calibration.loss_surface import compute_bs_vega_grid, iv_error_metrics_weighted
 
+#: Dispatch key of the spec-4.10 joint ``(H, eta, rho)`` rough Bergomi calibrator.
+#: Deliberately distinct from ``"rbergomi"``, which is the MC-surrogate calibrator.
+ROUGH_VOL_MODEL_KEY = "rbergomi_joint_h"
+
+#: Ordered stages of the rough-volatility pipeline, with the label the UI shows.
+#: The last one is the only expensive one; everything before it is closed-form or
+#: quadrature and runs in well under a second on a Yahoo chain.
+ROUGH_VOL_STEPS: tuple[tuple[str, str], ...] = (
+    ("chain", "Nettoyage des chaînes d'options (4.1)"),
+    ("forward", "Courbe forward par parité call-put (4.2)"),
+    ("surface", "Surface OTM en log-moneyness (4.2)"),
+    ("variance_swap", "Strikes de swap de variance K_var (4.3)"),
+    ("forward_variance", "Courbe de variance forward ξ₀ (4.4)"),
+    ("hurst", "Estimation initiale de H par le skew ATM (4.5)"),
+    ("initializer", "Point de départ (H₀, η₀, ρ₀) (4.9)"),
+    ("calibration", "Calibration jointe (H, η, ρ) à ξ₀ figé (4.10/4.11)"),
+)
+
+#: The two stages ``run_rbergomi_hurst_pipeline`` accepts.
+ROUGH_VOL_STAGE_PREPARE = "prepare"
+ROUGH_VOL_STAGE_FULL = "full"
+
 
 class CalibrationController:
     """Placeholder for future model calibration (architecture only)."""
@@ -836,6 +858,22 @@ class CalibrationController:
             {"key": "merton_jump_diffusion", "label": "Jump Diffusion (Merton) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": False},
             {"key": "rheston", "label": "rHeston (Markovian approx) via FFT", "pricing": "fft", "calibration": "least_squares", "expensive": True},
             {"key": "rbergomi", "label": "rBergomi (MC + surrogate)", "pricing": "mc", "calibration": "mc_surrogate", "expensive": True},
+            # Spec 4.10/4.11 joint (H, eta, rho) fit with xi0 FROZEN. Distinct key from
+            # "rbergomi" on purpose: that one is the surrogate calibrator and is pinned by
+            # tests/quant/test_advanced_calibration_roundtrip.py. This one cannot run from an
+            # IV grid alone — it needs constraints["xi0_curve"] (spec 4.4), which only the
+            # rough-volatility pipeline can build — so it lives in its own tab, not in the
+            # per-model tabs of "Calibration avancée".
+            {
+                "key": ROUGH_VOL_MODEL_KEY,
+                "label": "rBergomi (H joint, MC — ξ₀ figé)",
+                "pricing": "mc",
+                "calibration": "joint_h_mc",
+                "expensive": True,
+                "requires_constraints": ["xi0_curve"],
+                "ui": "tab_rough_vol",
+                "entry_point": "run_rbergomi_hurst_pipeline",
+            },
             {"key": "volterra", "label": "Volterra SDE (MC proxy)", "pricing": "mc", "calibration": "mc_proxy", "expensive": True},
         ]
 
@@ -868,6 +906,7 @@ class CalibrationController:
         from app.model.volatility_models.heston.calibrator_legacy import HestonLegacyLeastSquaresCalibrator
         from app.model.volatility_models.rheston.calibrator_fft import RHestonFFTMarkovianCalibrator
         from app.model.volatility_models.rbergomi.calibrator_mc_surrogate import RBergomiMCSurrogateCalibrator
+        from app.model.volatility_models.rbergomi.calibrator_joint_mc import RBergomiJointHCalibrator
         from app.model.volatility_models.volterra.calibrator_mc import VolterraSDECalibrator
 
         data = payload or {}
@@ -971,6 +1010,7 @@ class CalibrationController:
             "merton_jump_diffusion": MertonJumpDiffusionCalibrator(),
             "rheston": RHestonFFTMarkovianCalibrator(),
             "rbergomi": RBergomiMCSurrogateCalibrator(),
+            ROUGH_VOL_MODEL_KEY: RBergomiJointHCalibrator(),
             "volterra": VolterraSDECalibrator(),
         }
         calibrator = calibrator_map.get(model_key)
@@ -1010,6 +1050,724 @@ class CalibrationController:
                 "details": result.details or {},
             }
         )
+
+    # ------------------------------------------------------------------
+    # Rough-volatility pipeline (spec 4.1 -> 4.11) — Phase 5
+    # ------------------------------------------------------------------
+
+    def get_rough_vol_steps(self) -> list[Dict[str, str]]:
+        """Ordered pipeline stages, so the view can name them without importing the model."""
+        return [{"step": str(s), "label_fr": str(label)} for s, label in ROUGH_VOL_STEPS]
+
+    def get_rough_vol_flag_labels(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Every flag the joint calibrator can raise, with its French label and
+        whether it is *blocking* (i.e. on its own enough to make ``success``
+        False).
+
+        The view must be able to tell "cette surface n'identifie pas H" from a
+        mere advisory without importing ``app.model`` — the MVC gate forbids it.
+        """
+        from app.model.volatility_models.rbergomi.calibrator_joint_mc import (
+            BLOCKING_FLAGS,
+            JOINT_CALIBRATION_LABELS_FR,
+        )
+
+        blocking = {str(f) for f in BLOCKING_FLAGS}
+        return {
+            str(flag): {"label_fr": str(label), "blocking": bool(str(flag) in blocking)}
+            for flag, label in JOINT_CALIBRATION_LABELS_FR.items()
+        }
+
+    def rbergomi_joint_cost_estimate(self, payload: Dict | None) -> Dict[str, Any]:
+        """
+        Monte-Carlo budget of ONE joint calibration, **before** it is launched.
+
+        Returns evaluation counts and cumulated path counts per stage. It never
+        returns a wall time: no per-evaluation constant is measured here, and
+        inventing one would be a fabricated number. The view turns this into
+        seconds only once it holds a *measured* ``mean_evaluation_seconds`` from
+        a previous run on the same machine.
+
+        Two things this makes explicit, both raised by the Phase-4 panel:
+
+        * ``tab_advanced_calibration`` estimates a run as
+          ``per_eval * max_nfev * n_starts``. That is the Stage-2 term ONLY: it
+          ignores the Stage-1 design, the spec-4.11 profiles, the eta/rho valley,
+          the noise floor, the grid-refinement bias and the final high-accuracy
+          repricing. ``ratio_vs_local_stage_only`` states by how much.
+        * ``CalibratorSettings.max_nfev`` defaults to ``80`` and the joint
+          calibrator applies its own budget (``local_nfev_per_param * n_free``)
+          whenever it sees that exact value — so a caller who *deliberately*
+          passes 80 is indistinguishable from one who passed nothing.
+          ``max_nfev_is_ambiguous`` says when that is the case.
+        """
+        from app.model.calibration.base_calibrator import CalibratorSettings
+        from app.model.volatility_models.rbergomi.calibrator_joint_mc import (
+            PARAM_ORDER,
+            JointMCConfig,
+            _config_from_mapping,
+            resolve_bounds,
+        )
+
+        data = payload or {}
+        constraints = data.get("constraints") if isinstance(data.get("constraints"), dict) else {}
+        mc_override = data.get("mc_cfg")
+        if not isinstance(mc_override, dict):
+            mc_override = constraints.get("mc_cfg")
+        try:
+            cfg = _config_from_mapping(JointMCConfig(), mc_override)
+        except Exception as exc:
+            return {"success": False, "message": f"Configuration Monte-Carlo invalide: {exc}"}
+
+        n_params = len(PARAM_ORDER)
+        try:
+            _bounds, pinned = resolve_bounds(constraints)
+            n_free = max(0, n_params - len(pinned))
+        except Exception:
+            pinned = ()
+            n_free = n_params
+
+        default_max_nfev = int(CalibratorSettings().max_nfev)
+        requested_raw = data.get("max_nfev")
+        try:
+            requested = default_max_nfev if requested_raw is None else int(requested_raw)
+        except Exception:
+            requested = default_max_nfev
+        ambiguous = int(requested) == default_max_nfev
+        max_nfev_eff = int(cfg.local_max_nfev(n_free)) if ambiguous else int(requested)
+
+        n_starts = max(1, int(data.get("n_starts") or 1))
+        stage1_runs = bool(int(cfg.n_design) > 0 and n_free > 0)
+        n_starts_eff = min(n_starts, int(cfg.n_design) + 1) if stage1_runs else 1
+
+        stage1_paths = int(cfg.stage1_paths)
+        stage2_paths = int(cfg.stage2_paths)
+        profile_paths = int(cfg.effective_profile_paths)
+        final_paths = int(cfg.final_paths)
+
+        # Evaluation counts, read off the calibrator's own documented costs.
+        stage1_evals = (int(cfg.n_design) + 1) if stage1_runs else 0
+        stage2_evals = n_starts_eff * (max_nfev_eff + 1)  # local search + re-score on its own draw
+        selection_evals = n_starts_eff  # restarts re-scored on ONE common draw
+        crn_evals = 2  # loss at the optimum and at the initial point
+        matched_evals = 2  # loss_crn_matched / loss_fresh_matched
+        profile_evals = n_free * int(cfg.profile_points)
+        valley_evals = int(cfg.valley_points)
+        noise_evals = int(cfg.noise_replicates) * (1 + n_free)
+        refinement_evals = (2 + 4 * n_free) if bool(cfg.refinement_check) else 0
+        final_evals = 1
+
+        stages: list[Dict[str, Any]] = [
+            {"stage": "stage1_design", "label_fr": "Étape 1 — plan d'expérience (hypercube latin)",
+             "n_evaluations": int(stage1_evals), "n_paths_per_evaluation": stage1_paths},
+            {"stage": "stage2_local", "label_fr": "Étape 2 — recherche locale (Nelder-Mead, CRN)",
+             "n_evaluations": int(stage2_evals), "n_paths_per_evaluation": stage2_paths},
+            {"stage": "matched_losses", "label_fr": "Coûts appariés (dans / hors échantillon)",
+             "n_evaluations": int(matched_evals), "n_paths_per_evaluation": stage2_paths},
+            {"stage": "restart_selection", "label_fr": "Sélection du meilleur redémarrage",
+             "n_evaluations": int(selection_evals), "n_paths_per_evaluation": profile_paths},
+            {"stage": "crn_losses", "label_fr": "Coûts à tirage commun (optimum, point initial)",
+             "n_evaluations": int(crn_evals), "n_paths_per_evaluation": profile_paths},
+            {"stage": "profiles", "label_fr": "Profils d'identifiabilité (4.11)",
+             "n_evaluations": int(profile_evals), "n_paths_per_evaluation": profile_paths},
+            {"stage": "valley", "label_fr": "Vallée (η, ρ) à produit constant",
+             "n_evaluations": int(valley_evals), "n_paths_per_evaluation": profile_paths},
+            {"stage": "noise_floor", "label_fr": "Plancher de bruit Monte-Carlo",
+             "n_evaluations": int(noise_evals), "n_paths_per_evaluation": profile_paths},
+            {"stage": "grid_bias", "label_fr": "Biais de discrétisation (grille raffinée)",
+             "n_evaluations": int(refinement_evals), "n_paths_per_evaluation": profile_paths},
+            {"stage": "final_repricing", "label_fr": "Repricing final (graine fraîche)",
+             "n_evaluations": int(final_evals), "n_paths_per_evaluation": final_paths},
+        ]
+        for entry in stages:
+            entry["n_paths_total"] = int(entry["n_evaluations"]) * int(entry["n_paths_per_evaluation"])
+
+        n_evaluations = int(sum(int(e["n_evaluations"]) for e in stages))
+        n_paths_total = int(sum(int(e["n_paths_total"]) for e in stages))
+        local_only = int(max_nfev_eff) * int(n_starts_eff)
+        ratio = (float(n_evaluations) / float(local_only)) if local_only > 0 else float("nan")
+        # What `tab_advanced_calibration.py:499` literally multiplies:
+        # `per_eval * max_nfev * n_starts`, with the values the CALLER passed —
+        # not the budget the calibrator ends up applying. When `max_nfev` is the
+        # ambiguous 80 the two differ, and the heuristic is wrong twice over.
+        heuristic_evals = int(requested) * int(max(1, n_starts))
+        heuristic_ratio = (
+            (float(n_evaluations) / float(heuristic_evals))
+            if heuristic_evals > 0
+            else float("nan")
+        )
+
+        if ambiguous:
+            nfev_note = (
+                f"max_nfev = {requested} est exactement la valeur par défaut de "
+                f"CalibratorSettings : « {requested} demandé explicitement » est "
+                "indistinguable de « rien demandé », et le calibrateur applique son "
+                "propre budget de "
+                f"{max_nfev_eff} évaluations (local_nfev_per_param × nombre de paramètres "
+                "libres). Choisir une autre valeur pour imposer un budget."
+            )
+        else:
+            nfev_note = (
+                f"Budget imposé par l'appelant : {max_nfev_eff} évaluations par recherche locale."
+            )
+
+        return self._json_safe(
+            {
+                "success": True,
+                "model": ROUGH_VOL_MODEL_KEY,
+                "method": "joint_h_mc",
+                "expensive": True,
+                "n_free_parameters": int(n_free),
+                "pinned_parameters": [str(p) for p in pinned],
+                "n_starts_requested": int(n_starts),
+                "n_starts_effective": int(n_starts_eff),
+                "max_nfev_requested": int(requested),
+                "max_nfev_effective": int(max_nfev_eff),
+                "max_nfev_source": "config" if ambiguous else "settings",
+                "max_nfev_is_ambiguous": bool(ambiguous),
+                "max_nfev_ambiguity_fr": nfev_note,
+                "grid_n_max": int(cfg.grid_n_max),
+                "stages": stages,
+                "n_evaluations": n_evaluations,
+                "n_paths_total": n_paths_total,
+                "local_stage_only_evaluations": int(local_only),
+                "ratio_vs_local_stage_only": float(ratio),
+                "heuristic_evaluations": int(heuristic_evals),
+                "ratio_vs_heuristic": float(heuristic_ratio),
+                "message_fr": (
+                    f"≈ {n_evaluations} évaluations Monte-Carlo de la fonction de coût, soit "
+                    f"≈ {n_paths_total} trajectoires simulées au total. La recherche locale "
+                    f"seule — la seule chose que compte l'heuristique « max_nfev × n_starts » "
+                    f"de l'onglet Calibration avancée — n'en représente que {local_only}, "
+                    f"soit un facteur ≈ {ratio:.1f}. Avec les valeurs demandées ici cette "
+                    f"heuristique n'en compterait que {heuristic_evals}, "
+                    f"facteur ≈ {heuristic_ratio:.1f}."
+                ),
+                "wall_time_fr": (
+                    "Aucune durée n'est estimée ici : elle dépend de la machine. La constante "
+                    "`per_eval` de l'onglet Calibration avancée (0,05 s) est calibrée sur des "
+                    "modèles FFT, pas sur une évaluation Monte-Carlo de plusieurs milliers de "
+                    "trajectoires : appliquée ici elle se tromperait d'un ordre de grandeur, en "
+                    "plus du facteur de comptage ci-dessus. Après une première calibration, le "
+                    "rapport fournit la durée moyenne par évaluation réellement mesurée "
+                    "(mean_evaluation_seconds)."
+                ),
+            }
+        )
+
+    def _rough_vol_failure(
+        self,
+        *,
+        step: str,
+        message: str,
+        stage: str,
+        steps: list[Dict[str, Any]],
+        extra: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """A pipeline stop, named by the step that refused. Never carries a parameter value."""
+        out: Dict[str, Any] = {
+            "success": False,
+            "stage": str(stage),
+            "failed_step": str(step),
+            "message": str(message),
+            "steps": steps,
+            "params": {},
+            "params_usable": False,
+            "flags": [],
+            "warnings_fr": [],
+            "flag_details": [],
+            "blocking_flags": [],
+        }
+        if extra:
+            out.update(extra)
+        return self._json_safe(out)
+
+    @staticmethod
+    def _median_row_spot(*frames: Any) -> float:
+        """Median ``S0`` carried by the raw chain rows; NaN when they carry none."""
+        values: list[float] = []
+        for frame in frames:
+            if frame is None:
+                continue
+            try:
+                if isinstance(frame, pd.DataFrame):
+                    if "S0" not in frame.columns:
+                        continue
+                    series = pd.to_numeric(frame["S0"], errors="coerce")
+                else:
+                    series = pd.to_numeric(
+                        pd.Series([dict(row).get("S0") for row in frame], dtype="object"),
+                        errors="coerce",
+                    )
+            except Exception:
+                continue
+            series = series[series > 0]
+            if not series.empty:
+                values.append(float(series.median()))
+        if not values:
+            return float("nan")
+        return float(pd.Series(values).median())
+
+    def run_rbergomi_hurst_pipeline(self, payload: Dict | None) -> Dict[str, Any]:
+        """
+        Run the rough-volatility pipeline of spec 4.1 -> 4.11 end to end.
+
+        The controller **orchestrates only**: every number below is produced by
+        ``app.model.calibration.rough_vol.*`` and
+        ``app.model.volatility_models.rbergomi.*``.
+
+        Payload
+        -------
+        ``ticker``
+            Underlying whose Yahoo option chain is fetched (disk cache first).
+            Optional when ``calls`` / ``puts`` are supplied directly.
+        ``calls`` / ``puts``
+            Raw chain rows (``DataFrame`` or list of mappings) in the
+            ``fetch_options_details_yahoo`` schema. Supplying them skips the
+            network entirely.
+        ``stage``
+            ``"prepare"`` (**the default**) runs 4.1 -> 4.9 only — closed form
+            and quadrature, no Monte-Carlo — and returns the cost of the fit that
+            *would* follow. ``"full"`` also runs the expensive 4.10/4.11 joint
+            calibration. The cheap stage is the default on purpose: this
+            calibrator must never start from a casual call.
+        ``S0``, ``r``, ``q``, ``currency``, ``max_maturity_years``, ``max_expiries``, ``use_cache``
+            Spot / rate overrides and fetch parameters. An explicit ``r`` pins the
+            discounting of spec 4.2 at every quoted maturity (reproducible
+            off-line) instead of resolving the repo yield curve; without it the
+            curve is used and the reporting grid takes ``r`` / ``q`` from the
+            forward point closest to the middle of the term structure. ``q``
+            weights the reported grid metrics only — the fit itself runs on the
+            market forwards.
+        ``short_maturity_window``
+            ``[T_min, T_max]`` in years for the spec-4.5 skew regression.
+        ``constraints``
+            The repo constraints protocol restricted to ``H`` / ``eta`` / ``rho``.
+            ``xi0`` is data here, never a parameter: it is dropped before
+            dispatch and the model layer refuses it loudly anyway.
+        ``mc_cfg`` / ``weights_cfg``
+            Mappings overriding ``JointMCConfig`` / ``WeightConfig``.
+        ``max_nfev``, ``n_starts``, ``seed``, ``fit_to_observed_only``
+            The shared ``CalibratorSettings`` fields. See
+            :meth:`rbergomi_joint_cost_estimate` for the ``max_nfev == 80``
+            ambiguity.
+
+        Returns
+        -------
+        A ``_json_safe`` dict. ``success`` is a **verdict**: ``False`` means the
+        surface does not identify ``H`` (or an earlier stage refused), and the
+        French reason is in ``message`` with the per-flag detail in
+        ``warnings_fr``. ``params_usable`` mirrors it — when it is ``False`` the
+        numbers in ``params`` measure nothing and must not be presented as a
+        calibration result.
+        """
+        import math as _math
+
+        from app.model.calibration.rough_vol.chain_cleaning import (
+            CleaningConfig,
+            clean_option_chains,
+            cleaning_report,
+        )
+        from app.model.calibration.rough_vol.forward_curve import (
+            build_forward_curve,
+            build_otm_surface,
+            forward_curve_report,
+        )
+        from app.model.calibration.rough_vol.forward_variance import (
+            build_forward_variance_curve,
+            forward_variance_report,
+        )
+        from app.model.calibration.rough_vol.hurst_estimator import (
+            estimate_hurst_from_skew,
+            hurst_report,
+        )
+        from app.model.calibration.rough_vol.variance_swap import (
+            build_variance_swap_curve,
+            variance_swap_report,
+        )
+        from app.model.volatility_models.rbergomi.initializer import (
+            initial_rbergomi_params,
+            initializer_report,
+        )
+
+        data = payload or {}
+        stage = str(data.get("stage") or ROUGH_VOL_STAGE_PREPARE).strip().lower()
+        if stage not in (ROUGH_VOL_STAGE_PREPARE, ROUGH_VOL_STAGE_FULL):
+            stage = ROUGH_VOL_STAGE_PREPARE
+
+        labels = dict(ROUGH_VOL_STEPS)
+        steps: list[Dict[str, Any]] = []
+        ticker_out = str(data.get("ticker") or "").strip().upper() or None
+
+        def _ok(step: str, message: str, **detail: Any) -> None:
+            steps.append(
+                {
+                    "step": str(step),
+                    "label_fr": labels.get(step, step),
+                    "ok": True,
+                    "message_fr": str(message),
+                    **detail,
+                }
+            )
+
+        def _ko(step: str, message: str) -> Dict[str, Any]:
+            steps.append(
+                {
+                    "step": str(step),
+                    "label_fr": labels.get(step, step),
+                    "ok": False,
+                    "message_fr": str(message),
+                }
+            )
+            return self._rough_vol_failure(
+                step=step,
+                message=message,
+                stage=stage,
+                steps=steps,
+                extra={"ticker": ticker_out},
+            )
+
+        currency = data.get("currency") or None
+
+        # -- chain rows: supplied, or fetched from Yahoo (disk cache first) --
+        calls = data.get("calls")
+        puts = data.get("puts")
+        spot_fetched: Any = None
+        if calls is None and puts is None:
+            if not ticker_out:
+                return _ko("chain", "Ticker manquant : aucune chaîne d'options à traiter.")
+            from app.model.market_data.market_data import fetch_options_details_yahoo
+
+            try:
+                calls, puts, spot_fetched, _rf, _div = fetch_options_details_yahoo(
+                    ticker_out,
+                    max_maturity_years=float(data.get("max_maturity_years") or 2.0),
+                    max_expiries=int(data.get("max_expiries") or 12),
+                    use_cache=bool(data.get("use_cache", True)),
+                )
+            except Exception as exc:
+                return _ko("chain", f"Téléchargement de la chaîne {ticker_out} impossible: {exc}")
+
+        S0_raw = data.get("S0")
+        if S0_raw is None:
+            S0_raw = spot_fetched
+        if S0_raw is None:
+            S0_raw = self._median_row_spot(calls, puts)
+        try:
+            S0 = float(S0_raw)
+        except Exception:
+            S0 = float("nan")
+        if not (_math.isfinite(S0) and S0 > 0.0):
+            return _ko(
+                "chain",
+                "Spot indisponible ou non exploitable : la surface ne peut pas être normalisée.",
+            )
+
+        # -- 4.1 cleaning ----------------------------------------------------
+        cleaning_cfg = data.get("cleaning_cfg")
+        try:
+            config = CleaningConfig(**cleaning_cfg) if isinstance(cleaning_cfg, dict) else None
+            chains = clean_option_chains(calls, puts, config=config, spot=S0)
+        except Exception as exc:
+            return _ko("chain", f"Nettoyage des chaînes impossible: {exc}")
+        chains = [c for c in chains if _math.isfinite(float(c.T)) and float(c.T) > 0.0]
+        if not chains:
+            return _ko("chain", "Aucune échéance exploitable après nettoyage.")
+        cleaning = cleaning_report(chains)
+        _ok("chain", f"{len(chains)} échéance(s) nettoyée(s).", n_expiries=len(chains))
+
+        # -- 4.2 forward curve -----------------------------------------------
+        # An explicit `r` pins the discounting at every quoted maturity instead of
+        # resolving the repo yield curve, which makes a run reproducible off-line.
+        rates_pin: Dict[float, float] | None = None
+        if data.get("r") is not None:
+            try:
+                rates_pin = {float(c.T): float(data["r"]) for c in chains}
+            except Exception:
+                rates_pin = None
+        try:
+            forward_points = build_forward_curve(
+                chains, rates=rates_pin, currency=currency, S0=S0
+            )
+        except Exception as exc:
+            return _ko("forward", f"Courbe forward impossible: {exc}")
+        if not forward_points:
+            return _ko(
+                "forward",
+                "Aucun point de courbe forward n'a pu être construit (parité call-put).",
+            )
+        forwards = forward_curve_report(forward_points)
+        _ok("forward", f"{len(forward_points)} forward(s) par parité.", n_points=len(forward_points))
+
+        # -- 4.2 OTM surface --------------------------------------------------
+        by_T = {float(p.T): p for p in forward_points}
+        pairs: list[tuple[Any, Any]] = []
+        surfaces: list[list[Any]] = []
+        n_rejected = 0
+        for chain in chains:
+            point = by_T.get(float(chain.T))
+            if point is None:
+                continue
+            try:
+                points, rejections = build_otm_surface(chain, point)
+            except Exception as exc:
+                return _ko("surface", f"Surface OTM impossible à T={float(chain.T):.6g}: {exc}")
+            n_rejected += len(rejections)
+            if points:
+                pairs.append((chain, point))
+                surfaces.append(list(points))
+        flat_points = [p for group in surfaces for p in group]
+        if not flat_points:
+            return _ko("surface", "Aucune cotation hors de la monnaie exploitable sur la surface.")
+        _ok(
+            "surface",
+            f"{len(flat_points)} cotation(s) OTM sur {len(surfaces)} échéance(s) "
+            f"({n_rejected} rejetée(s)).",
+            n_quotes=len(flat_points),
+            n_maturities=len(surfaces),
+            n_rejected=int(n_rejected),
+        )
+
+        # -- 4.3 variance-swap strikes ----------------------------------------
+        try:
+            variance_curve = build_variance_swap_curve(pairs, currency=currency)
+        except Exception as exc:
+            return _ko("variance_swap", f"Courbe de swaps de variance impossible: {exc}")
+        variance = variance_swap_report(variance_curve)
+        if not variance_curve.points:
+            refusals = " ; ".join(str(f.message_fr) for f in variance_curve.failures[:3])
+            return _ko(
+                "variance_swap",
+                "Aucun K_var exploitable." + (f" {refusals}" if refusals else ""),
+            )
+        _ok(
+            "variance_swap",
+            f"{len(variance_curve.points)} K_var retenu(s), "
+            f"{len(variance_curve.failures)} échéance(s) refusée(s).",
+            n_points=len(variance_curve.points),
+            n_failures=len(variance_curve.failures),
+        )
+
+        # -- 4.4 forward-variance curve (xi0) ---------------------------------
+        try:
+            xi0_curve = build_forward_variance_curve(variance_curve)
+        except Exception as exc:
+            return _ko("forward_variance", f"Courbe de variance forward ξ₀ impossible: {exc}")
+        forward_variance = forward_variance_report(xi0_curve)
+        _ok(
+            "forward_variance",
+            f"ξ₀ construite sur {len(xi0_curve.T_knots)} nœud(s) ({xi0_curve.method}).",
+            n_knots=len(xi0_curve.T_knots),
+        )
+
+        # -- 4.5 initial Hurst estimate ---------------------------------------
+        window_raw = data.get("short_maturity_window")
+        window: tuple[float, float] | None = None
+        if isinstance(window_raw, (list, tuple)) and len(window_raw) == 2:
+            try:
+                window = (float(window_raw[0]), float(window_raw[1]))
+            except Exception:
+                window = None
+        try:
+            hurst = estimate_hurst_from_skew(
+                surfaces,
+                forward_points,
+                window,
+                clean_chains=chains,
+                variance_curve=variance_curve,
+            )
+        except Exception as exc:
+            return _ko("hurst", f"Estimation initiale de H impossible: {exc}")
+        hurst_out = hurst_report(hurst)
+        _ok("hurst", str(hurst.message_fr), unstable=bool(hurst.unstable))
+
+        # -- 4.9 initial (H0, eta0, rho0) --------------------------------------
+        try:
+            params0, init_diag = initial_rbergomi_params(
+                hurst,
+                surfaces,
+                xi0_curve=xi0_curve,
+                forward_curve=forward_points,
+                clean_chains=chains,
+                variance_curve=variance_curve,
+            )
+        except Exception as exc:
+            return _ko("initializer", f"Initialisation (H₀, η₀, ρ₀) impossible: {exc}")
+        initializer = initializer_report(init_diag)
+        _ok("initializer", str(initializer.get("message_fr") or "Point de départ construit."))
+
+        # -- shared reporting grid ---------------------------------------------
+        t_grid = sorted({float(chain.T) for chain, _point in pairs})
+        m_grid = [float(m) for m in default_grid()[0]]
+        anchor = forward_points[len(forward_points) // 2]
+        r_val = float(anchor.r) if _math.isfinite(float(anchor.r)) else 0.0
+        q_anchor = float(anchor.q_implied)
+        q_val = q_anchor if _math.isfinite(q_anchor) else 0.0
+        if data.get("r") is not None:
+            r_val = float(data["r"])
+        if data.get("q") is not None:
+            q_val = float(data["q"])
+
+        market_df = pd.DataFrame(
+            [
+                {"K": float(p.K), "T": float(p.T), "S0": S0, "iv": float(p.iv)}
+                for p in flat_points
+                if _math.isfinite(float(p.iv)) and float(p.iv) > 0.0
+            ]
+        )
+
+        constraints_in = data.get("constraints")
+        constraints: Dict[str, Any] = dict(constraints_in) if isinstance(constraints_in, dict) else {}
+        # xi0 is DATA during the joint fit; the optimizer must be structurally unable
+        # to move it. The model layer raises on this key — drop it here so the UI
+        # cannot even try.
+        constraints.pop("xi0", None)
+        if isinstance(data.get("mc_cfg"), dict):
+            constraints["mc_cfg"] = dict(data["mc_cfg"])
+        if isinstance(data.get("weights_cfg"), dict):
+            constraints["weights_cfg"] = dict(data["weights_cfg"])
+
+        cost = self.rbergomi_joint_cost_estimate(
+            {
+                "constraints": constraints,
+                "mc_cfg": constraints.get("mc_cfg"),
+                "max_nfev": data.get("max_nfev"),
+                "n_starts": data.get("n_starts"),
+            }
+        )
+
+        base: Dict[str, Any] = {
+            "stage": stage,
+            "failed_step": None,
+            "steps": steps,
+            "ticker": ticker_out,
+            "S0": float(S0),
+            "r": float(r_val),
+            "q": float(q_val),
+            "m_grid": m_grid,
+            "t_grid": t_grid,
+            "n_quotes": int(len(flat_points)),
+            "n_maturities": int(len(surfaces)),
+            "cleaning": cleaning,
+            "forward_curve": forwards,
+            "variance_swap": variance,
+            "forward_variance": forward_variance,
+            "hurst": hurst_out,
+            "initializer": initializer,
+            "initial_params": params0.to_dict(),
+            "cost": cost,
+        }
+
+        if stage == ROUGH_VOL_STAGE_PREPARE:
+            base.update(
+                {
+                    "success": True,
+                    "params": {},
+                    "params_usable": False,
+                    "message": (
+                        "Préparation terminée (4.1 → 4.9). "
+                        f"{initializer.get('message_fr') or ''} Aucun (H, η, ρ) n'est calibré "
+                        "à ce stade : les valeurs affichées sont des points de départ."
+                    ),
+                    "flags": [],
+                    "warnings_fr": [],
+                    "flag_details": [],
+                    "blocking_flags": [],
+                }
+            )
+            return self._json_safe(base)
+
+        # -- 4.10 / 4.11 joint calibration (EXPENSIVE) --------------------------
+        constraints["xi0_curve"] = xi0_curve
+        constraints["option_surface"] = flat_points
+        constraints["clean_chains"] = chains
+        constraints["initial_params"] = (params0, init_diag)
+
+        calib = self.run_advanced_surface_calibration(
+            {
+                "model": ROUGH_VOL_MODEL_KEY,
+                "df": market_df,
+                "S0": float(S0),
+                "r": float(r_val),
+                "q": float(q_val),
+                "m_grid": m_grid,
+                "t_grid": t_grid,
+                "constraints": constraints,
+                "fit_to_observed_only": bool(data.get("fit_to_observed_only", True)),
+                "max_nfev": data.get("max_nfev"),
+                "n_starts": data.get("n_starts"),
+                "seed": data.get("seed"),
+            }
+        )
+        if not isinstance(calib, dict):
+            return _ko("calibration", "Le calibrateur joint n'a rien retourné.")
+
+        details = calib.get("details") if isinstance(calib.get("details"), dict) else {}
+        report = details.get("report") if isinstance(details.get("report"), dict) else {}
+        flags = [str(f) for f in (report.get("flags") or details.get("flags") or [])]
+        warnings_fr = [str(w) for w in (report.get("warnings_fr") or details.get("warnings_fr") or [])]
+        # The model builds ``warnings_fr`` as ``[LABELS[f] for f in flags]``, so the
+        # two lists are positionally paired; keep the pairing explicit so the view
+        # can render a flag next to its French sentence, and mark which of them are
+        # on their own enough to make the verdict False.
+        try:
+            labels_fr = self.get_rough_vol_flag_labels()
+        except Exception:  # pragma: no cover - model import failure is reported elsewhere
+            labels_fr = {}
+        flag_details = [
+            {
+                "flag": flag,
+                "label_fr": str(
+                    (labels_fr.get(flag) or {}).get("label_fr")
+                    or (warnings_fr[i] if i < len(warnings_fr) else flag)
+                ),
+                "blocking": bool((labels_fr.get(flag) or {}).get("blocking", False)),
+            }
+            for i, flag in enumerate(flags)
+        ]
+        success = bool(calib.get("success"))
+        message = str(calib.get("message") or "")
+
+        steps.append(
+            {
+                "step": "calibration",
+                "label_fr": labels["calibration"],
+                "ok": success,
+                "message_fr": message,
+            }
+        )
+
+        base.update(
+            {
+                "success": success,
+                "message": message,
+                "failed_step": None if success else "calibration",
+                "model": calib.get("model"),
+                "method": calib.get("method"),
+                "params": calib.get("params") or {},
+                # A False verdict means the run carries no information about H: the
+                # triple above then measures nothing and must NOT reach the screen as
+                # a calibration result.
+                "params_usable": success,
+                "metrics": calib.get("metrics") or {},
+                "metrics_vw": calib.get("metrics_vw") or {},
+                "iv_market": calib.get("iv_market"),
+                "iv_model": calib.get("iv_model"),
+                "iv_error": calib.get("iv_error"),
+                "vega_weights": calib.get("vega_weights"),
+                "mask": calib.get("mask"),
+                "m_grid": calib.get("m_grid") or m_grid,
+                "t_grid": calib.get("t_grid") or t_grid,
+                "flags": flags,
+                "warnings_fr": warnings_fr,
+                "flag_details": flag_details,
+                "blocking_flags": [d["flag"] for d in flag_details if d["blocking"]],
+                "calibration": report,
+                "details": details,
+            }
+        )
+        return self._json_safe(base)
 
     def compute_diagnostics(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """
