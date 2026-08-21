@@ -440,8 +440,20 @@ FLAG_GRID_BIAS_NOT_MEASURED = "grid_bias_not_measured"
 #: Flags that mean the returned ``theta`` carries **no usable information** about
 #: ``H``.  ``success`` is ``False`` whenever any of them is raised - see the
 #: module docstring, section "WHAT ``success`` MEANS".
+#: Flags that make the result unusable rather than merely caveated.
+#:
+#: :data:`FLAG_H_WEAKLY_IDENTIFIED` is the load-bearing one. It is derived from
+#: ``SE(H) = sqrt(2*sigma_L / d2L/dH2)`` -- the profile curvature against the
+#: measured noise -- and it is strictly sharper than
+#: :data:`FLAG_H_PROFILE_FLAT`, whose bound-to-bound span is dominated by the far
+#: arms of the slice and is blind to weak identification: on a thin surface
+#: (quotes at 1y and 2y only, truth H = 0.10) three seeds returned H = 0.1136 /
+#: 0.1064 / 0.1621 -- one of them outside ``TOL_H`` -- while the span verdict
+#: said "informative" every time at 264-1115x its floor. The span flag is kept
+#: as a secondary diagnostic; the standard error is what decides.
 BLOCKING_FLAGS: tuple[str, ...] = (
     FLAG_H_PROFILE_FLAT,
+    FLAG_H_WEAKLY_IDENTIFIED,
     FLAG_NO_IMPROVEMENT,
     FLAG_PROFILE_NOT_STATIONARY,
 )
@@ -789,6 +801,17 @@ class JointMCConfig:
         ``H0`` standard error.  On the reference surface the measured values are
         ``SE(H) = 0.015`` against ``H0_se = 0.0061`` - a ratio of 2.5, well
         inside the default factor of 10.
+
+        ``se_material_ratio`` is **0.4**, not 1.0.  At 1.0 a parameter is only
+        flagged once its one-sigma uncertainty *alone* consumes the entire
+        recovery tolerance, which is far too late: measured on a deliberately
+        thin surface (quotes at 1y and 2y only, truth ``H = 0.10``), three seeds
+        returned ``H = 0.1136 / 0.1064 / 0.1621`` with ``SE(H) = 0.0118 /
+        0.0186 / 0.0303``.  The third is outside ``TOL_H = 0.05`` and at 1.0 it
+        was reported ``success=True`` with no warning at all, even though a
+        +/-1 sigma band 0.061 wide provably cannot resolve ``H`` to the
+        tolerance the result is accepted on.  At 0.4 the threshold is 0.02 for
+        ``H`` and that run is correctly flagged.
     refinement_check, refinement_factor, grid_bias_material:
         Residual-discretisation-bias estimate on a ``refinement_factor``-times
         finer grid, and the threshold past which it is flagged.  The threshold
@@ -838,7 +861,7 @@ class JointMCConfig:
     valley_points: int = 7
     noise_replicates: int = 3
     noise_sigma_multiplier: float = 2.0
-    se_material_ratio: float = 1.0
+    se_material_ratio: float = 0.4
     se_vs_h0_factor: float = 10.0
     refinement_check: bool = True
     refinement_factor: int = 2
@@ -4238,6 +4261,23 @@ def calibrate_rbergomi(
     # `apply_degeneracy_guard` only trips on an all-NaN surface, so without this
     # a meaningless H would reach the Phase-5 controller as a calibrated result.
     blocking = tuple(f for f in ordered_flags if f in BLOCKING_FLAGS)
+
+    # ...but "no improvement over the initial point" is NOT on its own a failure:
+    # it is a statement about WHERE THE CALLER STARTED, not about the result.
+    # A warm start at (or near) the optimum -- exactly what happens when a
+    # previous calibration is fed back in through `constraints["initial_params"]`
+    # from the Phase-5 controller -- legitimately produces no improvement while
+    # returning a perfectly good fit. Measured: starting from the pipeline seed
+    # gives H=0.1057 with success True; warm-starting the SAME config and seed at
+    # the truth gives H=0.1056 (the same optimum to four decimals, identical
+    # rmse) and used to come back "NON CONCLUANTE".
+    #
+    # It only condemns the run when the point it failed to improve on is ALSO
+    # not a minimum -- i.e. combined with a non-stationary profile or a
+    # flat/weakly-identified H. Alone, it is a warning.
+    if FLAG_NO_IMPROVEMENT in blocking and len(blocking) == 1:
+        blocking = ()
+
     success = not blocking
 
     message_fr = (

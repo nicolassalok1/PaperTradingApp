@@ -854,6 +854,7 @@ def test_success_is_a_verdict_not_a_constant():
     """``success`` is False exactly when a blocking flag is present."""
     assert set(BLOCKING_FLAGS) == {
         FLAG_H_PROFILE_FLAT,
+        FLAG_H_WEAKLY_IDENTIFIED,
         FLAG_NO_IMPROVEMENT,
         FLAG_PROFILE_NOT_STATIONARY,
     }
@@ -1965,7 +1966,16 @@ def test_calibrator_class_runs_on_a_surface_grid(strikes, market_iv, xi0_curve):
         },
         settings=CalibratorSettings(n_starts=1, seed=21),
     )
-    assert result.success is True
+    # This test is about PLUMBING -- that the BaseSurfaceCalibrator contract is
+    # honoured end to end on a SurfaceGrid -- not about fit quality. The config
+    # above is deliberately tiny (4 design points, 6k paths, 4 profile points),
+    # so SE(H) is large and the run is honestly reported as not identifying H.
+    # Asserting success here would be asserting that a cheap run resolves H,
+    # which it does not and should not claim to.
+    assert isinstance(result.success, bool)
+    assert result.success is (
+        not set(result.details["flags"]) & set(BLOCKING_FLAGS)
+    )
     assert set(result.params) == {"H", "eta", "rho"}
     for name, value in result.params.items():
         low, high = DEFAULT_BOUNDS[name]
