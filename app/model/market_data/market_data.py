@@ -132,13 +132,11 @@ def _alpaca_latest_quote_mid(symbol: str, *, feed: str | None = "iex") -> float 
         return None
 
 
-def fetch_spot_price(symbol: str):
+def fetch_live_spot_price(symbol: str) -> float | None:
     """
-    Spot price: Alpaca latest trade (data API) -> quote mid -> legacy SDK -> Stooq last close.
-
-    Notes:
-    - We prefer the data API because `alpaca_trade_api` is an optional dependency.
-    - Stooq can be rate-limited; we treat it as a best-effort fallback.
+    LIVE spot only: Alpaca latest trade (data API) -> quote mid -> legacy SDK.
+    Returns None without Alpaca credentials or when Alpaca has no price — never
+    a Stooq close (a disk-cached daily close is not a live price).
     """
     sym = (symbol or "").strip().upper()
     if not sym:
@@ -164,7 +162,23 @@ def fetch_spot_price(symbol: str):
                 return float(px)
         except Exception:
             pass
+    return None
 
+
+def fetch_spot_price(symbol: str):
+    """
+    Spot price: Alpaca latest trade (data API) -> quote mid -> legacy SDK -> Stooq last close.
+
+    Notes:
+    - We prefer the data API because `alpaca_trade_api` is an optional dependency.
+    - Stooq can be rate-limited; we treat it as a best-effort fallback.
+    """
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return None
+    px = fetch_live_spot_price(sym)
+    if px is not None:
+        return px
     return _fetch_stooq_spot(sym)
 
 
@@ -354,6 +368,66 @@ def fetch_ohlc_history(symbol: str, *, period: str = "2y", interval: str = "1d")
 
     df_y = _fetch_yahoo_ohlc(sym, period=period, interval=interval)
     return _filter_to_period(df_y, period) if df_y is not None else pd.DataFrame()
+
+
+# Yahoo caps the lookback per intraday granularity (1m ~ 7d, 5m/15m ~ 60d,
+# 1h ~ 730d). Conservative defaults so a plain call always returns data.
+_INTRADAY_DEFAULT_RANGE: dict[str, str] = {
+    "1m": "5d",
+    "2m": "5d",
+    "5m": "1mo",
+    "15m": "1mo",
+    "30m": "1mo",
+    "1h": "3mo",
+}
+
+
+def fetch_intraday_ohlc(symbol: str, *, interval: str = "5m", period: str | None = None) -> pd.DataFrame:
+    """
+    OHLC bars at intraday granularity (standardized Date/Open/High/Low/Close/Volume).
+
+    Stooq only serves daily+ bars, so unlike `fetch_ohlc_history` this goes
+    straight to the Yahoo chart endpoint for intraday intervals; intraday
+    timestamps are tz-aware UTC. "1d" (or an unknown interval) delegates to
+    `fetch_ohlc_history` (Stooq first + cache); a cached daily series whose last
+    bar is older than `_DAILY_STALE_DAYS` is refreshed from Yahoo when possible.
+    Returns an empty DataFrame when the fetch fails (caller decides fallback).
+    """
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return pd.DataFrame()
+    itv = (interval or "5m").strip().lower()
+    if itv not in _INTRADAY_DEFAULT_RANGE:
+        daily_period = period or "1y"
+        df = fetch_ohlc_history(sym, period=daily_period, interval="1d")
+        if _daily_is_stale(df):
+            fresh = _fetch_yahoo_ohlc(sym, period=daily_period, interval="1d")
+            if fresh is not None and not fresh.empty:
+                return fresh
+        return df if df is not None else pd.DataFrame()
+    rng = (period or _INTRADAY_DEFAULT_RANGE[itv]).strip().lower()
+    df = _fetch_yahoo_ohlc(sym, period=rng, interval=itv)
+    if df is None or df.empty:
+        return pd.DataFrame()
+    if "Date" in df.columns and getattr(df["Date"].dt, "tz", None) is None:
+        df = df.copy()
+        df["Date"] = df["Date"].dt.tz_localize("UTC")
+    return df
+
+
+_DAILY_STALE_DAYS = 7
+
+
+def _daily_is_stale(df: pd.DataFrame | None) -> bool:
+    if df is None or df.empty or "Date" not in df.columns:
+        return True
+    try:
+        last = pd.Timestamp(df["Date"].iloc[-1])
+        if last.tzinfo is not None:
+            last = last.tz_convert(None)
+        return (pd.Timestamp.today().normalize() - last.normalize()).days > _DAILY_STALE_DAYS
+    except Exception:
+        return False
 
 
 def _cache_path(ticker: str, period: str, interval: str) -> Path:
@@ -915,8 +989,10 @@ def fetch_options_details_yahoo(
 __all__ = [
     "make_alpaca_client",
     "fetch_spot_price",
+    "fetch_live_spot_price",
     "fetch_closing_prices",
     "fetch_ohlc_history",
+    "fetch_intraday_ohlc",
     "fetch_options_details",
     "fetch_options_details_yahoo",
     "load_or_fetch_closing_history",
