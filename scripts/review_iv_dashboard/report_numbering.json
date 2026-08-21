@@ -1,0 +1,226 @@
+[
+  {
+    "code": "M1",
+    "id": "stale-chain-cache-as-current-iv",
+    "sev": "M",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 372,
+    "title": "Fallback chain path serves a stale cached chain as today's IV, with expiries shifted by the cache age, and persists it"
+  },
+  {
+    "code": "M2",
+    "id": "iv-signal-vrp-bias",
+    "sev": "M",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 571,
+    "title": "« Signal (IV) » applique la grille mean-reversion à un percentile IV-dans-distribution-RV : biais structurel VRP"
+  },
+  {
+    "code": "M3",
+    "id": "parity-r-q-zero-bias",
+    "sev": "M",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 416,
+    "title": "BS inversion with r=0, q=0 (spot, not forward) biases each contract's IV by ~±1 vol pt at 30 DTE; the median only cancels when calls and puts are balanced"
+  },
+  {
+    "code": "M4",
+    "id": "local-date-vs-exchange-date",
+    "sev": "M",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 464,
+    "title": "dt.date.today() (server-local) keys the daily IV cache and drives DTE/T: an Asia user writes the US session under tomorrow's date and overwrites/loses sessions"
+  },
+  {
+    "code": "M5",
+    "id": "service-zero-unit-tests",
+    "sev": "M",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 234,
+    "title": "service.py has no direct tests: 8% statement coverage under the CI gate (303/338 lines never executed)"
+  },
+  {
+    "code": "m1",
+    "id": "snapshot-page-cap-silent",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 266,
+    "title": "_SNAPSHOT_MAX_PAGES×limit = 3000 contracts is below a filtered SPY chain (~4.9k) and the cap hit is never logged"
+  },
+  {
+    "code": "m2",
+    "id": "fallback-chain-cannot-reach-30dte-and-masks-root-cause",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 385,
+    "title": "Full-chain fallback fetches only 3×100 unfiltered contracts (nearest expiry) and the surfaced iv_error hides the real HTTP failure"
+  },
+  {
+    "code": "m3",
+    "id": "ask_only_and_crossed_mids",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 218,
+    "title": "_snapshot_mid accepts ask alone (bid missing/0) and crossed quotes without any sanity check"
+  },
+  {
+    "code": "m4",
+    "id": "iv-cache-corrupt-file-silent-loss",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 474,
+    "title": "A 0-byte or header-less iv_daily CSV makes every subsequent observation silently dropped, forever"
+  },
+  {
+    "code": "m5",
+    "id": "iv-history-filename-unsanitized-symbol",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 457,
+    "title": "Nom de fichier du cache IV dérivé du symbole brut (pas de sanitisation, contrairement au reste du modèle)"
+  },
+  {
+    "code": "m6",
+    "id": "html-exception-text-in-log",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 147,
+    "title": "Texte brut d'exception (page HTML 401 nginx, 8 lignes) injecté tel quel dans le journal et dans iv_error"
+  },
+  {
+    "code": "m7",
+    "id": "linreg-scipy-valueerror-coincidence",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/analytics.py",
+    "line": 139,
+    "title": "Série RV constante : ValueError scipy attrapée par coïncidence, message anglais brut affiché"
+  },
+  {
+    "code": "m8",
+    "id": "regime-split-out-of-range",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/analytics.py",
+    "line": 194,
+    "title": "Intersection y=x hors de la plage des données (pente > 1) : split de régime négatif affiché, un régime vide, reg_high = reg_diff"
+  },
+  {
+    "code": "m9",
+    "id": "percentile-label-vs-effective-window",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 521,
+    "title": "Libellé « Percentile (N j) » = fenêtre demandée, pas la fenêtre effective (min_periods=60 + lookback = durée seulement)"
+  },
+  {
+    "code": "m10",
+    "id": "duplicate-date-crash",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 534,
+    "title": "Index de dates dupliqué -> ValueError « cannot reindex on an axis with duplicate labels » au build de series_df"
+  },
+  {
+    "code": "m11",
+    "id": "rv-bad-close-silent-drop",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/analytics.py",
+    "line": 37,
+    "title": "Clôture ≤ 0 : deux rendements supprimés silencieusement, la fenêtre RV enjambe le trou (pas de NaN)"
+  },
+  {
+    "code": "m12",
+    "id": "iv-disabled-says-alpaca-inaccessible",
+    "sev": "m",
+    "file": "app/vue/tabs/tab_iv_dashboard.py",
+    "line": 249,
+    "title": "IV désactivée par l'utilisateur -> warning « chaîne d'options Alpaca inaccessible »"
+  },
+  {
+    "code": "m13",
+    "id": "stale-result-under-error-and-params-drift",
+    "sev": "m",
+    "file": "app/vue/tabs/tab_iv_dashboard.py",
+    "line": 513,
+    "title": "Résultat périmé rendu sous l'erreur ; paramètres du formulaire ≠ paramètres du résultat affiché"
+  },
+  {
+    "code": "m14",
+    "id": "iv-history-overlay-unbounded-x-range",
+    "sev": "m",
+    "file": "app/vue/tabs/tab_iv_dashboard.py",
+    "line": 314,
+    "title": "Overlay « IV ATM (historique local) » non borné à la fenêtre affichée : écrase l'axe x et relie des observations éparses"
+  },
+  {
+    "code": "m15",
+    "id": "chart-title-overprinted-by-legend",
+    "sev": "m",
+    "file": "app/vue/tabs/tab_iv_dashboard.py",
+    "line": 100,
+    "title": "Titre Plotly recouvert par la légende horizontale (3 graphiques)"
+  },
+  {
+    "code": "m16",
+    "id": "split-annotation-units-mismatch",
+    "sev": "m",
+    "file": "app/vue/tabs/tab_iv_dashboard.py",
+    "line": 451,
+    "title": "Annotation « Split régimes (0.165) » en décimal sur un axe formaté en %"
+  },
+  {
+    "code": "m17",
+    "id": "copy-en-dessous-hyphen",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/analytics.py",
+    "line": 124,
+    "title": "Libellé de régime « EN-DESSOUS DE LA MOYENNE » : trait d'union fautif"
+  },
+  {
+    "code": "m18",
+    "id": "forbid-streamlit-script-trips-on-docstring",
+    "sev": "m",
+    "file": "app/model/iv_dashboard/service.py",
+    "line": 15,
+    "title": "scripts/precommit_forbid_streamlit.py passe au rouge à cause du docstring de service.py"
+  },
+  {
+    "code": "m19",
+    "id": "controller-bounds-duplicated-silent-clamp",
+    "sev": "m",
+    "file": "app/controller/iv_dashboard_controller.py",
+    "line": 50,
+    "title": "Bornes de validation dupliquées vue/contrôleur, clamp silencieux"
+  },
+  {
+    "code": "m20",
+    "id": "smoke-tab-count-and-inventory",
+    "sev": "m",
+    "file": "tests/smoke/test_offline_imports.py",
+    "line": 101,
+    "title": "Smoke edit: stale test name (ten vs 11), CONTROLLERS inventory not extended, and the hard count pin already collides with the sibling branch"
+  },
+  {
+    "code": "m21",
+    "id": "render-guard-happy-path-only",
+    "sev": "m",
+    "file": "tests/integration/_iv_dashboard_render_driver.py",
+    "line": 104,
+    "title": "Render guard never renders the degraded states the tab shows without Alpaca keys (current_iv None, analysis None, empty iv_history, form submit)"
+  },
+  {
+    "code": "m22",
+    "id": "render-guard-not-in-ci-gate",
+    "sev": "m",
+    "file": "tests/integration/test_iv_dashboard_render.py",
+    "line": 26,
+    "title": "The render guard is `integration`-only, so the CI gate (-m 'unit or smoke') never runs it although it is offline and takes 1.4 s"
+  },
+  {
+    "code": "m23",
+    "id": "weak-realized-vol-oracle",
+    "sev": "m",
+    "file": "tests/test_iv_dashboard_analytics.py",
+    "line": 45,
+    "title": "test_realized_vol_known_magnitude's expected value is the ddof=0 number and rel=0.05 accepts ddof=0/1, sqrt(256), sqrt(260) and simple returns alike; warm-up test asserts one NaN fewer than exist"
+  }
+]

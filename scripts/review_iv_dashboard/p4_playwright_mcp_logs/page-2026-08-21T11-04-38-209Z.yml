@@ -1,0 +1,63 @@
+- generic [ref=e5]:
+  - img:
+    - generic:
+      - generic:
+        - generic:
+          - generic: Jan 2024
+          - generic: Apr 2024
+          - generic: Jul 2024
+          - generic: Oct 2024
+          - generic: Jan 2025
+          - generic: Apr 2025
+          - generic: Jul 2025
+          - generic: Oct 2025
+          - generic: Jan 2026
+        - generic:
+          - generic: 12%
+          - generic: 13%
+          - generic: 14%
+          - generic: 15%
+          - generic: 16%
+          - generic: 17%
+          - generic: 18%
+  - img:
+    - generic:
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - generic [ref=e24]: Vol réalisée (20 j)
+          - generic [ref=e25] [cursor=pointer]
+        - generic [ref=e26]:
+          - generic [ref=e27]: 75e percentile
+          - generic [ref=e28] [cursor=pointer]
+        - generic [ref=e29]:
+          - generic [ref=e30]: 25e percentile
+          - generic [ref=e31] [cursor=pointer]
+        - generic [ref=e32]:
+          - generic [ref=e33]: Moyenne
+          - generic [ref=e34] [cursor=pointer]
+        - generic [ref=e35]:
+          - generic [ref=e36]: RV courante
+          - generic [ref=e41] [cursor=pointer]
+        - generic [ref=e42]:
+          - generic [ref=e43]: IV ATM (historique local)
+          - generic [ref=e48] [cursor=pointer]
+        - generic [ref=e49]:
+          - generic [ref=e50]: IV ATM courante
+          - generic [ref=e55] [cursor=pointer]
+      - generic: Série de volatilité et bandes de régime
+      - generic: Vol annualisée
+  - generic [ref=e56]:
+    - generic [ref=e58] [cursor=pointer]
+    - generic [ref=e61]:
+      - generic [ref=e62] [cursor=pointer]
+      - generic [ref=e65] [cursor=pointer]
+      - generic [ref=e68] [cursor=pointer]
+      - generic [ref=e71] [cursor=pointer]
+    - generic [ref=e74]:
+      - generic [ref=e75] [cursor=pointer]
+      - generic [ref=e78] [cursor=pointer]
+      - generic [ref=e81] [cursor=pointer]
+      - generic [ref=e84] [cursor=pointer]
+    - link "plotly-logomark" [ref=e88] [cursor=pointer]:
+      - /url: https://plotly.com/
+      - img "plotly-logomark" [ref=e89]

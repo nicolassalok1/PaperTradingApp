@@ -1,0 +1,85 @@
+keys loaded: yes (redacted) | base url is paper: True
+today (local): 2026-08-21 | utc now: 2026-08-21T08:04+00:00
+
+=== (a) filtered snapshot fetch: are server-side filters honored? ===
+spot via fetch_spot_price: None
+HTTP 401 <html>
+<head><title>401 Authorization Required</title></head>
+<body>
+<center><h1>401 Authorization Required</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+
+filtered: status=401 pages=0 contracts=0 latency=0.80s
+unfiltered: HTTP 401 <html>
+<head><title>401 Authorization Required</title></head>
+<body>
+<center><h1>401 Authorization Required</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+
+bogus param probe: HTTP 401 (400 => unknown params rejected; 200 => unknown params silently ignored)
+feed=opra probe: HTTP 401 <html>
+<head><title>401 Authorization Required</title></head>
+<body>
+<center><h1>401 Authorization Required</h1></cen
+
+=== (b) greeks / IV presence on the indicative feed today ===
+snapshot fetch failed: 401 Client Error: Unauthorized for url: https://data.alpaca.markets/v1beta1/options/snapshots/SPY?feed=indicative&limit=1000&expiration_date_gte=2026-09-05&expiration_date_lte=2026-10-20
+
+=== (c) daily bars: default feed vs IEX, end = now - 16 min ===
+feed=None : FAIL <html>
+<head><title>401 Authorization Required</title></head>
+<body>
+<center><h1>401 Authorization Required</h1></center>
+<hr><center>nginx</center>
+</body
+feed=iex  : FAIL <html>
+<head><title>401 Authorization Required</title></head>
+<body>
+<center><h1>401 Authorization Required</h1></center>
+<hr><center>nginx</center>
+</body
+feed=sip  : FAIL <html>
+<head><title>401 Authorization Required</title></head>
+<body>
+<center><h1>401 Authorization Required</h1></center>
+<hr><center>nginx</center>
+</body
+no-end param: FAIL <html>
+<head><title>401 Authorization Required</title></head>
+<body>
+<center><h1>401 Authorization Required</h1></center>
+<hr><center>nginx</center>
+</body
+
+=== (d) end-to-end get_iv_dashboard_data('SPY') vs independent ATM IV ===
+e2e 6.8s | source=fallback (Stooq/Yahoo) points=501 current RV=0.1312 pct=0.579 regime=NORMALE
+current_iv: None
+iv_vs_series_percentile: nan | iv_regime: None | iv_minus_rv: None
+log:
+   - Barres alpaca indisponibles : <html>
+<head><title>401 Authorization Required</title></head>
+<body>
+<center><h1>401 Authorization Required</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+
+   - Barres alpaca (iex) indisponibles : <html>
+<head><title>401 Authorization Required</title></head>
+<body>
+<center><h1>401 Authorization Required</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+
+   - 534 barres daily via fallback Stooq/Yahoo.
+   - Vol réalisée courante (20 j, annualisée) : 0.1312 (13.12%).
+   - Spot indisponible : impossible de sélectionner les strikes ATM.
+analysis_error: None
+reg_forward slope=0.487 r2=0.354 n=471 intersection=0.1443 n_high=153 n_low=318
+
+cache file: C:\Users\Nathalie Asus\Dev\PaperTradingApp-fix\.claude\worktrees\feature+iv-dashboard-alpaca\cache\IVHistory\iv_daily_SPY.csv exists: False
