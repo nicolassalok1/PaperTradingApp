@@ -433,6 +433,9 @@ FLAG_PROFILE_NOT_STATIONARY = "optimum_not_stationary_on_profile"
 FLAG_H_WEAKLY_IDENTIFIED = "h_weakly_identified"
 FLAG_ETA_WEAKLY_IDENTIFIED = "eta_weakly_identified"
 FLAG_RHO_WEAKLY_IDENTIFIED = "rho_weakly_identified"
+#: SE sits inside its own uncertainty band around the threshold: the run cannot
+#: say whether the parameter is identified. Reported, NEVER blocking.
+FLAG_IDENTIFICATION_BORDERLINE = "identification_borderline"
 FLAG_RESTARTS_TRUNCATED = "restart_count_truncated"
 FLAG_REPORT_BEYOND_QUOTES = "report_maturity_beyond_quotes"
 FLAG_GRID_BIAS_NOT_MEASURED = "grid_bias_not_measured"
@@ -522,6 +525,14 @@ JOINT_CALIBRATION_LABELS_FR: dict[str, str] = {
         "mesuré sur les différences à tirage commun. L'étape locale s'est "
         "arrêtée avant d'atteindre un point stationnaire (budget max_nfev trop "
         "court, ou arrêt prématuré). Calibration en échec."
+    ),
+    FLAG_IDENTIFICATION_BORDERLINE: (
+        "Identification À LA LIMITE : l'erreur type déduite de la courbure du "
+        "profil tombe DANS sa propre barre d'incertitude autour du seuil, si "
+        "bien que ce tirage ne permet pas de trancher entre « identifié » et "
+        "« non identifié ». Ce n'est pas un échec, c'est un « je ne peux pas "
+        "conclure » : augmenter noise_replicates ou le nombre de chemins pour "
+        "resserrer la mesure avant d'exploiter la valeur."
     ),
     FLAG_H_WEAKLY_IDENTIFIED: (
         "H faiblement identifié : l'erreur type déduite de la courbure du "
@@ -859,7 +870,7 @@ class JointMCConfig:
     profile_points: int = 7
     profile_paths: int | None = None
     valley_points: int = 7
-    noise_replicates: int = 3
+    noise_replicates: int = 6
     noise_sigma_multiplier: float = 2.0
     se_material_ratio: float = 0.4
     se_vs_h0_factor: float = 10.0
@@ -2392,6 +2403,13 @@ class ProfileSlice:
     standard_error: float = float("nan")
     se_threshold: float = float("nan")
     weakly_identified: bool = False
+    #: ``SE`` sits inside its own uncertainty band around ``se_threshold``: the
+    #: data cannot say whether the parameter is identified or not. Reported,
+    #: never blocking -- "I cannot tell" must not masquerade as either answer.
+    identification_borderline: bool = False
+    #: Relative uncertainty carried by ``standard_error``, propagated from the
+    #: number of noise replicates (~1/(2*sqrt(2(n-1)))).
+    se_relative_uncertainty: float = float("nan")
     stationarity_gap: float = float("nan")
     stationarity_floor: float = float("nan")
     stationary: bool = True
@@ -2853,6 +2871,7 @@ def profile_slice(
     noise_floor: float,
     sigma_level: float = float("nan"),
     se_threshold: float = float("nan"),
+    n_sigma_replicates: int = 1,
     stationarity_floor: float | None = None,
 ) -> ProfileSlice:
     """
@@ -2925,12 +2944,42 @@ def profile_slice(
             standard_error = math.sqrt(2.0 * sigma / curvature)
         else:
             standard_error = float("inf")
-    weak = bool(
+    # A KNIFE-EDGE COMPARISON ON A NOISY STATISTIC IS A COIN FLIP, NOT A VERDICT.
+    #
+    # `sigma_level` is a sample standard deviation over `n_sigma_replicates`
+    # loss evaluations. The relative standard error of a sample sd is
+    # ~1/sqrt(2(n-1)), i.e. 50 % at n = 3. Since SE(p) = sqrt(2 sigma / curv)
+    # scales as sqrt(sigma), SE carries HALF that: ~25 % at n = 3.
+    #
+    # Comparing a quantity known to +/-25 % against a hard constant produced a
+    # verdict that flipped with the seed: on the committed fixture at the
+    # documented default budget, SE(H) = 0.020115 against a threshold of
+    # 0.020000 -- 0.58 % over -- and across 21 seeds 4 crossed to
+    # `success = True`. Seed 7 printed "Calibration REUSSIE - H = 0.1347" where
+    # seed 20260821 printed "NON CONCLUANTE - H = 0.1344": the SAME surface, the
+    # same budget, H differing by 3e-4, opposite headline verdicts.
+    #
+    # So the band is now explicit. Outside it the verdict is as before. Inside
+    # it the parameter is BORDERLINE: reported, not silently resolved either way,
+    # and not blocking -- because "I cannot tell" is the honest answer and it must
+    # not masquerade as either "identified" or "not identified".
+    rel_se_uncertainty = (
+        0.5 / math.sqrt(2.0 * max(1, int(n_sigma_replicates) - 1))
+        if int(n_sigma_replicates) > 1
+        else 0.5
+    )
+    borderline = False
+    weak = False
+    if (
         math.isfinite(se_threshold)
         and se_threshold > 0.0
-        and not (standard_error <= se_threshold)
         and not math.isnan(standard_error)
-    )
+    ):
+        band = rel_se_uncertainty * se_threshold
+        if standard_error > se_threshold + band:
+            weak = True
+        elif standard_error > se_threshold - band:
+            borderline = True
 
     gap = (
         float(centre_loss - float(np.min(losses)))
@@ -2961,6 +3010,8 @@ def profile_slice(
         standard_error=float(standard_error),
         se_threshold=float(se_threshold),
         weakly_identified=weak,
+        identification_borderline=borderline,
+        se_relative_uncertainty=float(rel_se_uncertainty),
         stationarity_gap=float(gap),
         stationarity_floor=float(stationarity_tolerance),
         stationary=stationary,
@@ -4116,6 +4167,7 @@ def calibrate_rbergomi(
                 sigma_level=sigma_level,
                 se_threshold=float(config.se_material_ratio)
                 * float(PARAM_SCALE.get(name, float("nan"))),
+                n_sigma_replicates=int(noise.n_replicates),
                 stationarity_floor=max(own_floor, float(noise.value)),
             )
         )
@@ -4148,6 +4200,8 @@ def calibrate_rbergomi(
             )
         if slice_.weakly_identified:
             identifiability_flags.append(weak_flag_of[slice_.parameter])
+        elif slice_.identification_borderline:
+            identifiability_flags.append(FLAG_IDENTIFICATION_BORDERLINE)
         # The module's OWN invariant, asserted rather than assumed: theta* must
         # be the cheapest point of its own profile, up to the noise floor.
         if not slice_.stationary:
