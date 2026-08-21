@@ -41,6 +41,7 @@ CONTROLLERS = [
     "calibration_controller",
     "dashboard_v2_controller",
     "hedger_v2_controller",
+    "kalman_controller",
     "options_controller",
     "portfolio_and_risk_controller",
     "trading_controller",
@@ -93,12 +94,16 @@ def test_controller_bridge_imports_offline():
 
 
 @pytest.mark.smoke
-def test_all_ten_tabs_present():
+def test_all_thirteen_tabs_present():
     # Locks the tab-count invariant. 11 from the original audit, +1 for the
     # "🧪 Exercices" tab, then -2 when "🤖 Bots" and "🧪 Exercices" were retired (H1),
-    # +1 for the "🌡️ Vol Implicite" tab (IV dashboard on Alpaca data).
+    # then +1 for "📡 Kalman Filters" (OU mean-level Kalman tab, 2026-08),
+    # then +1 for "🌊 Rough Vol (H)" (rBergomi H pipeline, spec 4.1 -> 4.11, Phase 5B),
+    # then +1 for "🌡️ Vol Implicite" (IV dashboard on Alpaca data, 2026-08).
     mods = _tab_modules()
-    assert len(mods) == 11, mods
+    assert len(mods) == 13, mods
+    assert "app.vue.tabs.tab_kalman_filters" in mods, mods
+    assert "app.vue.tabs.tab_rough_vol" in mods, mods
     assert "app.vue.tabs.tab_iv_dashboard" in mods, mods
     assert "app.vue.tabs.tab_bots" not in mods, mods
     assert "app.vue.tabs.tab_exercices" not in mods, mods

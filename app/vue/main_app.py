@@ -44,7 +44,9 @@ TAB_GROUPS = {
     "🧩 Modèles": [
         "🧮 Yield Curve",
         "🧪 Calibration avancée",
+        "🌊 Rough Vol (H)",
         "📈 Options",
+        "📡 Kalman Filters",
         "🌡️ Vol Implicite",
     ],
 }
@@ -58,6 +60,8 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     "tab_hedging_systems": "🛡️ Hedging Systems",
     "tab_yieldcurve": "🧮 Yield Curve",
     "tab_advanced_calibration": "🧪 Calibration avancée",
+    "tab_rough_vol": "🌊 Rough Vol (H)",
+    "tab_kalman_filters": "📡 Kalman Filters",
     "tab_iv_dashboard": "🌡️ Vol Implicite",
     # Internal trading sub-tabs (kept inside 💹 Trading only)
     "tab_alpaca_spot": "Alpaca Spot",
