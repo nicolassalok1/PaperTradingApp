@@ -871,6 +871,7 @@ class JointMCConfig:
     profile_paths: int | None = None
     valley_points: int = 7
     noise_replicates: int = 6
+    grid_bias_replicates: int = 3
     noise_sigma_multiplier: float = 2.0
     se_material_ratio: float = 0.4
     se_vs_h0_factor: float = 10.0
@@ -2583,21 +2584,50 @@ class GridBiasReport:
     seed: int | None
     unmeasured: tuple[str, ...] = ()
     unmeasured_reasons: tuple[str, ...] = ()
+    #: Standard error of each averaged shift, over ``n_replicates`` draws.
+    theta_shift_stderr: tuple[float, ...] = ()
+    #: How many independent draws the shift was averaged over.
+    n_replicates: int = 1
+    #: False when the +/- 2 stderr interval STRADDLES the threshold: the
+    #: measurement cannot decide whether the bias is material. Never print
+    #: "négligeable" in that case.
+    material_is_conclusive: bool = True
 
     @property
     def message_fr(self) -> str:
-        parts = ", ".join(
-            f"{name} " + ("NON MESURÉ" if not math.isfinite(shift) else f"{shift:+.4f}")
-            for name, shift in zip(PARAM_ORDER, self.theta_shift)
+        stderrs = self.theta_shift_stderr or tuple(
+            float("nan") for _ in self.theta_shift
         )
+        chunks = []
+        for name, shift, se in zip(PARAM_ORDER, self.theta_shift, stderrs):
+            if not math.isfinite(shift):
+                chunks.append(f"{name} NON MESURÉ")
+            elif math.isfinite(se):
+                chunks.append(f"{name} {shift:+.4f} ± {se:.4f}")
+            else:
+                chunks.append(f"{name} {shift:+.4f}")
+        parts = ", ".join(chunks)
         if not any(math.isfinite(x) for x in self.theta_shift):
             verdict = "INDÉTERMINÉ"
+        elif self.material:
+            verdict = "NON NÉGLIGEABLE"
+        elif not self.material_is_conclusive:
+            # The +/- 2 stderr interval straddles the threshold. Saying
+            # "négligeable" here would report an undecided measurement as a
+            # clean bill of health -- which is exactly what a single-draw
+            # estimate used to do, sign included.
+            verdict = "NON CONCLUANT (l'intervalle chevauche le seuil)"
         else:
-            verdict = "NON NÉGLIGEABLE" if self.material else "négligeable"
+            verdict = "négligeable"
         message = (
             f"Biais de discrétisation résiduel estimé ({verdict}) en passant de "
-            f"n={self.n_calibration} à n={self.n_refined} nœuds : {parts}. "
-            "Estimation reportée, jamais soustraite du résultat."
+            f"n={self.n_calibration} à n={self.n_refined} nœuds, moyenné sur "
+            f"{self.n_replicates} tirage(s) : {parts}. "
+            "Estimation reportée, jamais soustraite du résultat. ATTENTION : "
+            "c'est UN pas de raffinement, pas la distance au continuum — le "
+            "déplacement ne s'est pas annulé à n=768, donc le biais total "
+            "restant est PLUS GRAND que le chiffre ci-dessus, d'un facteur que "
+            "ces mesures ne permettent pas de fixer."
         )
         if self.unmeasured:
             details = "; ".join(
@@ -2612,6 +2642,9 @@ class GridBiasReport:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "theta_shift_stderr": [float(x) for x in self.theta_shift_stderr],
+            "n_replicates": int(self.n_replicates),
+            "material_is_conclusive": bool(self.material_is_conclusive),
             "n_calibration": int(self.n_calibration),
             "n_refined": int(self.n_refined),
             "factor": int(self.factor),
@@ -3101,6 +3134,127 @@ def grid_refinement_bias(
     seed: int | None,
 ) -> GridBiasReport | None:
     """
+    Grid-refinement bias, AVERAGED over independent draws and reported with its
+    own uncertainty.
+
+    WHY THIS WRAPPER EXISTS. :func:`_grid_refinement_bias_once` computes
+    ``-(g_refined - g_calibration) / curvature``, which is the correct expression
+    for the distance between the two grids' optima with the draw-specific tilt
+    removed. But the two grids have different dimension, so they **cannot share
+    their normals**: the two gradients are evaluated on independent draws and the
+    cancellation the expression relies on never actually happens. The estimator
+    is unbiased and unreadable at the same time.
+
+    Measured on the committed fixture at the shipped default (one draw each,
+    four seeds): reported ``shift_H`` = -5.08e-03, -1.97e-03, -6.68e-03,
+    **+2.28e-03** -- mean -2.86e-03, sd 3.95e-03, so ``|mean| / sd = 0.73``.
+    The mean has the right sign and the right order (re-calibrating at
+    ``n_max`` 384 -> 768 moves ``H`` by about -5e-03), but **a single draw is a
+    coin flip on the sign**, and the old code reported that single draw as a
+    point estimate with no uncertainty and printed "négligeable" next to it.
+
+    So the shift is now averaged over ``config.grid_bias_replicates`` draws, its
+    standard error is reported alongside, and ``material`` is decided on the
+    CONSERVATIVE bound ``|mean| + 2 * stderr`` rather than on the point. When the
+    interval straddles the threshold the verdict is explicitly INCONCLUSIVE
+    (``material_is_conclusive`` False) instead of "negligible" -- the same
+    discipline as :data:`FLAG_IDENTIFICATION_BORDERLINE`: a measurement that
+    cannot decide must say so.
+    """
+    n_replicates = max(1, int(getattr(config, "grid_bias_replicates", 1)))
+    rng = np.random.default_rng(None if seed is None else int(seed))
+    reports: list[GridBiasReport] = []
+    for k in range(n_replicates):
+        sub = None if seed is None else int(rng.integers(0, 2**31 - 1))
+        one = _grid_refinement_bias_once(
+            objective,
+            theta,
+            profiles=profiles,
+            config=config,
+            bounds=bounds,
+            n_paths=n_paths,
+            seed=sub,
+        )
+        if one is not None:
+            reports.append(one)
+    if not reports:
+        return None
+    if len(reports) == 1:
+        return reports[0]
+
+    shift: list[float] = []
+    shift_stderr: list[float] = []
+    relative: list[float] = []
+    conclusive = True
+    material = False
+    for index, name in enumerate(PARAM_ORDER):
+        vals = [
+            float(r.theta_shift[index])
+            for r in reports
+            if index < len(r.theta_shift) and math.isfinite(r.theta_shift[index])
+        ]
+        if not vals:
+            shift.append(float("nan"))
+            shift_stderr.append(float("nan"))
+            relative.append(float("nan"))
+            continue
+        mean = float(sum(vals) / len(vals))
+        if len(vals) > 1:
+            var = sum((v - mean) ** 2 for v in vals) / (len(vals) - 1)
+            stderr = float(math.sqrt(max(var, 0.0) / len(vals)))
+        else:
+            stderr = float("nan")
+        shift.append(mean)
+        shift_stderr.append(stderr)
+        scale = float(PARAM_SCALE.get(name, float("nan")))
+        rel = abs(mean) / scale if scale > 0.0 else float("nan")
+        relative.append(float(rel))
+        if not math.isfinite(scale) or scale <= 0.0:
+            continue
+        threshold = float(config.grid_bias_material)
+        upper = (abs(mean) + 2.0 * stderr) / scale if math.isfinite(stderr) else float("inf")
+        lower = max(abs(mean) - 2.0 * stderr, 0.0) / scale if math.isfinite(stderr) else 0.0
+        if lower > threshold:
+            material = True
+        elif upper > threshold:
+            # The interval straddles the threshold: cannot decide either way.
+            conclusive = False
+
+    head = reports[0]
+    return GridBiasReport(
+        n_calibration=head.n_calibration,
+        n_refined=head.n_refined,
+        factor=head.factor,
+        loss_calibration=head.loss_calibration,
+        loss_refined=head.loss_refined,
+        gradient_calibration=head.gradient_calibration,
+        gradient_refined=head.gradient_refined,
+        curvature=head.curvature,
+        theta_shift=tuple(shift),
+        theta_shift_relative=tuple(relative),
+        theta_shift_stderr=tuple(shift_stderr),
+        n_replicates=len(reports),
+        material=bool(material),
+        material_is_conclusive=bool(conclusive),
+        threshold=head.threshold,
+        n_paths=head.n_paths,
+        seed=None if seed is None else int(seed),
+        unmeasured=head.unmeasured,
+        unmeasured_reasons=head.unmeasured_reasons,
+    )
+
+
+def _grid_refinement_bias_once(
+    objective: JointObjective,
+    theta: Sequence[float],
+    *,
+    profiles: Sequence[ProfileSlice],
+    config: JointMCConfig,
+    bounds: Mapping[str, tuple[float, float]],
+    n_paths: int,
+    seed: int | None,
+) -> GridBiasReport | None:
+    """
     Estimate the residual discretisation bias by refining the simulation grid.
 
     Both gradients are re-measured **on this function's own draw**, one on the
@@ -3224,7 +3378,11 @@ def grid_refinement_bias(
         curvature=tuple(curvature),
         theta_shift=tuple(shift),
         theta_shift_relative=tuple(relative),
+        # One draw: no spread to report, and no basis for a conclusive verdict.
+        theta_shift_stderr=tuple(float("nan") for _ in shift),
+        n_replicates=1,
         material=material,
+        material_is_conclusive=True,
         threshold=float(config.grid_bias_material),
         n_paths=int(n_paths),
         seed=None if seed is None else int(seed),

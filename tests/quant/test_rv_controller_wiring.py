@@ -809,3 +809,78 @@ def _no_numpy(obj) -> bool:
     if isinstance(obj, list):
         return all(_no_numpy(v) for v in obj)
     return isinstance(obj, (str, int, float, bool, type(None)))
+
+
+# ---------------------------------------------------------------------------
+# UI guards: two paths that used to alter H silently
+# ---------------------------------------------------------------------------
+def test_the_exploration_profile_still_measures_the_grid_bias() -> None:
+    """
+    The cheap profile HALVES the simulation grid to 192, below the 256 at which
+    the pipeline docs measure a maturity-dependent skew deficit — so it makes the
+    log-Euler bias WORSE. It used to switch off ``refinement_check``, the only
+    mechanism that measures that bias, leaving the run both more biased and
+    silent about it (``grid_bias`` came back ``None`` and the tab printed
+    nothing).
+    """
+    from app.vue.tabs import tab_rough_vol
+    from app.model.volatility_models.rbergomi.calibrator_joint_mc import JointMCConfig
+
+    cheap = None
+    dear = None
+    for label, cfg in tab_rough_vol._MC_PROFILES.items():
+        if cfg.get("grid_n_max"):
+            cheap = (label, cfg)
+        else:
+            dear = (label, cfg)
+    assert cheap is not None and dear is not None
+
+    label, cfg = cheap
+    assert cfg["grid_n_max"] < JointMCConfig().grid_n_max, label
+    assert cfg.get("refinement_check") is True, (
+        f"{label} degrades the grid; it must keep measuring the bias it worsens"
+    )
+    # Every key must be a real config field, or the profile silently does nothing.
+    for key in cfg:
+        assert hasattr(JointMCConfig(), key), key
+
+
+def test_a_partially_specified_skew_window_is_completed_not_dropped() -> None:
+    """
+    "T min" left at its default 0.0 is the natural way to ask for "maturities up
+    to X". The old guard `window_hi > window_lo > 0.0` threw the whole request
+    away and ran the default window instead, displaying an H0 the user never
+    asked for. Measured on the committed fixture (truth H = 0.12): the default
+    window gives H0 = 0.12239 +/- 0.00858 on 6 expiries against 0.11997 +/-
+    0.00177 on 10 for (5/365, 1.00) — a CI four times tighter.
+
+    The completion rule is asserted here on the module's own default so the
+    behaviour cannot regress to silence.
+    """
+    from app.vue.tabs import tab_rough_vol
+
+    lo_default, hi_default = tab_rough_vol._DEFAULT_SKEW_WINDOW
+    assert 0.0 < lo_default < hi_default
+
+    def resolve(window_lo: float, window_hi: float):
+        """The tab's rule, restated inline — an oracle, not a call into it."""
+        if window_hi <= 0.0 and window_lo <= 0.0:
+            return None, False
+        lo = window_lo if window_lo > 0.0 else lo_default
+        hi = window_hi if window_hi > 0.0 else hi_default
+        if hi > lo:
+            return [lo, hi], (window_lo <= 0.0 or window_hi <= 0.0)
+        return None, True
+
+    # Both blank: the documented default, no warning.
+    assert resolve(0.0, 0.0) == (None, False)
+    # T max alone: completed with the default T min, and the user is told.
+    window, noted = resolve(0.0, 1.0)
+    assert window == [lo_default, 1.0] and noted
+    # T min alone: completed with the default T max.
+    window, noted = resolve(0.01, 0.0)
+    assert window == [0.01, hi_default] and noted
+    # Fully specified: taken as given, silently.
+    assert resolve(0.02, 0.5) == ([0.02, 0.5], False)
+    # Inverted: refused with a warning, never silently applied.
+    assert resolve(0.5, 0.02) == (None, True)

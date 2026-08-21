@@ -30,7 +30,9 @@ from __future__ import annotations
 import ast
 import json
 import math
+import subprocess
 import sys
+import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -62,6 +64,8 @@ from app.model.calibration.rough_vol.forward_variance import (
     build_forward_variance_curve,
 )
 from app.model.calibration.rough_vol.variance_swap import VarianceSwapPoint
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 pytestmark = pytest.mark.unit
 
@@ -643,12 +647,35 @@ def test_matplotlib_is_never_imported_at_module_level() -> None:
 def test_building_the_report_does_not_pull_matplotlib_in(
     result: _Result, xi0_curve
 ) -> None:
-    already_loaded = "matplotlib" in sys.modules
+    # Must run in a FRESH interpreter. Guarding on `if "matplotlib" not in
+    # sys.modules` made this inert in the gate that matters: something earlier in
+    # the `-m "unit or smoke"` selection always imports matplotlib first, so the
+    # assertion never executed. Proven with a runtime probe before this rewrite.
+    code = textwrap.dedent(
+        """
+        import sys
+        import app.model.calibration.rough_vol.diagnostics as diag
+        assert "matplotlib" not in sys.modules, "pulled in at import time"
+        print("OK")
+        """
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=str(_REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "OK" in proc.stdout
+
+    # And the in-process call still must not pull it in on top of whatever the
+    # rest of the suite already loaded: assert the module object is unchanged.
+    before = sys.modules.get("matplotlib")
     build_calibration_diagnostics(
         result, artifacts=PipelineArtifacts(xi0_curve=xi0_curve)
     )
-    if not already_loaded:
-        assert "matplotlib" not in sys.modules
+    assert sys.modules.get("matplotlib") is before
 
 
 def test_the_model_layer_imports_no_view_and_no_controller() -> None:
