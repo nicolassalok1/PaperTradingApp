@@ -467,7 +467,7 @@
     },
     {
       "dim": "?",
-      "id": "ask-only-and-crossed-mids",
+      "id": "ask_only_and_crossed_mids",
       "title": "_snapshot_mid accepts ask alone (bid missing/0) and crossed quotes without any sanity check",
       "severity": "m",
       "file": "app/model/iv_dashboard/service.py",

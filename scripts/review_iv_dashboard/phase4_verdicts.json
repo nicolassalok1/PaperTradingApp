@@ -213,11 +213,11 @@
           "id": "service-zero-unit-tests",
           "refuted": false,
           "confidence": 0.85,
-          "reason": "Re-measured under the exact CI selection (-m 'unit or smoke' --cov): service.py 338 stmts / 303 miss / 8%, tab 13%. The untested code is not plumbing: service.py:330-449 computes the headline IV number displayed by the tab (median of greeks + parity inversion, service.py:416-437), service.py:460-497 owns the persisted daily IV cache (same-day upsert at :475, silent except at :482), and :123-165 the Alpaca->IEX->Stooq fallback that decides which price series the RV is computed from. The impact is not hypothetical: this same panel found real defects in exactly those regions (iv-cache-corrupt-file-silent-loss, duplicate-date-crash, stale-chain-cache-as-current-iv, snapshot-page-cap-silent, ask-only-and-crossed-mids, yahoo-period-string), all of which a service test file would have made reproducible. M is calibrated: not C (no displayed number is wrong because of the gap itself), but a regression in median/parity/upsert would ship silently and corrupt data the tab accumulates day after day. The sketched tests are offline, fast and stable (24 passed in 1.5-1.6 s on two consecutive runs, socket-blocked).",
+          "reason": "Re-measured under the exact CI selection (-m 'unit or smoke' --cov): service.py 338 stmts / 303 miss / 8%, tab 13%. The untested code is not plumbing: service.py:330-449 computes the headline IV number displayed by the tab (median of greeks + parity inversion, service.py:416-437), service.py:460-497 owns the persisted daily IV cache (same-day upsert at :475, silent except at :482), and :123-165 the Alpaca->IEX->Stooq fallback that decides which price series the RV is computed from. The impact is not hypothetical: this same panel found real defects in exactly those regions (iv-cache-corrupt-file-silent-loss, duplicate-date-crash, stale-chain-cache-as-current-iv, snapshot-page-cap-silent, ask_only_and_crossed_mids, yahoo-period-string), all of which a service test file would have made reproducible. M is calibrated: not C (no displayed number is wrong because of the gap itself), but a regression in median/parity/upsert would ship silently and corrupt data the tab accumulates day after day. The sketched tests are offline, fast and stable (24 passed in 1.5-1.6 s on two consecutive runs, socket-blocked).",
           "proposed_severity": "M",
           "corrected_evidence": "CI-selection coverage: app/model/iv_dashboard/service.py 338 stmts 303 miss 8% (branches 104/0); tab_iv_dashboard.py 213 stmts 180 miss 13%; analytics.py 88%. Full CI selection = 676 passed, 2 skipped, 50 deselected in 178 s. p1_tests_service_sketches.py: 24 passed in 1.60 s and 1.51 s (two runs).",
           "fix_ok": true,
-          "fix_note": "Proportionate (one unit-marked file, ~1 h, no app change). Three adjustments before copying the sketches verbatim: (1) sketch line 94 pins 'bid=0 -> ask' and line 183 pins 'corrupt CSV -> empty, no raise' — both behaviours are flagged as defects by ask-only-and-crossed-mids and iv-cache-corrupt-file-silent-loss; write those two cases against the agreed target behaviour (or mark xfail) instead of freezing the current one. (2) test_fetch_current_atm_iv asserts dte == 30 from dt.date.today(); if local-date-vs-exchange-date is fixed the service date may differ from the test's local date around midnight for this UTC+8 user — build expiry from the same date helper the service ends up using, or assert dte in {29,30,31}. (3) Keep patching svc.<name> module globals (service.py:32-33 bind fetch_spot_price/CACHE_IV_HISTORY_DIR at import), as the sketch already does."
+          "fix_note": "Proportionate (one unit-marked file, ~1 h, no app change). Three adjustments before copying the sketches verbatim: (1) sketch line 94 pins 'bid=0 -> ask' and line 183 pins 'corrupt CSV -> empty, no raise' — both behaviours are flagged as defects by ask_only_and_crossed_mids and iv-cache-corrupt-file-silent-loss; write those two cases against the agreed target behaviour (or mark xfail) instead of freezing the current one. (2) test_fetch_current_atm_iv asserts dte == 30 from dt.date.today(); if local-date-vs-exchange-date is fixed the service date may differ from the test's local date around midnight for this UTC+8 user — build expiry from the same date helper the service ends up using, or assert dte in {29,30,31}. (3) Keep patching svc.<name> module globals (service.py:32-33 bind fetch_spot_price/CACHE_IV_HISTORY_DIR at import), as the sketch already does."
         }
       ],
       "confirm": 3,
@@ -1498,7 +1498,7 @@
     },
     {
       "dim": "?",
-      "id": "ask-only-and-crossed-mids",
+      "id": "ask_only_and_crossed_mids",
       "title": "_snapshot_mid accepts ask alone (bid missing/0) and crossed quotes without any sanity check",
       "severity": "m",
       "file": "app/model/iv_dashboard/service.py",
@@ -1513,7 +1513,7 @@
       "votes": [
         {
           "lens": "CODE READING",
-          "id": "ask-only-and-crossed-mids",
+          "id": "ask_only_and_crossed_mids",
           "refuted": false,
           "confidence": 0.85,
           "reason": "Reading is correct. _snapshot_mid L214-L216 returns 0.5*(bid+ask) whenever both are >0 with no ask>=bid check; L217-L218 returns the ask alone when bid is None or <=0; L221-L227 falls back to latestTrade['p'] ignoring its timestamp 't'. Measured on the real function: {bp:0, ap:5.20} -> 5.2; {ap:5.20} (no bp) -> 5.2; crossed {bp:5.30, ap:5.10} -> 5.2; {bp:0, ap:0, latestTrade p=4.00 t=2026-01-02} -> 4.0. Note the asymmetry: {bp:5.10, ap:0} -> None (bid-only is skipped but ask-only is accepted). Downstream guards checked: fetch_current_atm_iv L413 only rejects mid<=0, implied_vol_call only rejects prices outside [intrinsic, S] (L31), L418 only rejects iv outside (0,5) — none of them catches a one-sided or crossed quote at normal price levels. End-to-end on the real function with the whole chain bid=0 (pre-market indicative pattern) the median is pushed up by +12 bp ($0.10 spread), +57 bp ($0.50), +108 bp ($1.00) versus the two-sided chain — larger than the finder's single-ATM-contract numbers because off-ATM contracts have lower vega so spread/2/vega is bigger there and the median mixes them. Impact remains small for in-session SPY ($0.02-0.10 spreads) and the median dampens isolated bad quotes, so minor is the right severity; the fallback to a stale last trade is the more dangerous branch but also the rarest (requires both sides at 0).",
@@ -1524,7 +1524,7 @@
         },
         {
           "lens": "REPRODUCTION",
-          "id": "ask-only-and-crossed-mids",
+          "id": "ask_only_and_crossed_mids",
           "refuted": false,
           "confidence": 0.85,
           "reason": "Reproduced on the real svc._snapshot_mid (service.py L218-236): bid=0/ask=5.20 -> 5.2; bid missing -> 5.2; bid=None -> 5.2; crossed bid=5.30/ask=5.10 -> 5.2 (no check); locked -> 5.2; bid=0 ask=0 + latestTrade p=4.0 -> 4.0; no quote + trade -> 4.0; bid=0.01/ask=50 -> 25.005; asymmetrically bid=5.10/ask=0 -> None. End-to-end through fetch_current_atm_iv with an r=q=0 market (so only the quote effect is measured), whole +-5% chain bid=0/ask-only: +8 bp at $0.10 spread, +24 at $0.30, +39 at $0.50, +79 at $1.00 (finder's ATM-only numbers +7/+20/+34/+68 are slightly low because OTM contracts in the band have less vega); crossed by $0.20 everywhere: all 126 contracts accepted, none rejected. Whether Alpaca's indicative feed actually returns bid=0 pre-market cannot be checked offline, so the realistic magnitude for in-session SPY ($0.05-0.15 spreads) is <= ~+12 bp; larger for illiquid names. Severity m confirmed.",
@@ -1535,7 +1535,7 @@
         },
         {
           "lens": "IMPACT & SEVERITY",
-          "id": "ask-only-and-crossed-mids",
+          "id": "ask_only_and_crossed_mids",
           "refuted": false,
           "confidence": 0.75,
           "reason": "Kept as m, but the headline claim is the weak part. Ask-only bias at realistic in-session spreads is +3 bp ($0.05), +7 bp ($0.10), +20 bp ($0.30) on ATM SPY/AAPL 30 DTE (vega 0.732 $/pt) -- negligible, and one crossed quote among ~126 contracts cannot move a median. The part with real impact is the third clause, the latestTrade fallback (service.py L229-236): after hours, when bid=ask=0 on the whole book, every 'mid' silently becomes a stale last trade; with a 0.5% spot move since the trade, the median shifts +107 bp and per-contract IVs scatter -977..+527 bp, while the caption still says 'inversion Black-Scholes (mid)'. That is an undisclosed basis change, not a wrong formula, hence m (robustness/transparency), not M.",
@@ -1605,7 +1605,7 @@
   ],
   "p4_probes": [
     "p1_alpaca_plumbing_snapshot_mock.py (re-run, no network: requests.get patched module-wide)",
-    "p4_ask-only-and-crossed-mids_repro.py",
+    "p4_ask_only_and_crossed_mids_repro.py",
     "p4_cache_group_code_reading.py",
     "p4_chart-title-overprinted-by-legend_repro.py",
     "p4_controller-bounds-duplicated-silent-clamp_repro.py",

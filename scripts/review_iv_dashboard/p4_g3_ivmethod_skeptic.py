@@ -92,7 +92,7 @@ for m in (0.95, 0.97, 1.0, 1.03, 1.05):
         row.append(f"{typ} {'None' if info is None else f'{(info[chr(105)+chr(118)]-sigma)*1e4:+.0f} bp'}")
     print(f"    K/S={m:.2f} K={K}: " + " | ".join(row))
 
-print("\n=== [B] ask-only-and-crossed-mids : real _snapshot_mid ===")
+print("\n=== [B] ask_only_and_crossed_mids : real _snapshot_mid ===")
 cases = {
     "bid=0 ask=5.20": {"latestQuote": {"bp": 0, "ap": 5.20}},
     "bid missing ask=5.20": {"latestQuote": {"ap": 5.20}},

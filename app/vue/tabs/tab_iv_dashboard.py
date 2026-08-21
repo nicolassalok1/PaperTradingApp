@@ -214,7 +214,6 @@ def _render_metrics(result: Dict[str, Any]) -> None:
         iv_val = float(current_iv.get("iv", float("nan")))
         spread = result.get("iv_minus_rv")
         iv_pct = result.get("iv_vs_series_percentile", float("nan"))
-        iv_regime = result.get("iv_regime") or {}
         d1, d2, d3, d4 = st.columns(4)
         with d1:
             _chip(
@@ -235,10 +234,13 @@ def _render_metrics(result: Dict[str, Any]) -> None:
                 help="Position de l'IV courante dans la distribution récente de la RV.",
             )
         with d4:
-            _chip(
-                "Signal (IV)",
-                str(iv_regime.get("signal_label", "N/A")),
-                _SIGNAL_COLORS.get(str(iv_regime.get("signal_key")), _COL_MUTED),
+            # No regime / mean-reversion chip here: an IV ranked inside the RV
+            # distribution sits structurally high (variance risk premium) and says
+            # nothing about IV richness vs its own history.
+            st.caption(
+                "Lecture : ce percentile mesure la prime de risque de vol (IV vs RV), "
+                "pas la cherté de l'IV vs son propre historique — aucun signal de "
+                "mean reversion n'en est dérivé."
             )
         st.caption(
             f"Échéance {current_iv.get('expiry')} ({current_iv.get('dte')} j) · "

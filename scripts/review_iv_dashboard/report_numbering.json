@@ -57,7 +57,7 @@
   },
   {
     "code": "m3",
-    "id": "ask-only-and-crossed-mids",
+    "id": "ask_only_and_crossed_mids",
     "sev": "m",
     "file": "app/model/iv_dashboard/service.py",
     "line": 218,

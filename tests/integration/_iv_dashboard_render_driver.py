@@ -80,7 +80,7 @@ def _build_payload():
         },
         "iv_error": None,
         "iv_vs_series_percentile": iv_pct,
-        "iv_regime": ivx.classify_regime(iv_pct),
+        "iv_regime": None,  # the service no longer derives a signal from this percentile (review M2)
         "iv_minus_rv": iv_val - current_vol,
         "iv_history": pd.DataFrame(
             {
@@ -106,10 +106,14 @@ def main() -> None:
     at = AppTest.from_function(_tab_script, default_timeout=120)
     at.session_state["iv_dashboard_result"] = _build_payload()
     at.run()
+    rendered_text = "\n".join(str(getattr(el, "value", "")) for el in list(at.markdown) + list(at.caption))
     seeded = {
         "exceptions": [str(e.value) for e in at.exception],
         "n_charts": len(at.get("plotly_chart")),
         "n_metrics": len(at.metric),
+        # review M2: no mean-reversion signal may be derived from the IV-within-RV percentile
+        "has_iv_signal_chip": "Signal (IV)" in rendered_text,
+        "has_vrp_caption": "prime de risque" in rendered_text.lower(),
     }
 
     # Run 2: no payload -> placeholder only

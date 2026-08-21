@@ -22,6 +22,7 @@ import logging
 import math
 import os
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -36,6 +37,24 @@ from app.utils.secrets import get_secret
 ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
 DEFAULT_OPTION_FEED = "indicative"
 _SNAPSHOT_MAX_PAGES = 3
+_EXCHANGE_TZ = ZoneInfo("America/New_York")
+
+
+# --------------------------------------------------------------------------- #
+# Clock (exchange date, never the machine's local date)
+# --------------------------------------------------------------------------- #
+def _utc_now() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def _exchange_today() -> dt.date:
+    """Calendar date of the US session in progress (New York), used for DTE and the cache key."""
+    return _utc_now().astimezone(_EXCHANGE_TZ).date()
+
+
+def _short_exc(exc: BaseException, n: int = 160) -> str:
+    """One-line, bounded exception text for log lines (HTTP error pages can span many lines)."""
+    return " ".join(str(exc).split())[:n] or type(exc).__name__
 
 
 # --------------------------------------------------------------------------- #
@@ -249,7 +268,7 @@ def _fetch_atm_snapshots(
     if headers is None:
         raise EnvironmentError("Clés Alpaca absentes (APCA_API_KEY_ID / APCA_API_SECRET_KEY).")
 
-    today = dt.date.today()
+    today = _exchange_today()
     params: Dict[str, Any] = {
         "feed": feed,
         "limit": 1000,
@@ -305,26 +324,23 @@ def _contracts_from_snapshots(snapshots: Dict[str, Dict[str, Any]]) -> List[Dict
     return rows
 
 
-def _contracts_from_chain_df(df: pd.DataFrame, today: dt.date) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
-    if df is None or df.empty:
-        return rows
-    for _, r in df.iterrows():
-        try:
-            expiry = today + dt.timedelta(days=int(round(float(r["T"]) * 365.0)))
-            rows.append(
-                {
-                    "opra": str(r.get("opra") or ""),
-                    "K": float(r["K"]),
-                    "expiry": expiry,
-                    "type": str(r["type"]).lower(),
-                    "iv": float(r["iv"]) if pd.notna(r["iv"]) else float("nan"),
-                    "mid": None,  # chain cache has no quotes -> no BS fallback
-                }
-            )
-        except Exception:
+def _forward_from_parity(contracts: List[Dict[str, Any]], spot: float) -> Optional[float]:
+    """
+    Forward implied by put-call parity at the strike nearest the spot that carries
+    both a call and a put mid: F ≈ K + (C − P). Returns None when no such pair exists.
+    """
+    by_strike: Dict[float, Dict[str, float]] = {}
+    for c in contracts:
+        mid = c.get("mid")
+        if mid is None or not np.isfinite(mid) or mid <= 0:
             continue
-    return rows
+        by_strike.setdefault(float(c["K"]), {})[c["type"]] = float(mid)
+    pairs = [(k, v) for k, v in by_strike.items() if "call" in v and "put" in v]
+    if not pairs:
+        return None
+    k0, mids = min(pairs, key=lambda kv: abs(kv[0] - spot))
+    fwd = k0 + (mids["call"] - mids["put"])
+    return fwd if np.isfinite(fwd) and fwd > 0 else None
 
 
 def fetch_current_atm_iv(
@@ -341,8 +357,12 @@ def fetch_current_atm_iv(
     Median ATM implied vol near `target_dte` from Alpaca option snapshots.
 
     Per contract: direct Alpaca IV when present, otherwise Black-Scholes
-    inversion of the quote mid (puts converted to synthetic calls via
-    put-call parity with q=0). Returns (info dict | None, log messages).
+    inversion of the quote mid on the parity-implied forward (puts converted
+    to synthetic calls via put-call parity on that same forward, so the
+    unknown r / q cancel). Returns (info dict | None, log messages).
+
+    No fallback on the cached full chain: a days-old CSV must never be
+    reported as today's IV (review M1).
     """
     sym = (symbol or "").strip().upper()
     log: List[str] = []
@@ -356,25 +376,16 @@ def fetch_current_atm_iv(
         log.append("Spot indisponible : impossible de sélectionner les strikes ATM.")
         return None, log
 
-    today = dt.date.today()
-    contracts: List[Dict[str, Any]] = []
+    today = _exchange_today()
     try:
         snaps = _fetch_atm_snapshots(
             sym, feed=feed_val, spot=spot, dte_min=dte_min, dte_max=dte_max
         )
-        contracts = _contracts_from_snapshots(snaps)
-        log.append(f"{len(contracts)} contrats candidats via snapshots filtrés (feed={feed_val}).")
-    except Exception as exc:  # noqa: BLE001 — fallback to the cached full chain
-        log.append(f"Snapshots filtrés indisponibles ({exc}) ; fallback chaîne complète.")
-        try:
-            from app.model.options.logic import download_options_alpaca
-
-            chain = download_options_alpaca(sym, feed=feed_val, max_pages=_SNAPSHOT_MAX_PAGES)
-            contracts = _contracts_from_chain_df(chain, today)
-            log.append(f"{len(contracts)} contrats via chaîne Alpaca (cache).")
-        except Exception as exc2:  # noqa: BLE001
-            log.append(f"Chaîne d'options Alpaca en échec : {exc2}")
-            return None, log
+    except Exception as exc:  # noqa: BLE001 — surfaced as-is, no stale-cache fallback
+        log.append(f"Snapshots d'options Alpaca indisponibles (feed={feed_val}) : {_short_exc(exc)}")
+        return None, log
+    contracts = _contracts_from_snapshots(snaps)
+    log.append(f"{len(contracts)} contrats candidats via snapshots filtrés (feed={feed_val}).")
 
     usable = [
         c
@@ -398,6 +409,10 @@ def fetch_current_atm_iv(
         atm = sorted(at_expiry, key=lambda c: abs(c["K"] - spot))[:4]
 
     T = max(dte, 1) / 365.0
+    # Inversion underlying: the parity-implied forward when an ATM call/put pair is
+    # quoted (r and q then cancel), otherwise the spot (legacy behaviour).
+    fwd = _forward_from_parity(at_expiry, spot)
+    s_inv = fwd if fwd is not None else spot
     ivs: List[float] = []
     n_direct = 0
     n_inverted = 0
@@ -410,11 +425,17 @@ def fetch_current_atm_iv(
         mid = c.get("mid")
         if mid is None or not np.isfinite(mid) or mid <= 0:
             continue
+        # Invert the OTM side of each strike only: the ITM side is redundant by
+        # parity, carries no vol information, and its discounted price can fall
+        # below the undiscounted intrinsic bound (rejected as NaN) in low vol.
+        is_otm = (c["type"] == "put" and c["K"] <= s_inv) or (c["type"] == "call" and c["K"] > s_inv)
+        if not is_otm:
+            continue
         if c["type"] == "call":
             call_price = float(mid)
-        else:  # put -> synthetic call via parity (q = 0)
-            call_price = float(mid) + spot - c["K"] * math.exp(-r_annual * T)
-        iv_bs = implied_vol_call(call_price, spot, c["K"], T, r_annual, 0.0)
+        else:  # put -> synthetic call via parity on the same underlying
+            call_price = float(mid) + s_inv - c["K"] * math.exp(-r_annual * T)
+        iv_bs = implied_vol_call(call_price, s_inv, c["K"], T, r_annual, 0.0)
         if iv_bs is not None and np.isfinite(iv_bs) and 0.0 < iv_bs < 5.0:
             ivs.append(float(iv_bs))
             n_inverted += 1
@@ -461,7 +482,7 @@ def record_iv_observation(symbol: str, info: Dict[str, Any]) -> None:
     """Upsert today's ATM IV observation into cache/IVHistory/iv_daily_{SYM}.csv."""
     try:
         path = _iv_history_path(symbol)
-        today = dt.date.today().isoformat()
+        today = _exchange_today().isoformat()
         row = {
             "date": today,
             "iv": float(info.get("iv")),
@@ -559,6 +580,9 @@ def get_iv_dashboard_data(
     current_iv: Optional[Dict[str, Any]] = None
     iv_error: Optional[str] = None
     iv_vs_series_percentile = float("nan")
+    # No regime / mean-reversion signal is derived from the IV-within-RV percentile:
+    # the variance risk premium keeps IV above RV most days, so that rank says
+    # nothing about IV richness (review M2). The percentile itself stays informative.
     iv_regime: Optional[Dict[str, str]] = None
     iv_minus_rv: Optional[float] = None
     if include_current_iv:
@@ -568,7 +592,6 @@ def get_iv_dashboard_data(
             record_iv_observation(sym, current_iv)
             trailing = series_df["vol"].tail(int(percentile_window))
             iv_vs_series_percentile = analytics.percentile_within(trailing, current_iv["iv"])
-            iv_regime = analytics.classify_regime(iv_vs_series_percentile)
             iv_minus_rv = float(current_iv["iv"]) - current_vol
         else:
             iv_error = iv_log[-1] if iv_log else "IV indisponible."

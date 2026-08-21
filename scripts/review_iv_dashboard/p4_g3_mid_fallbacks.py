@@ -1,4 +1,4 @@
-"""p4 skeptic probe — ask-only-and-crossed-mids: realistic impact of _snapshot_mid
+"""p4 skeptic probe — ask_only_and_crossed_mids: realistic impact of _snapshot_mid
 fallbacks on the DISPLAYED median, and regression risk of the proposed strict fix.
 
 Uses the real _snapshot_mid and implied_vol_call from the repo.

@@ -74,6 +74,13 @@ def test_tab_shows_three_charts_and_metrics(render_result):
     assert render_result["seeded"]["n_metrics"] >= 3, render_result["seeded"]
 
 
+def test_tab_shows_no_mean_reversion_signal_on_iv_percentile(render_result):
+    """Review M2: the IV-within-RV percentile is shown, but never dressed as a regime signal."""
+    seeded = render_result["seeded"]
+    assert not seeded["has_iv_signal_chip"], seeded
+    assert seeded["has_vrp_caption"], seeded
+
+
 def test_tab_empty_state_shows_placeholder(render_result):
     empty = render_result["empty"]
     assert not empty["exceptions"], empty["exceptions"]

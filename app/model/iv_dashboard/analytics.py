@@ -11,6 +11,10 @@ Differences vs the legacy script (intentional fixes):
   Realized vol is annualized here from daily log returns with `sqrt(252)`.
 - The forward-vol regression sample only drops rows lacking current/forward vol
   (the legacy version also dropped the percentile warm-up rows).
+- The legacy ranked the IV inside its own 252-day IV history. Alpaca has no IV
+  history, so the service ranks the current IV inside the *realized-vol*
+  distribution instead; that rank is reported as-is (variance risk premium) and
+  `classify_regime` is NOT applied to it — no mean-reversion signal on the IV.
 """
 
 from __future__ import annotations
