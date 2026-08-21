@@ -95,8 +95,10 @@ def test_controller_bridge_imports_offline():
 @pytest.mark.smoke
 def test_all_ten_tabs_present():
     # Locks the tab-count invariant. 11 from the original audit, +1 for the
-    # "🧪 Exercices" tab, then -2 when "🤖 Bots" and "🧪 Exercices" were retired (H1).
+    # "🧪 Exercices" tab, then -2 when "🤖 Bots" and "🧪 Exercices" were retired (H1),
+    # +1 for the "🌡️ Vol Implicite" tab (IV dashboard on Alpaca data).
     mods = _tab_modules()
-    assert len(mods) == 10, mods
+    assert len(mods) == 11, mods
+    assert "app.vue.tabs.tab_iv_dashboard" in mods, mods
     assert "app.vue.tabs.tab_bots" not in mods, mods
     assert "app.vue.tabs.tab_exercices" not in mods, mods

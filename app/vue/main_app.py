@@ -45,6 +45,7 @@ TAB_GROUPS = {
         "🧮 Yield Curve",
         "🧪 Calibration avancée",
         "📈 Options",
+        "🌡️ Vol Implicite",
     ],
 }
 
@@ -57,6 +58,7 @@ DEFAULT_LABEL_OVERRIDES: Dict[str, str] = {
     "tab_hedging_systems": "🛡️ Hedging Systems",
     "tab_yieldcurve": "🧮 Yield Curve",
     "tab_advanced_calibration": "🧪 Calibration avancée",
+    "tab_iv_dashboard": "🌡️ Vol Implicite",
     # Internal trading sub-tabs (kept inside 💹 Trading only)
     "tab_alpaca_spot": "Alpaca Spot",
     "tab_alpaca_orders": "Advanced Orders",
@@ -137,6 +139,7 @@ def sidebar_menu(all_tabs: Dict[str, Callable[[], None]], tab_labels: list[str])
             "- Commence par `📊 Dashboard` pour vérifier l’état du compte.\n"
             "- Utilise `🧮 Yield Curve` si tu veux un `r(T)` cohérent.\n"
             "- Calibre une surface dans `🧪 Calibration avancée`, puis envoie-la vers `📈 Options`.\n"
+            "- `🌡️ Vol Implicite` : régimes de volatilité et signaux de mean reversion (Alpaca).\n"
             "- Tout ce qui envoie des ordres Alpaca est volontairement explicite et peut être dangereux."
         )
 

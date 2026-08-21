@@ -29,6 +29,7 @@ Cache layout (repo root `cache/`):
 - `cache/OHLC/` (historical OHLC & Stooq caches)
 - `cache/YahooOptionChains/` (Yahoo-derived option chain/surfaces)
 - `cache/AlpacaOptionChains/` (Alpaca option snapshots)
+- `cache/IVHistory/` (daily ATM implied-vol observations recorded by 🌡️ Vol Implicite)
 
 ---
 
